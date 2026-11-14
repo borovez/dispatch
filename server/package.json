@@ -1,5 +1,5 @@
 {
-  "name": "@prdeck/server",
+  "name": "@dispatch/server",
   "private": true,
   "type": "module",
   "scripts": {

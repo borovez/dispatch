@@ -13,7 +13,7 @@ export function openBeside(url: string) {
     win!.location.href = url
     win!.focus()
   } else {
-    win = window.open(url, 'prdeck-beside', features)
+    win = window.open(url, 'dispatch-beside', features)
   }
 }
 

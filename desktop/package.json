@@ -1,9 +1,9 @@
 {
-  "name": "prdeck-desktop",
-  "productName": "PR Deck",
-  "version": "0.1.0",
+  "name": "dispatch-desktop",
+  "productName": "Dispatch",
+  "version": "0.1.2",
   "private": true,
-  "description": "PR Deck as a Mac app: the local server and the web app in one window",
+  "description": "Dispatch as a Mac app: the local server and the web app in one window",
   "license": "MIT",
   "type": "module",
   "main": "main.mjs",
@@ -14,8 +14,8 @@
     "dist:all": "npm run bundle && electron-builder --mac --arm64 --x64 --publish never"
   },
   "build": {
-    "appId": "app.prdeck.desktop",
-    "productName": "PR Deck",
+    "appId": "app.dispatch.desktop",
+    "productName": "Dispatch",
     "files": [
       "main.mjs",
       "preload.cjs",
@@ -37,9 +37,9 @@
       "identity": null
     },
     "dmg": {
-      "title": "PR Deck ${version}"
+      "title": "Dispatch ${version}"
     },
-    "artifactName": "PR-Deck-${version}-${arch}.${ext}",
+    "artifactName": "Dispatch-${version}-${arch}.${ext}",
     "asar": false,
     "electronVersion": "45.3.2"
   },
@@ -48,5 +48,5 @@
     "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2"
   },
-  "author": "PR Deck"
+  "author": "Dispatch"
 }

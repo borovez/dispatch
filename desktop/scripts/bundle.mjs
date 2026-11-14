@@ -37,4 +37,4 @@ await build({
   logLevel: 'warning',
 })
 if (!existsSync(join(out, 'server', 'server.mjs'))) throw new Error('server bundle missing')
-console.log(`Bundled PR Deck ${version} into desktop/app`)
+console.log(`Bundled Dispatch ${version} into desktop/app`)

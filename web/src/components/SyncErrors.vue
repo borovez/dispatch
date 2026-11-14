@@ -21,7 +21,7 @@ const copiedOne = ref<number | null>(null)
 const report = () => {
   const s = deck.overview?.sync
   return [
-    `PR Deck sync errors (${errors.value.length})`,
+    `Dispatch sync errors (${errors.value.length})`,
     `Last sync: started ${s?.lastStartedAt ?? 'unknown'}, finished ${s?.lastFinishedAt ?? 'unknown'}`,
     '',
     ...errors.value.map((e, i) => `${i + 1}. ${e.raw}`),

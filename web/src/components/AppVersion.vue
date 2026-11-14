@@ -8,8 +8,8 @@ const { status, checking, popoverOpen, load } = useUpdates()
 const tip = computed(() => {
   const s = status.value
   if (!s) return 'Checking the version…'
-  if (s.available) return `PR Deck ${s.latest} is available (you have ${s.current}). Click for what’s new.`
-  return `PR Deck ${s.current}${s.checkedAt ? ', the latest release' : ''}. Click to check for updates.`
+  if (s.available) return `Dispatch ${s.latest} is available (you have ${s.current}). Click for what’s new.`
+  return `Dispatch ${s.current}${s.checkedAt ? ', the latest release' : ''}. Click to check for updates.`
 })
 const click = () => (status.value?.available ? (popoverOpen.value = true) : load(true))
 </script>

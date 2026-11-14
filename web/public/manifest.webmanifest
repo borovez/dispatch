@@ -1,6 +1,6 @@
 {
-  "name": "PR Deck",
-  "short_name": "PR Deck",
+  "name": "Dispatch",
+  "short_name": "Dispatch",
   "description": "Pull requests across your GitHub orgs, with dependencies, Jira and a Slack inbox.",
   "id": "/",
   "start_url": "/",

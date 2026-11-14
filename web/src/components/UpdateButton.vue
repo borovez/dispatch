@@ -24,7 +24,7 @@ const notes = computed(() => markdownToAdf(status.value?.notes ?? ''))
     </PopoverTrigger>
     <PopoverContent align="end" class="w-96 gap-3">
       <div>
-        <p class="font-medium">PR Deck {{ status.latest }} is out</p>
+        <p class="font-medium">Dispatch {{ status.latest }} is out</p>
         <p class="text-xs text-muted-foreground">You have {{ status.current }}<template v-if="status.publishedAt"> · released {{ timeAgo(status.publishedAt) }}</template></p>
       </div>
       <ScrollArea v-if="notes.content.length" class="rounded-md border bg-muted/40 [&>[data-slot=scroll-area-viewport]]:max-h-60">

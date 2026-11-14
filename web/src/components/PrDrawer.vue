@@ -522,7 +522,7 @@ const removeDep = (e: DepEdge) => deps.remove(e)
                     deck.overview.dependencyWrites.bothSides ? `, and “${dv.depKind === 'release' ? 'Release blocks' : 'Blocks'}: …” into the other one` : ''
                   }}, so it shows on GitHub too.
                 </template>
-                <template v-else>Kept in PR Deck only (Settings → Dependencies).</template>
+                <template v-else>Kept in Dispatch only (Settings → Dependencies).</template>
               </p>
             </form>
           </div>

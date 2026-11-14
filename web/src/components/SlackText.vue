@@ -13,7 +13,7 @@ const deck = useDeck()
 /** https://github.com/owner/repo/pull/123 (with anything after: /files, #discussion…) */
 const GITHUB_PR = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/i
 
-/** A PR link as a chip: opens the PR panel when PR Deck has the PR, GitHub otherwise */
+/** A PR link as a chip: opens the PR panel when Dispatch has the PR, GitHub otherwise */
 function prChip(url: string, owner: string, repo: string, n: string): VNode {
   const shown = `${owner}/${repo}#${n}`
   const pr = deck.byId.get(shown.toLowerCase()) ?? deck.byId.get(shown)
@@ -23,7 +23,7 @@ function prChip(url: string, owner: string, repo: string, n: string): VNode {
       href: url,
       target: '_blank',
       rel: 'noopener',
-      title: pr ? `${pr.title} (open in PR Deck)` : `${shown} (open on GitHub)`,
+      title: pr ? `${pr.title} (open in Dispatch)` : `${shown} (open on GitHub)`,
       class: 'inline-flex max-w-full items-baseline rounded bg-primary/12 px-1 align-baseline font-mono text-[0.85em] text-primary hover:bg-primary/20',
       onClick: (e: MouseEvent) => {
         e.stopPropagation()

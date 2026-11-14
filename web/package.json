@@ -1,5 +1,5 @@
 {
-  "name": "@prdeck/web",
+  "name": "@dispatch/web",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,6 +1,6 @@
 import './quiet.ts'
 import { DatabaseSync } from 'node:sqlite'
-import { chmodSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type {
@@ -22,9 +22,28 @@ import type {
 import { DEFAULT_SETTINGS } from '../../shared/types.ts'
 import { deleteSecret, KEYCHAIN_MARK, keychainEnabled, readSecret, writeSecret } from './secrets.ts'
 
-export const DATA_DIR = process.env.PRDECK_DATA_DIR ?? join(homedir(), '.prdeck')
+// Env names and the data folder were PR Deck's before the rename: read the old names, move the old folder once
+const envDir = process.env.DISPATCH_DATA_DIR ?? process.env.PRDECK_DATA_DIR
+const LEGACY_DIR = join(homedir(), '.prdeck')
+if (!envDir && !existsSync(join(homedir(), '.dispatch')) && existsSync(LEGACY_DIR)) {
+  try {
+    renameSync(LEGACY_DIR, join(homedir(), '.dispatch'))
+  } catch {
+    /* another Dispatch process moved it first */
+  }
+}
+export const DATA_DIR = envDir ?? join(homedir(), '.dispatch')
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 })
-export const DB_PATH = join(DATA_DIR, 'prdeck.db')
+export const DB_PATH = join(DATA_DIR, 'dispatch.db')
+if (!existsSync(DB_PATH) && existsSync(join(DATA_DIR, 'prdeck.db'))) {
+  for (const ext of ['', '-wal', '-shm']) {
+    try {
+      if (existsSync(join(DATA_DIR, `prdeck.db${ext}`))) renameSync(join(DATA_DIR, `prdeck.db${ext}`), `${DB_PATH}${ext}`)
+    } catch {
+      /* moved by another process */
+    }
+  }
+}
 
 // Shared by the API server and the MCP server (separate processes) – WAL keeps that safe.
 export const db = new DatabaseSync(DB_PATH)
@@ -87,15 +106,15 @@ type Slot = { name: string; label: string; get: () => string | undefined; set: (
 function secretSlots(s: Partial<Settings>): Slot[] {
   const slots: Slot[] = (s.github?.accounts ?? []).map((a) => ({
     name: `github:${a.id}`,
-    label: `PR Deck: GitHub token (${a.label || a.login || a.id})`,
+    label: `Dispatch: GitHub token (${a.label || a.login || a.id})`,
     get: () => a.token,
     set: (v) => (a.token = v),
   }))
-  if (s.jira) slots.push({ name: 'jira', label: 'PR Deck: Jira API token', get: () => s.jira!.apiToken, set: (v) => (s.jira!.apiToken = v) })
-  if (s.slack) slots.push({ name: 'slack', label: 'PR Deck: Slack token', get: () => s.slack!.token, set: (v) => (s.slack!.token = v) })
+  if (s.jira) slots.push({ name: 'jira', label: 'Dispatch: Jira API token', get: () => s.jira!.apiToken, set: (v) => (s.jira!.apiToken = v) })
+  if (s.slack) slots.push({ name: 'slack', label: 'Dispatch: Slack token', get: () => s.slack!.token, set: (v) => (s.slack!.token = v) })
   if (s.launchdarkly)
-    slots.push({ name: 'launchdarkly', label: 'PR Deck: LaunchDarkly token', get: () => s.launchdarkly!.apiToken, set: (v) => (s.launchdarkly!.apiToken = v) })
-  if (s.ai) slots.push({ name: 'anthropic', label: 'PR Deck: Anthropic API key', get: () => s.ai!.apiKey, set: (v) => (s.ai!.apiKey = v) })
+    slots.push({ name: 'launchdarkly', label: 'Dispatch: LaunchDarkly token', get: () => s.launchdarkly!.apiToken, set: (v) => (s.launchdarkly!.apiToken = v) })
+  if (s.ai) slots.push({ name: 'anthropic', label: 'Dispatch: Anthropic API key', get: () => s.ai!.apiKey, set: (v) => (s.ai!.apiKey = v) })
   return slots
 }
 
@@ -222,7 +241,7 @@ export function updatePrData(pr: PrRecord) {
   db.prepare('UPDATE prs SET data = ? WHERE id = ?').run(JSON.stringify(pr), pr.id)
 }
 
-/** Local copy of a PR description after PR Deck edited it on GitHub (the next sync confirms it) */
+/** Local copy of a PR description after Dispatch edited it on GitHub (the next sync confirms it) */
 export function setPrTitle(id: PrId, title: string) {
   db.prepare("UPDATE prs SET data = json_set(data, '$.title', ?) WHERE id = ?").run(title, id)
 }

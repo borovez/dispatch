@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DispatchLogo from '@/components/DispatchLogo.vue'
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -105,8 +106,8 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
       <Sidebar collapsible="icon">
         <SidebarHeader class="app-titlebar app-titlebar-left">
           <div class="flex min-w-0 items-center gap-2 overflow-hidden px-2 py-1.5 text-base font-semibold whitespace-nowrap group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-            <PhGitPullRequest :size="22" weight="duotone" class="shrink-0 text-primary" />
-            <span class="shrink-0 group-data-[collapsible=icon]:hidden">PR Deck</span>
+            <DispatchLogo :size="22" class="shrink-0 text-primary" />
+            <span class="shrink-0 group-data-[collapsible=icon]:hidden">Dispatch</span>
             <!-- Hidden when the sidebar is collapsed to icons (no room beside the logo) -->
             <span class="ml-auto shrink-0 group-data-[collapsible=icon]:hidden"><AppVersion /></span>
           </div>
@@ -140,7 +141,7 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
           <div class="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
           <SidebarTrigger class="-ml-1" />
           <Separator orientation="vertical" class="mr-1 data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center" />
-          <h1 class="truncate text-sm font-semibold">{{ title }}</h1>
+          <h1 class="truncate text-sm font-semibold sm:shrink-0">{{ title }}</h1>
           <span class="ml-2 hidden truncate text-xs text-muted-foreground lg:inline">
             <template v-if="deck.overview?.sync.lastFinishedAt">
               Synced {{ timeAgo(deck.overview.sync.lastFinishedAt) }}

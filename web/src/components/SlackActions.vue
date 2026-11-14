@@ -27,7 +27,7 @@ async function status(s: SlackItem['status']) {
   const label = s === 'done' ? 'Marked done' : s === 'dismissed' ? 'Dismissed' : 'Back in inbox'
   // Todos also change in Slack (done reaction added / removed)
   if (res?.slack) toast.success(label, { description: res.slack.done ? `Added :${res.slack.reaction}: in Slack` : `Removed :${res.slack.reaction}: in Slack` })
-  else if (res?.warning) toast.warning(`${label} in PR Deck only`, { description: res.warning })
+  else if (res?.warning) toast.warning(`${label} in Dispatch only`, { description: res.warning })
   else toast.success(label)
   if (props.labelled && s !== 'new') deck.selectedSlackId = next
 }

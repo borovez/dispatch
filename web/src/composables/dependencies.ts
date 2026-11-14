@@ -9,7 +9,7 @@ const pending = reactive(new Set<string>())
 
 /**
  * Add / remove dependencies. With "write to description" on (Settings), the server edits the dependent PR's
- * description on GitHub; if that fails the dependency is kept in PR Deck only, and the toast says why.
+ * description on GitHub; if that fails the dependency is kept in Dispatch only, and the toast says why.
  * One write per pair at a time; adding one that already exists does nothing.
  */
 export function useDependencies() {
@@ -35,7 +35,7 @@ export function useDependencies() {
       const where = [res.written && from, res.writtenOther && to].filter(Boolean).join(' and ')
       if (where && !res.error) toast.success(res.written && res.writtenOther ? 'Dependency added to both PR descriptions' : 'Dependency added to the PR description', { description: where })
       else if (where) toast.warning(`Dependency added to ${where}`, { description: `Couldn't edit the other description: ${res.error}` })
-      else if (res.error) toast.warning('Dependency saved in PR Deck only', { description: `Couldn't edit the descriptions: ${res.error}` })
+      else if (res.error) toast.warning('Dependency saved in Dispatch only', { description: `Couldn't edit the descriptions: ${res.error}` })
       else toast.success('Dependency added')
       return true
     } finally {

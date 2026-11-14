@@ -261,7 +261,7 @@ function cached<T>(key: string, load: () => Promise<T>, ttlMs = 10 * 60_000): Pr
 }
 
 /**
- * Projects I can create issues in. Settings → Jira picks which ones PR Deck uses (`projectKeys`);
+ * Projects I can create issues in. Settings → Jira picks which ones Dispatch uses (`projectKeys`);
  * everything else gets only those, unless none are picked. `all` is for that picker.
  */
 export async function listProjects(cfg: JiraConfig, { all = false } = {}): Promise<JiraProjectMeta[]> {

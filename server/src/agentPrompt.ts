@@ -7,7 +7,7 @@ import { buildOverview } from './model.ts'
 /**
  * A self-contained prompt for any AI coding agent to implement a Jira issue: the issue and its links,
  * the description and latest comments, the PRs, repos, flags and Slack threads tied to it, and how to
- * work (repo conventions, branch, PR rules). Built from what PR Deck knows; no AI call.
+ * work (repo conventions, branch, PR rules). Built from what Dispatch knows; no AI call.
  */
 export async function buildAgentPrompt(key: string): Promise<string> {
   const s = getSettings()

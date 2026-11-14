@@ -258,7 +258,7 @@ export async function draftPrText(cfg: AiConfig, input: PrDraftInput, signal?: A
     input.jira.length
       ? `<jira_issues>\n${input.jira.map((j) => `${j.key} [${j.status}] ${j.summary} (${j.url})\n${j.description.slice(0, 2000)}`).join('\n\n')}\n</jira_issues>`
       : '',
-    input.facts.length ? `<known_from_pr_deck>\n${input.facts.join('\n')}\n</known_from_pr_deck>` : '',
+    input.facts.length ? `<known_from_dispatch>\n${input.facts.join('\n')}\n</known_from_dispatch>` : '',
     input.commits.length ? `<commits>\n${input.commits.slice(0, 60).map((c) => `- ${c.slice(0, 500)}`).join('\n')}\n</commits>` : '',
     `<diff>\n${diff}\n</diff>`,
     input.images.length ? `${input.images.length} image(s) are attached above: use what they show.` : '',

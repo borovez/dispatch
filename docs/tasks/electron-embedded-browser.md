@@ -4,7 +4,7 @@ Status: not started (deferred)
 
 ## Goal
 
-Show a PR's GitHub page (and a Jira issue's page) inside the PR Deck window, docked beside the side
+Show a PR's GitHub page (and a Jira issue's page) inside the Dispatch window, docked beside the side
 panel, instead of in a separate browser window.
 
 ## Why it needs a native app
@@ -26,7 +26,7 @@ window are still behind an unstable flag in Tauri v2; Electron's `WebContentsVie
 - **Embedded pane**: a `WebContentsView` attached to the main window that loads github.com /
   Atlassian URLs, positioned in a rect the web app reports.
 - **Bridge**: a preload script exposes a small API to the web app (via `contextBridge`), e.g.
-  `window.prdeckNative.showPage(url, bounds)`, `hidePage()`, `setBounds(bounds)`. The web app uses it
+  `window.dispatchNative.showPage(url, bounds)`, `hidePage()`, `setBounds(bounds)`. The web app uses it
   when present and falls back to `openBeside()` otherwise (browser / PWA).
 - **Session**: the pane uses a persistent partition (e.g. `persist:web`) so GitHub and Jira logins
   survive restarts. Users sign in once inside the app; it does not share the system browser's cookies.

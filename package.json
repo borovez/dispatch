@@ -1,5 +1,5 @@
 {
-  "name": "prdeck",
+  "name": "dispatch",
   "version": "0.1.2",
   "private": true,
   "repository": "github:borovez/prdeck",
@@ -18,7 +18,7 @@
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
     "app:install": "sh scripts/app-install.sh",
     "app:uninstall": "sh scripts/app-uninstall.sh",
-    "app:logs": "tail -f ~/Library/Logs/PRDeck.log",
+    "app:logs": "tail -f ~/Library/Logs/Dispatch.log",
     "app:update": "sh scripts/app-update.sh",
     "release": "sh scripts/release.sh",
     "desktop": "npm run start -w desktop",

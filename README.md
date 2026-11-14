@@ -1,4 +1,4 @@
-# PR Deck
+# Dispatch
 
 A local dashboard for the pull requests you care about across several GitHub orgs, with the things
 around them: cross-repo dependencies, Jira status, and a Slack inbox. It also runs an MCP server, so
@@ -7,7 +7,7 @@ Claude Code can query and edit the same data.
 It runs on your machine only. The API binds to `127.0.0.1`, tokens stay in a local SQLite file, and
 nothing is hosted.
 
-![PR Deck overview: stat tiles, the "Needs my action" list, the Slack inbox and dependency chains (demo data)](docs/screenshot.png)
+![Dispatch overview: stat tiles, the "Needs my action" list, the Slack inbox and dependency chains (demo data)](docs/screenshot.png)
 
 ## Features
 
@@ -76,21 +76,21 @@ default).
 
 ## Mac app
 
-`npm run desktop:dist` builds PR Deck as a Mac app for this Mac (`desktop/dist/PR-Deck-<version>-arm64.dmg`
+`npm run desktop:dist` builds Dispatch as a Mac app for this Mac (`desktop/dist/Dispatch-<version>-arm64.dmg`
 on Apple Silicon; `npm run desktop:dist:all` also builds `-x64.dmg` for Intel); `npm run desktop` runs it from source. Open the `.dmg` and drag
-**PR Deck** to Applications. It includes everything (no Node, git or npm needed) and keeps its data
-in `~/.prdeck`. If the background server from `npm run app:install` is running, the app uses it.
+**Dispatch** to Applications. It includes everything (no Node, git or npm needed) and keeps its data
+in `~/.dispatch`. If the background server from `npm run app:install` is running, the app uses it.
 
 It asks for Touch ID (or your Mac password) when it opens, and again after the screen locks or the
-Mac sleeps (PR Deck menu → Require Unlock; Lock Now with ⌘L).
+Mac sleeps (Dispatch menu → Require Unlock; Lock Now with ⌘L).
 
 The app isn't signed with an Apple Developer ID yet, so the first time macOS says it can't check it:
-right-click PR Deck in Applications → **Open** → **Open**. It checks GitHub for new releases (menu
-**PR Deck → Check for Updates…**) and offers the new `.dmg` when a release has one.
+right-click Dispatch in Applications → **Open** → **Open**. It checks GitHub for new releases (menu
+**Dispatch → Check for Updates…**) and offers the new `.dmg` when a release has one.
 
 ## Install as a Mac app
 
-PR Deck is a Progressive Web App: install it from the browser and it gets a Dock icon, its own
+Dispatch is a Progressive Web App: install it from the browser and it gets a Dock icon, its own
 window and Launchpad/Spotlight entries. The installed app talks to the local server, so first make
 the server run in the background:
 
@@ -98,9 +98,9 @@ the server run in the background:
 npm run app:install
 ```
 
-This builds the web app and registers a macOS LaunchAgent (`prdeck.server`) that starts the server
+This builds the web app and registers a macOS LaunchAgent (`dispatch.server`) that starts the server
 at login and restarts it if it stops. It serves the app at <http://127.0.0.1:4317>. Logs go to
-`~/Library/Logs/PRDeck.log` (`npm run app:logs`).
+`~/Library/Logs/Dispatch.log` (`npm run app:logs`).
 
 Then install the app from that address:
 
@@ -109,7 +109,7 @@ Then install the app from that address:
 - **Safari**: *File* → *Add to Dock*.
 
 In Chrome and Edge the app draws its own title bar ("window controls overlay"): the browser's bar
-with its menu, extensions and uninstall buttons is replaced by PR Deck's header, and the header
+with its menu, extensions and uninstall buttons is replaced by Dispatch's header, and the header
 drags the window. A small toggle in the top corner brings the browser's bar back. Safari web apps
 always get a plain macOS title bar.
 
@@ -145,21 +145,21 @@ Settings → MCP shows the exact `claude mcp add` command for your machine. It r
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PRDECK_DATA_DIR` | `~/.prdeck` | Where the SQLite database lives (settings, tokens, cache) |
-| `PRDECK_PORT` | `4317` | API port |
+| `DISPATCH_DATA_DIR` | `~/.dispatch` | Where the SQLite database lives (settings, tokens, cache) |
+| `DISPATCH_PORT` | `4317` | API port |
 | `CLAUDE_BIN` | found on `PATH` | Path to the `claude` CLI, if it isn't found |
 | `ANTHROPIC_API_KEY` | | Used for drafting when no key is stored in Settings |
 
 ## Security
 
 - The API only listens on loopback (`127.0.0.1`) and never returns stored tokens to the browser.
-- On macOS, tokens and keys live in the **macOS Keychain** (items named "PR Deck: …", visible in
+- On macOS, tokens and keys live in the **macOS Keychain** (items named "Dispatch: …", visible in
   Keychain Access); the database only notes that they're there. Older installs move their tokens
   there on first start and the database is rewritten so no copy is left. Elsewhere (or with
-  `PRDECK_KEYCHAIN=0`) they stay in the database under `PRDECK_DATA_DIR`: protect that folder like
+  `DISPATCH_KEYCHAIN=0`) they stay in the database under `DISPATCH_DATA_DIR`: protect that folder like
   any other credentials file.
 - The Mac app asks for **Touch ID** (or your Mac password) when it opens, when the screen locks and
-  when the Mac sleeps (PR Deck menu → Require Unlock; Lock Now with ⌘L). This locks the app window;
+  when the Mac sleeps (Dispatch menu → Require Unlock; Lock Now with ⌘L). This locks the app window;
   the local server itself still answers on `127.0.0.1` for this Mac (browser, Claude Code).
 - Drafting through Claude Code runs `claude -p` in safe mode with no tools and no saved session.
 

@@ -201,7 +201,7 @@ async function draftJira(c: { req: { json: <T>() => Promise<T> } }) {
 
 api.post('/setup/jira/test', async (c) => c.json(await jiraMyself((await draftJira(c)).cfg)))
 
-/** Every project the account can create issues in: Settings picks which ones PR Deck uses */
+/** Every project the account can create issues in: Settings picks which ones Dispatch uses */
 api.post('/setup/jira/projects', async (c) => c.json(await listProjects((await draftJira(c)).cfg, { all: true })))
 
 /** Issue types of one project, for the default type */
@@ -282,7 +282,7 @@ api.post('/deps', async (c) => {
     } catch (e) {
       warnings.push(`${to}: ${(e as Error).message}`)
     }
-  // Neither description holds it: keep it in PR Deck
+  // Neither description holds it: keep it in Dispatch
   const id = written || writtenOther ? undefined : addManualDep(from, to, d.kind, d.note ?? null)
   return c.json({ id, from, to, written, writtenOther, error: warnings.join('; ') || undefined })
 })

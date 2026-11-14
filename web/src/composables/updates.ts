@@ -12,7 +12,7 @@ const installing = ref(false)
 const popoverOpen = ref(false)
 let timer: number | undefined
 
-/** One toast per new version: "PR Deck X is available", with the action that fits this install */
+/** One toast per new version: "Dispatch X is available", with the action that fits this install */
 function announce(s: UpdateStatus) {
   const seen = useLayout().view('updates', { announced: '' })
   if (!s.available || !s.latest || seen.announced === s.latest) return
@@ -22,7 +22,7 @@ function announce(s: UpdateStatus) {
     : s.downloadUrl
       ? { label: 'Download', onClick: () => window.open(s.downloadUrl!, '_blank', 'noopener') }
       : { label: 'View release', onClick: () => window.open(s.url, '_blank', 'noopener') }
-  toast.info(`PR Deck ${s.latest} is available`, {
+  toast.info(`Dispatch ${s.latest} is available`, {
     description: `You have ${s.current}.`,
     duration: 15_000,
     action,
@@ -36,7 +36,7 @@ async function load(refresh = false) {
     status.value = await api.updateStatus(refresh)
     announce(status.value)
     if (refresh && !status.value.available)
-      toast.success(status.value.error ? 'Couldn’t check for updates' : `PR Deck ${status.value.current} is the latest`, { description: status.value.error ?? undefined })
+      toast.success(status.value.error ? 'Couldn’t check for updates' : `Dispatch ${status.value.current} is the latest`, { description: status.value.error ?? undefined })
   } catch {
     /* offline: try again later */
   } finally {

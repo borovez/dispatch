@@ -369,7 +369,7 @@ export async function replyInThread(cfg: SlackConfig, item: SlackItem, text: str
 }
 
 /**
- * Mirror PR Deck's Done on a Slack todo: add my first "done" reaction (or take it off when the item goes
+ * Mirror Dispatch's Done on a Slack todo: add my first "done" reaction (or take it off when the item goes
  * back to the inbox). Needs the reactions:write scope.
  */
 export async function setTodoDoneInSlack(cfg: SlackConfig, item: SlackItem, done: boolean): Promise<string | null> {

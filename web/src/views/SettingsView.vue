@@ -51,14 +51,14 @@ onMounted(async () => {
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2"><PhGraph :size="20" /> Dependencies</CardTitle>
-        <CardDescription>How dependencies you add or remove in PR Deck are stored.</CardDescription>
+        <CardDescription>How dependencies you add or remove in Dispatch are stored.</CardDescription>
       </CardHeader>
       <CardContent class="space-y-3">
         <Label class="cursor-pointer items-start gap-2 font-normal">
           <Switch v-model="st.s.dependencies.writeToDescription" class="mt-0.5" />
           <span>
             Write them into the PR description on GitHub
-            <span class="block text-xs text-muted-foreground">Adds or removes a “Depends on: org/repo#12” line in the dependent PR, so reviewers see it too. Off: kept in PR Deck only.</span>
+            <span class="block text-xs text-muted-foreground">Adds or removes a “Depends on: org/repo#12” line in the dependent PR, so reviewers see it too. Off: kept in Dispatch only.</span>
           </span>
         </Label>
         <Label class="cursor-pointer items-start gap-2 font-normal" :class="!st.s.dependencies.writeToDescription && 'opacity-50'">
@@ -84,7 +84,7 @@ onMounted(async () => {
         </CardDescription>
       </CardHeader>
       <CardContent v-if="mcp" class="space-y-1">
-        <CodeBlock :code="`claude mcp add prdeck --scope user -- ${mcp.node} ${mcp.tsxCandidates[1]} ${mcp.entry}`" />
+        <CodeBlock :code="`claude mcp add dispatch --scope user -- ${mcp.node} ${mcp.tsxCandidates[1]} ${mcp.entry}`" />
         <p class="text-xs text-muted-foreground">Database: {{ mcp.dbPath }}</p>
       </CardContent>
     </Card>

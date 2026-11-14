@@ -38,7 +38,7 @@ const others = computed(() =>
       const why = direct
         ? direct.source === 'body'
           ? 'set in the PR description'
-          : 'added in PR Deck'
+          : 'added in Dispatch'
         : (link?.reasons.find((x) => x.includes(props.releaseId)) ?? link?.reasons[0] ?? '')
       return { id: r, pr: deck.byId.get(r), before, after, shared, direct, why }
     }),

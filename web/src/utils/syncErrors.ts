@@ -22,7 +22,7 @@ export interface SyncError {
 const KNOWN: [RegExp, string, string | null][] = [
   // Most specific first
   [/secondary rate limit/i, 'GitHub asked to slow down', 'Calls pause for a few minutes, then sync resumes.'],
-  [/rate limit/i, 'GitHub rate limit reached', 'PR Deck pauses GitHub calls until the limit resets (usually within the hour) and retries on its own.'],
+  [/rate limit/i, 'GitHub rate limit reached', 'Dispatch pauses GitHub calls until the limit resets (usually within the hour) and retries on its own.'],
   [/missing_scope|needs scope/i, 'Missing permission', 'Add the scope to your Slack app, reinstall it and paste the new token in Settings → Slack.'],
   [/fetch failed|ENOTFOUND|ECONNRESET|ETIMEDOUT|network/i, 'Network error', 'Usually temporary; the next sync tries again.'],
   [/401|bad credentials|invalid_auth|token_revoked/i, 'Token rejected', 'Reconnect the account in Settings.'],

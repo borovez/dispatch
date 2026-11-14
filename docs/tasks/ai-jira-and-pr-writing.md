@@ -88,7 +88,7 @@ the change.
 
 ### 1.4 MCP
 
-Claude Code writes the text itself, so the tools give it what PR Deck knows and write safely:
+Claude Code writes the text itself, so the tools give it what Dispatch knows and write safely:
 `jira_fields` (fields, choices, current values and description, writing guides), `create_jira_issue` and
 `update_jira_issue` (fields by name, choices by label; refuse with the choices when something doesn't match).
 
@@ -106,11 +106,11 @@ Claude Code writes the text itself, so the tools give it what PR Deck knows and 
 
 ## Part 2: Pull requests (update only) ✅
 
-PR Deck never opens PRs; it rewrites an existing PR's **title and description** with Claude:
+Dispatch never opens PRs; it rewrites an existing PR's **title and description** with Claude:
 
 - Context: the repo's `CLAUDE.md` and `.github/pull_request_template.md` (fetched from the PR's base
   branch through the GitHub API, also `docs/`-level templates if the repo has them), the diff
-  (files and patches, trimmed to a budget), commits, linked Jira issues, dependencies and flags PR Deck knows about.
+  (files and patches, trimmed to a budget), commits, linked Jira issues, dependencies and flags Dispatch knows about.
 - Keeps what's already there: dependency lines (`Depends on:` / `Blocks:` …), feature flag lines, ticked
   checklist items and anything you mark as "keep".
 - Review as a diff in the PR panel, then Save (PATCH title/body, the same path as dependency writes).

@@ -22,7 +22,7 @@ const props = defineProps<{
   /** Highlighted PR (e.g. ship next) and its badge label */
   highlight?: PrId | null
   highlightLabel?: string
-  /** For PRs PR Deck doesn't track (e.g. release contents): shown from this, opened on GitHub */
+  /** For PRs Dispatch doesn't track (e.g. release contents): shown from this, opened on GitHub */
   fallback?: (id: PrId) => ReleaseItem | undefined
   /** Trigger shows only the count */
   compact?: boolean

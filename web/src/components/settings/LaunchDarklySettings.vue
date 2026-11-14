@@ -104,7 +104,7 @@ const submit = () => st.saveSection({ launchdarkly: draft.value }, ld.value ? 'L
     <template #dialog-description>
       Open
       <a class="text-primary hover:underline" :href="tokenPage" target="_blank" rel="noopener">LaunchDarkly → Organization settings → Authorization</a>,
-      create an <b>access token</b> with the <b>Reader</b> role and paste it below. PR Deck only reads flags.
+      create an <b>access token</b> with the <b>Reader</b> role and paste it below. Dispatch only reads flags.
     </template>
     <template v-if="draft" #form>
       <Field label="Access token">

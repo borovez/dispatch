@@ -13,9 +13,9 @@ import { normaliseRef } from './refs.ts'
 import { runSync } from './sync.ts'
 
 // stdio MCP server over the same SQLite cache the web app uses.
-// Register in Claude Code:  claude mcp add prdeck --scope user -- <node> <tsx cli> <this file>
+// Register in Claude Code:  claude mcp add dispatch --scope user -- <node> <tsx cli> <this file>
 
-const server = new McpServer({ name: 'prdeck', version: '0.1.0' })
+const server = new McpServer({ name: 'dispatch', version: '0.1.0' })
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })
 
@@ -245,7 +245,7 @@ server.registerTool(
     title: 'Jira fields and writing guide',
     description:
       'Before creating or editing a Jira issue: the fields it has (type, required, choices such as priorities, active/future sprints, open epics), ' +
-      "the project's writing guide (PR Deck settings) and optionally a repo's CLAUDE.md guidance. With `key`, also the issue's current " +
+      "the project's writing guide (Dispatch settings) and optionally a repo's CLAUDE.md guidance. With `key`, also the issue's current " +
       'summary, Markdown description and field values (edit the description from this text: image lines ![…](jira-media:…) are its attachments and must be kept).',
     inputSchema: {
       key: z.string().optional().describe('An existing issue to edit, e.g. PROJ-123'),
@@ -257,7 +257,7 @@ server.registerTool(
   async ({ key, projectKey, issueType, repo }) => {
     const s = getSettings()
     const cfg = s.jira
-    if (!cfg?.apiToken) return text('Jira is not configured in PR Deck settings.')
+    if (!cfg?.apiToken) return text('Jira is not configured in Dispatch settings.')
     let head: string
     let fields: JiraFieldMeta[]
     let values: Record<string, JiraFieldValue> = {}
@@ -298,7 +298,7 @@ server.registerTool(
     return text(
       [
         head,
-        guide ? `## Writing guide for ${project} (PR Deck settings; follow it)\n${guide}` : '',
+        guide ? `## Writing guide for ${project} (Dispatch settings; follow it)\n${guide}` : '',
         repoGuide ? `## ${repo} CLAUDE.md (issue guidance)\n${repoGuide}` : '',
         `## Fields (* = required; pass them to create_jira_issue / update_jira_issue by name, choices by label)\n${rows.join('\n')}`,
         current,
@@ -335,7 +335,7 @@ server.registerTool(
   async (input) => {
     const s = getSettings()
     const cfg = s.jira
-    if (!cfg?.apiToken) return text('Jira is not configured in PR Deck settings.')
+    if (!cfg?.apiToken) return text('Jira is not configured in Dispatch settings.')
     const projectKey = (input.projectKey || cfg.create.projectKey || '').toUpperCase()
     if (!projectKey) return text('No projectKey given and no default project configured.')
     let meta = await createMeta(cfg, projectKey)
@@ -390,7 +390,7 @@ server.registerTool(
   },
   async (input) => {
     const cfg = getSettings().jira
-    if (!cfg?.apiToken) return text('Jira is not configured in PR Deck settings.')
+    if (!cfg?.apiToken) return text('Jira is not configured in Dispatch settings.')
     const key = input.key.toUpperCase()
     const e = await editable(cfg, key)
     const { values, problems } = await resolveFieldInput(cfg, e.project.key, e.fields, input.fields ?? {}, key)

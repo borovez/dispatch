@@ -9,7 +9,7 @@ import { api } from './routes.ts'
 import { runSync } from './sync.ts'
 import { updateStatus } from './updates.ts'
 
-const PORT = Number(process.env.PRDECK_PORT ?? 4317)
+const PORT = Number(process.env.DISPATCH_PORT ?? process.env.PRDECK_PORT ?? 4317)
 // Bound to loopback only: this process holds your GitHub and Jira tokens.
 const HOST = '127.0.0.1'
 
@@ -18,7 +18,7 @@ app.route('/api', api)
 
 // In production, serve the built Vue app.
 // The desktop app bundles the server and points it at its copy of the web app
-const dist = process.env.PRDECK_WEB_DIR ?? fileURLToPath(new URL('../../web/dist', import.meta.url))
+const dist = process.env.DISPATCH_WEB_DIR ?? fileURLToPath(new URL('../../web/dist', import.meta.url))
 if (existsSync(dist)) {
   app.use('/*', serveStatic({ root: dist }))
   // SPA fallback. Read on each request: a rebuild renames the hashed assets it points to
@@ -26,7 +26,7 @@ if (existsSync(dist)) {
 }
 
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
-  console.log(`prdeck API on http://${HOST}:${PORT}  (db: ${DB_PATH})`)
+  console.log(`dispatch API on http://${HOST}:${PORT}  (db: ${DB_PATH})`)
 })
 
 // A sync cut short by a restart left "running" behind; mark it stopped, with unfinished steps as queued

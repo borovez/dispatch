@@ -1,4 +1,4 @@
-// PR Deck for Mac: starts the bundled server (or reuses one already running, e.g. the background
+// Dispatch for Mac: starts the bundled server (or reuses one already running, e.g. the background
 // service from `npm run app:install`), opens the app in a window, and checks GitHub for new releases.
 import { app, BrowserWindow, dialog, ipcMain, Menu, powerMonitor, shell, systemPreferences } from 'electron'
 import { spawn } from 'node:child_process'
@@ -8,11 +8,11 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const PORT = Number(process.env.PRDECK_PORT ?? 4317)
+const PORT = Number(process.env.DISPATCH_PORT ?? 4317)
 const BASE = `http://127.0.0.1:${PORT}`
 const REPO = 'borovez/prdeck'
 const HERE = fileURLToPath(new URL('.', import.meta.url))
-const LOG = join(homedir(), 'Library', 'Logs', 'PRDeck-desktop.log')
+const LOG = join(homedir(), 'Library', 'Logs', 'Dispatch-desktop.log')
 
 let server = null
 let window = null
@@ -34,7 +34,7 @@ let locked = prefs.requireUnlock
 async function authenticate() {
   if (systemPreferences.canPromptTouchID()) {
     try {
-      await systemPreferences.promptTouchID('unlock PR Deck')
+      await systemPreferences.promptTouchID('unlock Dispatch')
       return { ok: true }
     } catch (e) {
       // Cancelled or too many tries: offer the password instead of giving up
@@ -49,7 +49,7 @@ function passwordPrompt() {
   return new Promise((resolve) =>
     execFile(
       '/usr/bin/osascript',
-      ['-e', 'do shell script "true" with prompt "PR Deck wants to unlock." with administrator privileges'],
+      ['-e', 'do shell script "true" with prompt "Dispatch wants to unlock." with administrator privileges'],
       (err) => resolve(err ? { ok: false, message: /cancel/i.test(String(err.message)) ? 'Cancelled' : 'Not unlocked' } : { ok: true }),
     ),
   )
@@ -59,7 +59,7 @@ function showLock() {
   locked = true
   window?.loadFile(join(HERE, 'lock.html'))
 }
-ipcMain.handle('prdeck:unlock', async () => {
+ipcMain.handle('dispatch:unlock', async () => {
   const r = await authenticate()
   if (r.ok) {
     locked = false
@@ -71,10 +71,10 @@ ipcMain.handle('prdeck:unlock', async () => {
 powerMonitor.on('lock-screen', () => prefs.requireUnlock && showLock())
 powerMonitor.on('suspend', () => prefs.requireUnlock && showLock())
 
-// Run from source (npm run desktop) Electron shows its own name and icon: use PR Deck's
+// Run from source (npm run desktop) Electron shows its own name and icon: use Dispatch's
 // (the packaged app gets both from electron-builder)
 if (!app.isPackaged) {
-  app.setName('PR Deck')
+  app.setName('Dispatch')
   app.whenReady().then(() => app.dock?.setIcon(join(HERE, 'build', 'icon.png')))
 }
 
@@ -100,10 +100,10 @@ async function startServer() {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
-      PRDECK_PORT: String(PORT),
-      PRDECK_WEB_DIR: join(HERE, 'app', 'web'),
-      PRDECK_VERSION: app.getVersion(),
-      PRDECK_INSTALL: 'desktop',
+      DISPATCH_PORT: String(PORT),
+      DISPATCH_WEB_DIR: join(HERE, 'app', 'web'),
+      DISPATCH_VERSION: app.getVersion(),
+      DISPATCH_INSTALL: 'desktop',
       PATH: path,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -112,13 +112,13 @@ async function startServer() {
   server.stderr.pipe(log)
   server.on('exit', (code) => {
     server = null
-    if (code && !app.isQuitting) dialog.showErrorBox('PR Deck', `The PR Deck server stopped (exit ${code}). See ${LOG}`)
+    if (code && !app.isQuitting) dialog.showErrorBox('Dispatch', `The Dispatch server stopped (exit ${code}). See ${LOG}`)
   })
   for (let i = 0; i < 60; i++) {
     if (await healthy()) return
     await new Promise((r) => setTimeout(r, 250))
   }
-  throw new Error(`The PR Deck server didn't start. See ${LOG}`)
+  throw new Error(`The Dispatch server didn't start. See ${LOG}`)
 }
 
 function createWindow() {
@@ -127,7 +127,7 @@ function createWindow() {
     height: 920,
     minWidth: 900,
     minHeight: 600,
-    title: 'PR Deck',
+    title: 'Dispatch',
     backgroundColor: '#09090b',
     webPreferences: { contextIsolation: true, sandbox: true, preload: join(HERE, 'preload.cjs') },
   })
@@ -155,7 +155,7 @@ async function checkForUpdate(manual = false) {
     const rel = await r.json()
     const latest = String(rel.tag_name).replace(/^v/, '')
     if (!newer(latest, app.getVersion())) {
-      if (manual) dialog.showMessageBox({ message: `PR Deck ${app.getVersion()} is the latest version.` })
+      if (manual) dialog.showMessageBox({ message: `Dispatch ${app.getVersion()} is the latest version.` })
       return
     }
     const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
@@ -163,8 +163,8 @@ async function checkForUpdate(manual = false) {
     const dmg = dmgs.find((a) => a.name.includes(arch)) ?? dmgs[0]
     const { response } = await dialog.showMessageBox({
       type: 'info',
-      message: `PR Deck ${latest} is available`,
-      detail: `You have ${app.getVersion()}. Download it, open the .dmg and drag PR Deck to Applications, replacing this one.`,
+      message: `Dispatch ${latest} is available`,
+      detail: `You have ${app.getVersion()}. Download it, open the .dmg and drag Dispatch to Applications, replacing this one.`,
       buttons: ['Download', 'Release notes', 'Later'],
       defaultId: 0,
       cancelId: 2,
@@ -172,7 +172,7 @@ async function checkForUpdate(manual = false) {
     if (response === 0) shell.openExternal(dmg?.browser_download_url ?? rel.html_url)
     if (response === 1) shell.openExternal(rel.html_url)
   } catch (e) {
-    if (manual) dialog.showErrorBox('PR Deck', `Couldn't check for updates: ${e.message}`)
+    if (manual) dialog.showErrorBox('Dispatch', `Couldn't check for updates: ${e.message}`)
   }
 }
 
@@ -222,7 +222,7 @@ app.whenReady().then(async () => {
   try {
     await startServer()
   } catch (e) {
-    dialog.showErrorBox('PR Deck', e.message)
+    dialog.showErrorBox('Dispatch', e.message)
     app.quit()
     return
   }
@@ -237,5 +237,5 @@ app.on('before-quit', () => {
   server?.kill()
 })
 app.on('window-all-closed', () => {
-  // Like other Mac apps: closing the window keeps PR Deck running in the Dock
+  // Like other Mac apps: closing the window keeps Dispatch running in the Dock
 })

@@ -10,14 +10,14 @@ import { kvGet, kvSet } from './db.ts'
 const run = promisify(execFile)
 const ROOT = fileURLToPath(new URL('../..', import.meta.url))
 /** The desktop app passes its version and how it was installed; a source checkout reads package.json */
-const DESKTOP = process.env.PRDECK_INSTALL === 'desktop'
+const DESKTOP = process.env.DISPATCH_INSTALL === 'desktop'
 const pkg: { version: string; repository?: string } = DESKTOP
-  ? { version: process.env.PRDECK_VERSION ?? '0.0.0' }
+  ? { version: process.env.DISPATCH_VERSION ?? '0.0.0' }
   : JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 export const VERSION = pkg.version
 const REPO = (pkg.repository ?? 'github:borovez/prdeck').replace(/^github:/, '')
 const CHECK_EVERY_MS = 6 * 60 * 60_000
-export const UPDATE_LOG = join(homedir(), 'Library', 'Logs', 'PRDeck-update.log')
+export const UPDATE_LOG = join(homedir(), 'Library', 'Logs', 'Dispatch-update.log')
 
 /** 1.2.3 vs 1.10.0, ignoring a leading v */
 export function newer(a: string, b: string) {

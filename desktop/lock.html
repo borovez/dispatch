@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:" />
-    <title>PR Deck</title>
+    <title>Dispatch</title>
     <style>
       :root { color-scheme: light dark; --bg: #fafafa; --fg: #18181b; --muted: #71717a; --primary: #6366f1; }
       @media (prefers-color-scheme: dark) { :root { --bg: #09090b; --fg: #fafafa; --muted: #a1a1aa; --primary: #818cf8; } }
@@ -26,7 +26,7 @@
       <div class="lock">
         <svg width="28" height="28" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208 80h-32V56a48 48 0 0 0-96 0v24H48a16 16 0 0 0-16 16v112a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16V96a16 16 0 0 0-16-16ZM96 56a32 32 0 0 1 64 0v24H96Zm112 152H48V96h160v112Zm-68-56a12 12 0 1 1-12-12 12 12 0 0 1 12 12Z"/></svg>
       </div>
-      <h1>PR Deck is locked</h1>
+      <h1>Dispatch is locked</h1>
       <p>Unlock with Touch ID or your Mac password to see your pull requests, Jira issues and Slack.</p>
       <button id="unlock" autofocus>Unlock</button>
       <div class="err" id="err"></div>
@@ -37,7 +37,7 @@
       async function go() {
         btn.disabled = true
         err.textContent = ''
-        const r = await window.prdeckLock.unlock()
+        const r = await window.dispatchLock.unlock()
         if (!r.ok) err.textContent = r.message || 'Not unlocked'
         btn.disabled = false
       }
