@@ -17,9 +17,9 @@ const notes = computed(() => markdownToAdf(status.value?.notes ?? ''))
 <template>
   <Popover v-if="status?.available" v-model:open="popoverOpen">
     <PopoverTrigger as-child>
-      <Button size="sm" variant="outline" class="h-8 gap-1.5 border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary">
+      <Button size="sm" variant="outline" class="h-8 gap-1.5 border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary" :title="installing ? 'Updating…' : 'Update available'">
         <PhCircleNotch v-if="installing" class="animate-spin" /><PhArrowCircleUp v-else weight="fill" />
-        {{ installing ? 'Updating…' : 'Update available' }}
+        <span class="max-xl:sr-only">{{ installing ? 'Updating…' : 'Update available' }}</span>
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" class="w-96 gap-3">

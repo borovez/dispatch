@@ -1,8 +1,9 @@
-import { ref } from 'vue'
+import { markRaw, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import type { UpdateStatus } from '@shared/types'
 import { api } from '@/api'
 import { useLayout } from '@/stores/layout'
+import UpdateToast from '@/components/UpdateToast.vue'
 
 /** Release check shared by the header pill and the user menu */
 const status = ref<UpdateStatus | null>(null)
@@ -22,11 +23,15 @@ function announce(s: UpdateStatus) {
     : s.downloadUrl
       ? { label: 'Download', onClick: () => window.open(s.downloadUrl!, '_blank', 'noopener') }
       : { label: 'View release', onClick: () => window.open(s.url, '_blank', 'noopener') }
-  toast.info(`Dispatch ${s.latest} is available`, {
-    description: `You have ${s.current}.`,
+  toast.custom(markRaw(UpdateToast), {
     duration: 15_000,
-    action,
-    cancel: { label: 'What’s new', onClick: () => (popoverOpen.value = true) },
+    componentProps: {
+      latest: s.latest,
+      current: s.current,
+      actionLabel: action.label,
+      onAction: action.onClick,
+      onWhatsNew: () => (popoverOpen.value = true),
+    },
   })
 }
 

@@ -154,7 +154,8 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
           </div>
           <GlobalSearch />
 
-          <div class="flex min-w-0 shrink-0 items-center justify-end gap-1 sm:gap-2">
+          <!-- sm:min-w-fit: the grid keeps room for these, so they never slide under the search -->
+          <div class="flex min-w-0 shrink-0 items-center justify-end gap-1 sm:min-w-fit sm:gap-2">
           <UpdateButton />
           <SyncErrors />
           <Tooltip v-if="deck.overview?.configured.jira">
