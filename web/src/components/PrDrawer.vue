@@ -3,6 +3,7 @@ import { useArrowNav } from '@/composables/prNav'
 import { useDependencies } from '@/composables/dependencies'
 import { useReleaseNav } from '@/composables/releaseNav'
 import { followBeside, openBeside } from '@/composables/besideWindow'
+import { issueSeedFromPr } from '@/composables/itemMenus'
 import { loadPrDetail } from '@/composables/prDetail'
 import { releaseStatus } from '@shared/release'
 import SidePanel from './SidePanel.vue'
@@ -136,8 +137,7 @@ const banner = computed(() => {
 function createIssueFromPr() {
   const p = pr.value
   if (!p) return
-  const summary = p.title.replace(/\s*\[[A-Z][A-Z0-9_]+-\d+\]/g, '').replace(/^\w+(\([^)]*\))?!?:\s*/, '').trim()
-  deck.composer = { mode: 'create', summary: summary.charAt(0).toUpperCase() + summary.slice(1), description: `Pull request: [${p.id}](${p.url})`, prId: p.id }
+  deck.composer = issueSeedFromPr(p)
 }
 const jira = computed(() => (pr.value?.jiraKeys ?? []).map((k) => ({ key: k, issue: deck.jiraByKey.get(k) })))
 

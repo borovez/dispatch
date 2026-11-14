@@ -23,6 +23,8 @@ import RepoName from './RepoName.vue'
 import ThreadCount from './ThreadCount.vue'
 import FlagStatus from './FlagStatus.vue'
 import PrListPopover from './PrListPopover.vue'
+import ItemContextMenu from './ItemContextMenu.vue'
+import { usePrMenu } from '@/composables/itemMenus'
 
 /** preview: hover preview (off for rows inside side panels) */
 const props = withDefaults(defineProps<{ pr: PrView; compact?: boolean; preview?: boolean; class?: HTMLAttributes['class']; /** Flags to show instead of the PR's own (e.g. a release's roll-up) */ flags?: string[]; /** Parts to leave out (PR_PROPERTIES keys) */ hide?: string[] }>(), { preview: true })
@@ -33,10 +35,12 @@ const show = (part: string) => !props.hide?.includes(part)
 const contents = computed(() => deck.releaseById.get(props.pr.id))
 const contentIds = computed(() => contents.value?.items.map((i) => i.id) ?? [])
 const contentItem = (id: string) => contents.value?.items.find((i) => i.id === id)
+const prMenu = usePrMenu()
 const openDeps = computed(() => props.pr.dependsOn.filter((d) => !d.satisfied).length)
 </script>
 
 <template>
+  <ItemContextMenu :entries="() => prMenu(pr)">
   <PrHover :pr="pr" side="bottom" :disabled="!preview">
   <div
     :data-pr-id="pr.id"
@@ -113,4 +117,5 @@ const openDeps = computed(() => props.pr.dependsOn.filter((d) => !d.satisfied).l
     </div>
   </div>
   </PrHover>
+  </ItemContextMenu>
 </template>

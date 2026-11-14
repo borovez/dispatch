@@ -6,6 +6,8 @@ import { timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import JiraTransition from './JiraTransition.vue'
 import PrListPopover from './PrListPopover.vue'
+import ItemContextMenu from './ItemContextMenu.vue'
+import { useJiraMenu } from '@/composables/itemMenus'
 import PrRow from './PrRow.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -18,6 +20,7 @@ function select(e: MouseEvent) {
   deck.selectedJiraKey = props.issueKey
 }
 const deck = useDeck()
+const jiraMenu = useJiraMenu()
 const href = computed(
   () => props.issue?.url ?? (deck.overview?.jiraBaseUrl ? `${deck.overview.jiraBaseUrl}/browse/${props.issueKey}` : undefined),
 )
@@ -36,6 +39,7 @@ const initials = (name: string) =>
 </script>
 
 <template>
+  <ItemContextMenu :entries="() => jiraMenu(issueKey, issue, prs)">
   <div
     :data-jira-id="issueKey"
     :class="cn('group cursor-pointer px-4 py-3 transition-colors hover:bg-accent/50', deck.selectedJiraKey === issueKey && 'bg-accent/60 ring-2 ring-primary ring-inset')"
@@ -86,4 +90,5 @@ const initials = (name: string) =>
     </div>
     <div v-else-if="!dense" class="mt-1 ml-6 text-xs text-muted-foreground">No linked pull requests</div>
   </div>
+  </ItemContextMenu>
 </template>
