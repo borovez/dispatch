@@ -23,7 +23,7 @@ const DEFAULTS: SlackConfig = {
   lookbackDays: 7,
   maxConversations: 40,
   includeSaved: true,
-  todoReactions: ['todo', 'eyes', 'bookmark'],
+  todoReactions: ['todo', 'bookmark'],
   doneReactions: ['white_check_mark', 'heavy_check_mark', 'done'],
 }
 const SCOPES =
@@ -75,7 +75,7 @@ const submit = () => st.saveSection({ slack: draft.value }, slack.value ? 'Slack
         <Field label="Look back (days)"><Input v-model.number="draft.lookbackDays" type="number" min="1" max="60" /></Field>
         <Field label="Max DMs / groups scanned"><Input v-model.number="draft.maxConversations" type="number" min="5" max="200" /></Field>
         <Field label="Todo reactions" hint="Emoji names, comma separated">
-          <Input :model-value="draft.todoReactions.join(', ')" placeholder="todo, eyes, bookmark" @change="draft.todoReactions = splitList(($event.target as HTMLInputElement).value).map((r) => r.replace(/:/g, ''))" />
+          <Input :model-value="draft.todoReactions.join(', ')" placeholder="todo, bookmark" @change="draft.todoReactions = splitList(($event.target as HTMLInputElement).value).map((r) => r.replace(/:/g, ''))" />
         </Field>
         <Field label="Done reactions" hint="A todo you also react to with one of these moves to Done">
           <Input :model-value="draft.doneReactions.join(', ')" placeholder="white_check_mark, heavy_check_mark" @change="draft.doneReactions = splitList(($event.target as HTMLInputElement).value).map((r) => r.replace(/:/g, ''))" />
