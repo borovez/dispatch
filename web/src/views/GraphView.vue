@@ -206,6 +206,11 @@ function onNodeClick({ node }: NodeMouseEvent) {
   }
 }
 const onEdgeClick = ({ edge }: EdgeMouseEvent) => (selectedEdge.value = edge.data as DepEdge)
+/** Right-click on an edge: the same card as a click (see the dependency, remove it), not the browser menu */
+function onEdgeContextMenu(e: EdgeMouseEvent) {
+  e.event.preventDefault()
+  onEdgeClick(e)
+}
 // Hover tooltip: HTML above the canvas (an SVG edge label sits under the nodes and gets clipped)
 const tip = ref<{ x: number; y: number; text: string } | null>(null)
 function onEdgeHover({ edge, event }: EdgeMouseEvent) {
@@ -306,6 +311,7 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
         fit-view-on-init
         @node-click="onNodeClick"
         @edge-click="onEdgeClick"
+        @edge-context-menu="onEdgeContextMenu"
         @edge-mouse-enter="onEdgeHover"
         @edge-mouse-move="onEdgeHover"
         @edge-mouse-leave="onEdgeLeave"

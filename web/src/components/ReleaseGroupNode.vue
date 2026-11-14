@@ -51,6 +51,8 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import RepoName from './RepoName.vue'
 import FlagStatus from './FlagStatus.vue'
+import ItemContextMenu from './ItemContextMenu.vue'
+import { usePrMenu } from '@/composables/itemMenus'
 
 /**
  * A release (or a repo's merged-but-unreleased work) on the release graph: header with state and a Jira
@@ -58,6 +60,7 @@ import FlagStatus from './FlagStatus.vue'
  */
 const props = defineProps<{ data: ReleaseGroupData }>()
 const deck = useDeck()
+const prMenu = usePrMenu()
 const drawer = useLayout().view('drawer', { tab: 'details' as string })
 
 /** Jira roll-up: done / in progress / to do / not synced */
@@ -129,6 +132,8 @@ const subtitle = computed(() => {
     <Handle id="back-in:group" type="target" :position="Position.Right" :connectable="false" class="rg-handle" style="top: 28px" />
 
     <!-- Header: fixed height (see HEADER_H) -->
+    <!-- Right-click: the release PR's menu (boxes without a PR, like Unreleased, have none) -->
+    <ItemContextMenu :entries="() => (data.pr ? prMenu.byId(data.pr.id) : [])">
     <button type="button" class="flex h-[80px] w-full flex-col gap-1 border-b px-3 py-2 text-left" :class="data.pr && 'transition-colors hover:bg-accent'" @click.stop="openRelease">
       <span class="flex w-full min-w-0 items-center gap-1.5 text-xs">
         <template v-if="data.pr">
@@ -172,12 +177,12 @@ const subtitle = computed(() => {
         <span v-if="data.jiraKeys.length" class="shrink-0 tabular-nums">{{ rollup.done }}/{{ data.jiraKeys.length }}</span>
       </span>
     </button>
+    </ItemContextMenu>
 
     <!-- Rows: fixed height each (ROW_H) -->
     <template v-if="data.expanded">
+      <ItemContextMenu v-for="r in data.rows" :key="r.id" :entries="() => prMenu.byId(r.id)">
       <div
-        v-for="r in data.rows"
-        :key="r.id"
         :data-pr-id="r.pr ? r.id : undefined"
         class="relative flex h-7 cursor-pointer items-center gap-1.5 px-3 text-xs transition-colors hover:bg-accent"
         :class="r.pr && deck.selectedId === r.id && 'bg-primary/10'"
@@ -197,6 +202,7 @@ const subtitle = computed(() => {
         <PhWarning v-if="r.warn" :size="13" weight="fill" class="shrink-0 text-warning" />
         <Badge v-if="r.via && r.via !== 'commit'" variant="muted" class="h-4 shrink-0 px-1 text-[10px]">{{ r.via }}</Badge>
       </div>
+      </ItemContextMenu>
     </template>
     <button
       v-if="data.rows.length"

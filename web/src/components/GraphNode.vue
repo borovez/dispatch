@@ -22,13 +22,18 @@ export interface GraphNodeData {
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
 import PrCard from './PrCard.vue'
+import ItemContextMenu from './ItemContextMenu.vue'
+import { usePrMenu } from '@/composables/itemMenus'
 
 defineProps<{ data: GraphNodeData; selected?: boolean }>()
+const prMenu = usePrMenu()
 </script>
 
 <template>
+  <ItemContextMenu :entries="() => prMenu.byId(data.id)">
   <PrCard :id="data.id" :pr="data.pr" :is-next="data.isNext" :accent="data.color" :selected="selected" class="w-[264px]">
     <Handle type="target" :position="Position.Left" class="graph-handle" />
     <Handle type="source" :position="Position.Right" class="graph-handle" />
   </PrCard>
+  </ItemContextMenu>
 </template>
