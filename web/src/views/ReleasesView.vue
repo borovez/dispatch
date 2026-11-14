@@ -224,7 +224,7 @@ async function refresh(id: string) {
               @update:collapsed="(c: boolean) => (v.collapsed[`unreleased:${u.repo}`] = c)"
             >
               <template #label><RepoName :repo="u.repo" class="font-mono text-xs" /></template>
-              <div class="-m-1.5 divide-y"><PrRow v-for="p in u.prs" :key="p.id" :pr="p" compact /></div>
+              <div><PrRow v-for="p in u.prs" :key="p.id" :pr="p" compact /></div>
             </GroupCard>
           </template>
           <div v-if="!releases.length && !unreleased.length && !tags.length" class="py-16 text-center text-muted-foreground">
@@ -253,7 +253,7 @@ async function refresh(id: string) {
             :collapsed="isCollapsed(g.key, g.collapsed)"
             @update:collapsed="(c: boolean) => (v.collapsed[g.key] = c)"
           >
-            <div class="-m-1.5 divide-y">
+            <div>
               <div v-for="p in g.prs" :key="p.id">
                 <PrRow :pr="p" />
                 <div v-if="p.state === 'MERGED' && p.backmerge" class="flex items-center gap-1.5 px-2.5 pb-2 text-xs" :class="p.backmerge.backmerged ? 'text-success' : 'text-warning'">

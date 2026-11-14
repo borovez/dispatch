@@ -19,7 +19,7 @@ const deck = useDeck()
   <div
     :data-slack-id="item.id"
     :class="cn(
-      'group flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-1 rounded-lg px-3 py-2.5 hover:bg-accent sm:flex-nowrap',
+      'group flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-1 rounded-lg px-3 py-2.5 transition-colors hover:bg-accent sm:flex-nowrap',
       item.status !== 'new' && 'opacity-60',
       deck.selectedSlackId === item.id && 'bg-accent ring-2 ring-primary ring-inset',
     )"

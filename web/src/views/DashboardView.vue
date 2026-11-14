@@ -232,7 +232,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
             <div v-if="!deck.overview?.configured.slack" class="p-6 text-center text-sm text-muted-foreground">
               Slack isn't connected. <RouterLink to="/settings" class="text-primary hover:underline">Set it up</RouterLink>
             </div>
-            <SlackList :items="slackFor(p).slice(0, p.limit)" class="-m-1.5 [&>section:last-child_[data-slack-id]:last-child]:rounded-b-xl" />
+            <SlackList :items="slackFor(p).slice(0, p.limit)" class="-m-1.5" />
             <div v-if="deck.overview?.configured.slack && !slackNew.length" class="p-6 text-center text-sm text-muted-foreground">Inbox zero</div>
           </template>
 
@@ -246,7 +246,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
               :key="j.key"
               :href="j.url"
               target="_blank"
-              class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent"
+              class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
             >
               <img v-if="j.typeIconUrl" :src="j.typeIconUrl" class="size-4" alt="" />
               <span class="font-mono text-xs">{{ j.key }}</span>
@@ -276,7 +276,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
             </section>
             <button
               v-if="myUnreleased.length"
-              class="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent"
+              class="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
               @click="releaseNav.openReleases(myUnreleased[0].id)"
             >
               <PhRocketLaunch :size="15" class="text-muted-foreground" />
@@ -292,7 +292,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
               No cross-PR dependencies yet. Add one from a PR's detail panel, or write
               <code class="rounded bg-muted px-1 text-xs">Depends on: org/repo#12</code> in a PR description.
             </div>
-            <div v-for="c in openChains.slice(0, p.limit)" :key="c.id" class="rounded-lg px-3 py-2 hover:bg-accent/60">
+            <div v-for="c in openChains.slice(0, p.limit)" :key="c.id" class="rounded-lg px-3 py-2 transition-colors hover:bg-accent">
               <div class="mb-2 text-xs text-muted-foreground">{{ c.repos.join(' · ') }}</div>
               <ol class="flex flex-wrap items-center gap-1 text-xs">
                 <li v-for="(id, i) in c.prs" :key="id" class="flex max-w-full min-w-0 items-center gap-1">

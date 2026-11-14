@@ -35,8 +35,8 @@ const groups = computed(() => {
       >
         {{ g.label }} <span class="font-normal">· {{ g.items.length }}</span>
       </h3>
-      <div class="divide-y">
-        <SlackRow v-for="i in g.items" :key="i.id" :item="i" class="rounded-none px-4 py-3" />
+      <div class="p-1.5">
+        <SlackRow v-for="i in g.items" :key="i.id" :item="i" />
       </div>
     </section>
   </div>

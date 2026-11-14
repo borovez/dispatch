@@ -59,8 +59,8 @@ const other = (l: ReleaseTrain['links'][number], id: string) => (l.from === id ?
       section.
     </p>
 
-    <ol class="divide-y">
-      <li v-for="s in steps" :key="s.id" class="flex items-start gap-3 px-3 py-2">
+    <ol class="p-1.5">
+      <li v-for="s in steps" :key="s.id" class="flex items-start gap-3 px-1.5 py-1">
         <span
           class="mt-2 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums"
           :class="s.pr?.state === 'MERGED' ? 'bg-success/15 text-success' : train.next === s.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"

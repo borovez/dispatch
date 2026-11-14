@@ -42,7 +42,7 @@ const initials = (name: string) =>
   <ItemContextMenu :entries="() => jiraMenu(issueKey, issue, prs)">
   <div
     :data-jira-id="issueKey"
-    :class="cn('group cursor-pointer px-4 py-3 transition-colors hover:bg-accent/50', deck.selectedJiraKey === issueKey && 'bg-accent/60 ring-2 ring-primary ring-inset')"
+    :class="cn('group cursor-pointer rounded-lg px-3 py-2.5 transition-colors hover:bg-accent', deck.selectedJiraKey === issueKey && 'bg-accent ring-2 ring-primary ring-inset')"
     @click="select"
   >
     <div class="flex flex-wrap items-start gap-x-2 gap-y-1.5 sm:flex-nowrap">

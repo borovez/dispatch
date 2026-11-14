@@ -129,7 +129,7 @@ const subtitle = computed(() => {
     <Handle id="back-in:group" type="target" :position="Position.Right" :connectable="false" class="rg-handle" style="top: 28px" />
 
     <!-- Header: fixed height (see HEADER_H) -->
-    <button type="button" class="flex h-[80px] w-full flex-col gap-1 border-b px-3 py-2 text-left" :class="data.pr && 'hover:bg-accent/40'" @click.stop="openRelease">
+    <button type="button" class="flex h-[80px] w-full flex-col gap-1 border-b px-3 py-2 text-left" :class="data.pr && 'transition-colors hover:bg-accent'" @click.stop="openRelease">
       <span class="flex w-full min-w-0 items-center gap-1.5 text-xs">
         <template v-if="data.pr">
           <Badge :variant="data.pr.state === 'OPEN' ? 'success' : data.pr.release?.released ? 'muted' : 'merged'" class="h-4 shrink-0 px-1.5 text-[10px]">
@@ -179,7 +179,7 @@ const subtitle = computed(() => {
         v-for="r in data.rows"
         :key="r.id"
         :data-pr-id="r.pr ? r.id : undefined"
-        class="relative flex h-7 cursor-pointer items-center gap-1.5 px-3 text-xs hover:bg-accent/50"
+        class="relative flex h-7 cursor-pointer items-center gap-1.5 px-3 text-xs transition-colors hover:bg-accent"
         :class="r.pr && deck.selectedId === r.id && 'bg-primary/10'"
         :title="`${r.id}: ${r.title}${r.via && r.via !== 'commit' ? ` (${VIA_LABEL[r.via]})` : ''}${r.warn ? ` · ${r.warn}` : ''}`"
         @click="openRow(r, $event)"

@@ -44,7 +44,7 @@ const indent = computed(() => ({ paddingLeft: `${props.depth * 20}px` }))
       <span class="text-xs text-muted-foreground">Flags</span>
       <FlagChip v-for="k in flags" :key="k" :flag-key="k" />
     </div>
-    <div class="divide-y" :class="{ 'border-t': depth > 0 }">
+    <div>
       <div v-for="{ item, pr, nested } in rows" :key="item.id">
         <div class="flex min-w-0 items-center py-1" :style="indent">
           <PhArrowElbowDownRight :size="14" class="ml-2.5 text-muted-foreground/70" />
@@ -63,7 +63,7 @@ const indent = computed(() => ({ paddingLeft: `${props.depth * 20}px` }))
               <Badge variant="merged" title="This PR is a release itself">release · {{ nested.items.length }}</Badge>
             </template>
           </PrRow>
-          <a v-else :href="item.url" target="_blank" rel="noopener" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm hover:bg-accent/50">
+          <a v-else :href="item.url" target="_blank" rel="noopener" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-accent">
             <PhGitMerge :size="14" class="text-merged" />
             <RepoName :id="item.id" class="max-w-[40%] font-mono text-xs" />
             <span class="min-w-0 flex-1 truncate">{{ item.title }}</span>

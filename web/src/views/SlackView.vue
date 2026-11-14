@@ -80,7 +80,7 @@ const chips = computed(() =>
     <div>
         <!-- overflow-visible: Card clips by default, which would make it the sticky container for the headings -->
         <Card class="gap-0 overflow-visible py-0">
-          <SlackList :items="items" sticky class="[&>section:first-child>h3]:rounded-t-xl [&>section:last-child_[data-slack-id]:last-child]:rounded-b-xl" />
+          <SlackList :items="items" sticky class="[&>section:first-child>h3]:rounded-t-xl" />
           <div v-if="!items.length" class="py-12 text-center text-muted-foreground">Nothing here.</div>
         </Card>
     </div>

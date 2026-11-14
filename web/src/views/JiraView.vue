@@ -212,7 +212,7 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
           <template v-if="g.category" #label>
             <span class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-full" :class="DOT[g.category] ?? 'bg-muted-foreground'" />{{ g.label }}</span>
           </template>
-          <div class="-m-1.5 divide-y">
+          <div>
             <JiraRow v-for="i in g.items" :key="i.key" :issue-key="i.key" :issue="i.issue" :prs="i.prs" :dense="layout.prefs.dense" />
           </div>
         </GroupCard>
