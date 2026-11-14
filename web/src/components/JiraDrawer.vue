@@ -11,6 +11,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { jiraTone, timeAgo, fullDate } from '@/utils/format'
 import AdfView from './AdfView.vue'
 import JiraLinks from './JiraLinks.vue'
+import ItemContextMenu from './ItemContextMenu.vue'
+import { useJiraMenu } from '@/composables/itemMenus'
 import JiraTransition from './JiraTransition.vue'
 import PrRow from './PrRow.vue'
 import FlagList from './FlagList.vue'
@@ -24,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 /** Side panel for a Jira issue: details, linked PRs and issues, description and latest comments. */
 const deck = useDeck()
+const jiraMenu = useJiraMenu()
 const key = computed(() => deck.selectedJiraKey)
 const nav = useReleaseNav()
 const releaseId = computed(() => (key.value ? nav.releaseForIssue(key.value) : null))
@@ -133,8 +136,8 @@ const details = computed(() => {
           </div>
           <div v-for="d in details" :key="d.label" class="min-w-0">
             <div class="text-xs text-muted-foreground">{{ d.label }}</div>
+            <ItemContextMenu v-if="d.open" :entries="() => jiraMenu(d.open!, deck.jiraByKey.get(d.open!) ?? null)">
             <button
-              v-if="d.open"
               type="button"
               class="block max-w-full truncate text-left text-primary hover:underline"
               :title="`Open ${d.value}`"
@@ -142,6 +145,7 @@ const details = computed(() => {
             >
               {{ d.value }}
             </button>
+            </ItemContextMenu>
             <div v-else class="truncate" :title="d.value">{{ d.value }}</div>
           </div>
         </div>

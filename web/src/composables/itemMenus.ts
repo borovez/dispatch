@@ -16,8 +16,9 @@ import {
   PhSidebarSimple,
   PhSquareSplitHorizontal,
   PhSwap,
+  PhTrash,
 } from '@phosphor-icons/vue'
-import type { JiraIssueView, PrView } from '@shared/types'
+import type { DepEdge, JiraIssueView, PrView } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useReleaseNav } from '@/composables/releaseNav'
@@ -70,15 +71,44 @@ export function branchFor(key: string, summary?: string) {
   return slug ? `${key}-${slug}` : key
 }
 
+/**
+ * "Open details" for an item: left out when the side panel already shows it, and "Open in panel" while a
+ * panel is open (it switches the panel to that item)
+ */
+function openEntry(deck: ReturnType<typeof useDeck>, shown: boolean, open: () => void): MenuEntry[] {
+  if (shown) return []
+  const panelOpen = !!(deck.selectedId || deck.selectedJiraKey || deck.selectedSlackId)
+  return [{ label: panelOpen ? 'Open in panel' : 'Open details', icon: PhSidebarSimple, run: open }]
+}
+
+/** Remove a dependency (the PR panel's Dependencies list) */
+export function removeDependencyEntry(e: DepEdge, remove: (e: DepEdge) => unknown, busy: boolean): MenuEntry {
+  return { label: e.id != null ? 'Remove dependency' : 'Remove from the PR description', icon: PhTrash, variant: 'destructive', disabled: busy, run: () => remove(e) }
+}
+
 export function usePrMenu() {
   const deck = useDeck()
   const nav = useReleaseNav()
-  return (pr: PrView): MenuEntry[] => {
+  /** A PR by id: its full menu when it's synced, else GitHub and copy only. `extra` goes at the end. */
+  const byId = (id: string, extra: MenuEntry[] = []): MenuEntry[] => {
+    const pr = deck.byId.get(id)
+    if (pr) return menu(pr, extra)
+    const [repo, n] = id.split('#')
+    const url = `https://github.com/${repo}/pull/${n}`
+    return [
+      { label: 'Open on GitHub', icon: PhArrowSquareOut, href: url },
+      { label: 'Open beside', icon: PhSquareSplitHorizontal, run: () => openBeside(url) },
+      'separator',
+      { label: 'Copy link', icon: PhCopy, run: () => copyText(url, 'link') },
+      ...(extra.length ? (['separator', ...extra] as MenuEntry[]) : []),
+    ]
+  }
+  const menu = (pr: PrView, extra: MenuEntry[] = []): MenuEntry[] => {
     const ref = `${pr.repo}#${pr.number}`
     const release = nav.releaseForPr(pr.id)
     const jira = pr.jiraKeys.map((k) => ({ key: k, issue: deck.jiraByKey.get(k) }))
     return [
-      { label: 'Open details', icon: PhSidebarSimple, run: () => (deck.selectedId = pr.id) },
+      ...openEntry(deck, deck.selectedId === pr.id, () => (deck.selectedId = pr.id)),
       { label: 'Open on GitHub', icon: PhArrowSquareOut, href: pr.url },
       { label: 'Open beside', icon: PhSquareSplitHorizontal, run: () => openBeside(pr.url) },
       'separator',
@@ -123,8 +153,10 @@ export function usePrMenu() {
             { label: 'Show in the release graph', icon: PhGraph, run: () => nav.openGraph(pr.id, pr.repo) },
           ] as MenuEntry[])
         : []),
+      ...(extra.length ? (['separator', ...extra] as MenuEntry[]) : []),
     ]
   }
+  return Object.assign(menu, { byId })
 }
 
 export function useJiraMenu() {
@@ -133,7 +165,7 @@ export function useJiraMenu() {
     const url = issue?.url ?? (deck.overview?.jiraBaseUrl ? `${deck.overview.jiraBaseUrl}/browse/${key}` : undefined)
     const connected = !!deck.overview?.configured.jira
     return [
-      { label: 'Open details', icon: PhSidebarSimple, run: () => (deck.selectedJiraKey = key) },
+      ...openEntry(deck, deck.selectedJiraKey === key, () => (deck.selectedJiraKey = key)),
       ...(url
         ? [
             { label: 'Open in Jira', icon: PhArrowSquareOut, href: url },

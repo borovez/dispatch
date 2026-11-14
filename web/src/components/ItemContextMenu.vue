@@ -10,7 +10,7 @@ import MenuEntries from './MenuEntries.vue'
  * (copy, look up). The trigger is `display: contents`, so it doesn't change the item's layout.
  */
 defineOptions({ inheritAttrs: false })
-const props = defineProps<{ entries: () => MenuEntry[] }>()
+const props = withDefaults(defineProps<{ entries: () => MenuEntry[]; as?: 'div' | 'span' }>(), { as: 'div' })
 const items = ref<MenuEntry[]>([])
 
 function onContextMenu(e: MouseEvent) {
@@ -24,7 +24,7 @@ function onContextMenu(e: MouseEvent) {
 
 <template>
   <ContextMenu :modal="false">
-    <ContextMenuTrigger as="div" class="contents" v-bind="$attrs" @contextmenu.capture="onContextMenu">
+    <ContextMenuTrigger :as="as" class="contents" v-bind="$attrs" @contextmenu.capture="onContextMenu">
       <slot />
     </ContextMenuTrigger>
     <ContextMenuContent class="w-60" @click.stop>

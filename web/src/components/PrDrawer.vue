@@ -3,7 +3,8 @@ import { useArrowNav } from '@/composables/prNav'
 import { useDependencies } from '@/composables/dependencies'
 import { useReleaseNav } from '@/composables/releaseNav'
 import { followBeside, openBeside } from '@/composables/besideWindow'
-import { issueSeedFromPr } from '@/composables/itemMenus'
+import { issueSeedFromPr, removeDependencyEntry, useJiraMenu, usePrMenu } from '@/composables/itemMenus'
+import ItemContextMenu from './ItemContextMenu.vue'
 import { loadPrDetail } from '@/composables/prDetail'
 import { releaseStatus } from '@shared/release'
 import SidePanel from './SidePanel.vue'
@@ -194,6 +195,10 @@ async function addDep() {
 const waiting = computed(() => pr.value?.dependsOn.filter((e) => !e.satisfied).length ?? 0)
 const deps = useDependencies()
 const removeDep = (e: DepEdge) => deps.remove(e)
+// Right-click menus on the PRs and issues listed in the panel
+const prMenu = usePrMenu()
+const jiraMenu = useJiraMenu()
+const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? [removeDependencyEntry(e, removeDep, deps.busy.value)] : [])
 
 </script>
 
@@ -322,7 +327,7 @@ const removeDep = (e: DepEdge) => deps.remove(e)
                 <PhRocketLaunch :size="14" class="self-center" />
                 <template v-for="(s, i) in pr.shipsIn" :key="s.id">
                   <span>{{ i ? 'and' : s.state === 'OPEN' ? 'Ships in' : 'Shipped via' }}</span>
-                  <button class="font-mono text-primary hover:underline" @click="deck.selectedId = s.id"><RepoName :id="s.id" /></button>
+                  <ItemContextMenu as="span" :entries="() => prMenu.byId(s.id)"><button class="font-mono text-primary hover:underline" @click="deck.selectedId = s.id"><RepoName :id="s.id" /></button></ItemContextMenu>
                   <span v-if="i === 0 && s.state === 'OPEN'" class="text-muted-foreground">(open release)</span>
                 </template>
               </p>
@@ -332,7 +337,7 @@ const removeDep = (e: DepEdge) => deps.remove(e)
                 <Badge v-if="train.next" variant="primary" class="h-4 px-1.5 text-[10px]">Ship next</Badge>
                 <template v-if="train.after.length">
                   · after
-                  <button v-for="a in train.after" :key="a" class="font-mono text-primary hover:underline" @click="deck.selectedId = a"><RepoName :id="a" /></button>
+                  <ItemContextMenu v-for="a in train.after" :key="a" as="span" :entries="() => prMenu.byId(a)"><button class="font-mono text-primary hover:underline" @click="deck.selectedId = a"><RepoName :id="a" /></button></ItemContextMenu>
                 </template>
                 <template v-if="train.with.length">
                   · with
@@ -420,7 +425,8 @@ const removeDep = (e: DepEdge) => deps.remove(e)
               </Button>
             </div>
             <div v-if="!jira.length" class="text-sm text-muted-foreground">No issue key found in title or branch.</div>
-            <div v-for="{ key, issue } in jira" :key="key" :class="['mb-2 rounded-lg border p-3', issue && jiraCardTone(issue.statusCategory)]">
+            <ItemContextMenu v-for="{ key, issue } in jira" :key="key" :entries="() => jiraMenu(key, issue ?? null, deck.prs.filter((p) => p.jiraKeys.includes(key)))">
+            <div :class="['mb-2 rounded-lg border p-3', issue && jiraCardTone(issue.statusCategory)]">
               <template v-if="issue">
                 <div class="flex items-center gap-2">
                   <img v-if="issue.typeIconUrl" :src="issue.typeIconUrl" class="size-4" alt="" />
@@ -442,6 +448,7 @@ const removeDep = (e: DepEdge) => deps.remove(e)
               </template>
               <span v-else class="font-mono text-sm">{{ key }} <span class="text-muted-foreground">(not synced)</span></span>
             </div>
+            </ItemContextMenu>
           </section>
 
 
@@ -461,7 +468,8 @@ const removeDep = (e: DepEdge) => deps.remove(e)
           <div class="pr-3">
             <h4 class="mb-1 text-xs text-muted-foreground">Depends on: merge these first</h4>
             <ul class="space-y-1">
-              <li v-for="e in pr.dependsOn" :key="e.to" class="flex items-center gap-2 text-sm">
+              <ItemContextMenu v-for="e in pr.dependsOn" :key="e.to" :entries="() => depMenu(e.to, e)">
+              <li class="flex items-center gap-2 text-sm">
                 <PhCheckCircle v-if="e.satisfied" :size="16" weight="fill" class="shrink-0 text-success" />
                 <PhXCircle v-else :size="16" class="shrink-0 text-warning" />
                 <button class="max-w-1/2 min-w-0 shrink-0 font-mono text-primary hover:underline" @click="deck.selectedId = e.to"><RepoName :id="e.to" /></button>
@@ -471,17 +479,20 @@ const removeDep = (e: DepEdge) => deps.remove(e)
                 <Badge variant="muted" :title="e.note ?? ''">{{ e.source }}</Badge>
                 <Button v-if="deps.canRemove(e)" variant="ghost" size="icon-xs" :disabled="deps.busy.value" :title="e.id != null ? 'Remove' : 'Remove from the PR description'" @click="removeDep(e)"><PhCircleNotch v-if="deps.isPending(e.from, e.to)" class="animate-spin" /><PhTrash v-else /></Button>
               </li>
+              </ItemContextMenu>
               <li v-if="!pr.dependsOn.length" class="text-sm text-muted-foreground">None</li>
             </ul>
             <h4 class="mt-3 mb-1 text-xs text-muted-foreground">Blocks: waiting on this</h4>
             <ul class="space-y-1">
-              <li v-for="e in pr.dependents" :key="e.from" class="flex items-center gap-2 text-sm">
+              <ItemContextMenu v-for="e in pr.dependents" :key="e.from" :entries="() => depMenu(e.from, e)">
+              <li class="flex items-center gap-2 text-sm">
                 <button class="max-w-1/2 min-w-0 shrink-0 font-mono text-primary hover:underline" @click="deck.selectedId = e.from"><RepoName :id="e.from" /></button>
                 <span class="truncate text-muted-foreground">{{ deck.byId.get(e.from)?.title }}</span>
                 <span class="flex-1" />
                 <Badge variant="outline">waits for {{ e.kind }}</Badge>
                 <Button v-if="deps.canRemove(e)" variant="ghost" size="icon-xs" :disabled="deps.busy.value" :title="e.id != null ? 'Remove' : 'Remove from the PR description'" @click="removeDep(e)"><PhCircleNotch v-if="deps.isPending(e.from, e.to)" class="animate-spin" /><PhTrash v-else /></Button>
               </li>
+              </ItemContextMenu>
               <li v-if="!pr.dependents.length" class="text-sm text-muted-foreground">None</li>
             </ul>
 
