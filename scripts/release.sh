@@ -14,8 +14,13 @@ command -v gh >/dev/null || { echo "The GitHub CLI (gh) is needed to create the 
 [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "Commit or stash your changes first." >&2; exit 1; }
 git pull --ff-only
 
-# npm version bumps package.json, commits "v<version>" and tags it
-VERSION="$(npm version "$BUMP" -m "Release v%s")"
+# Bump package.json (and the lock), and the Mac app's desktop/package.json in the same commit: the
+# app build syncs that version too, and a changed file afterwards would block self-updates
+VERSION="v$(npm version "$BUMP" --no-git-tag-version | sed 's/^v//')"
+node -e 'const f="desktop/package.json",fs=require("fs"),p=JSON.parse(fs.readFileSync(f));p.version=process.argv[1];fs.writeFileSync(f,JSON.stringify(p,null,2)+"\n")' "${VERSION#v}"
+git add package.json package-lock.json desktop/package.json
+git commit -m "Release $VERSION"
+git tag -a "$VERSION" -m "Release $VERSION"
 git push --follow-tags
 gh release create "$VERSION" --title "Dispatch $VERSION" --generate-notes
 

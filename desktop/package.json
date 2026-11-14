@@ -1,7 +1,7 @@
 {
   "name": "dispatch-desktop",
   "productName": "Dispatch",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "description": "Dispatch as a Mac app: the local server and the web app in one window",
   "license": "MIT",
