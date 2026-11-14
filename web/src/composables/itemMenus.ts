@@ -17,8 +17,12 @@ import {
   PhSquareSplitHorizontal,
   PhSwap,
   PhTrash,
+  PhArrowCounterClockwise,
+  PhCheck,
+  PhKanban,
+  PhX,
 } from '@phosphor-icons/vue'
-import type { DepEdge, JiraIssueView, PrView } from '@shared/types'
+import type { DepEdge, JiraIssueView, PrView, SlackItem } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useReleaseNav } from '@/composables/releaseNav'
@@ -212,6 +216,66 @@ export function useJiraMenu() {
             },
           ] as MenuEntry[])
         : []),
+    ]
+  }
+}
+
+/** Done / dismiss / back to inbox for a Slack item, with the toast saying what changed in Slack too */
+export async function setSlackStatus(deck: ReturnType<typeof useDeck>, item: SlackItem, s: SlackItem['status']): Promise<boolean> {
+  let res: Awaited<ReturnType<typeof api.slackStatus>> | undefined
+  const ok = await deck.mutate(async () => void (res = await api.slackStatus(item.id, s)))
+  if (!ok) return false
+  const label = s === 'done' ? 'Marked done' : s === 'dismissed' ? 'Dismissed' : 'Back in inbox'
+  // Todos also change in Slack (done reaction added / removed)
+  if (res?.slack) toast.success(label, { description: res.slack.done ? `Added :${res.slack.reaction}: in Slack` : `Removed :${res.slack.reaction}: in Slack` })
+  else if (res?.warning) toast.warning(`${label} in Dispatch only`, { description: res.warning })
+  else toast.success(label)
+  return true
+}
+
+/** New Jira issue with a Slack message as context: Claude reads the thread; creating it marks the message done */
+export function slackToJira(deck: ReturnType<typeof useDeck>, item: SlackItem) {
+  deck.composer = {
+    mode: 'create',
+    slackItemId: item.id,
+    description: item.text
+      .split('\n')
+      .map((l) => `> ${l}`)
+      .join('\n'),
+  }
+}
+
+export function useSlackMenu() {
+  const deck = useDeck()
+  return (item: SlackItem): MenuEntry[] => {
+    const open = item.status === 'new'
+    const quote = item.text
+      .split('\n')
+      .map((l) => `> ${l}`)
+      .join('\n')
+    return [
+      ...openEntry(deck, deck.selectedSlackId === item.id, () => (deck.selectedSlackId = item.id)),
+      ...(item.permalink ? [{ label: 'Open in Slack', icon: PhArrowSquareOut, href: item.permalink }] : []),
+      'separator',
+      item.jiraKey
+        ? { label: `Open ${item.jiraKey}`, icon: PhSidebarSimple, run: () => (deck.selectedJiraKey = item.jiraKey) }
+        : { label: 'Create Jira task…', icon: PhKanban, run: () => slackToJira(deck, item) },
+      ...(open
+        ? [
+            { label: 'Done', icon: PhCheck, run: () => setSlackStatus(deck, item, 'done') },
+            { label: 'Dismiss', icon: PhX, run: () => setSlackStatus(deck, item, 'dismissed') },
+          ]
+        : [{ label: 'Back to inbox', icon: PhArrowCounterClockwise, run: () => setSlackStatus(deck, item, 'new') }]),
+      'separator',
+      {
+        label: 'Copy',
+        icon: PhCopy,
+        children: [
+          ...(item.permalink ? [{ label: 'Link', run: () => copyText(item.permalink!, 'link') }] : []),
+          { label: 'Text', run: () => copyText(item.text, 'message') },
+          { label: 'As a quote', hint: `${item.userName}`, run: () => copyText(`${quote}\n— ${item.userName}`, 'quote') },
+        ],
+      },
     ]
   }
 }

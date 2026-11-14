@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { PhArrowCounterClockwise, PhArrowSquareOut, PhCheck, PhKanban, PhX } from '@phosphor-icons/vue'
 import type { SlackItem } from '@shared/types'
-import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useEventListener } from '@vueuse/core'
-import { toast } from 'vue-sonner'
+import { setSlackStatus, slackToJira } from '@/composables/itemMenus'
 import { LAYER_OPEN } from '@/composables/escape'
 import { neighbourId } from '@/composables/prNav'
 import Kbd from './Kbd.vue'
@@ -21,26 +20,10 @@ const deck = useDeck()
 async function status(s: SlackItem['status']) {
   // In the panel, Done/Dismiss moves on to the next message in the list
   const next = props.labelled && s !== 'new' ? neighbourId('slack', props.item.id) : null
-  let res: Awaited<ReturnType<typeof api.slackStatus>> | undefined
-  const ok = await deck.mutate(async () => void (res = await api.slackStatus(props.item.id, s)))
-  if (!ok) return
-  const label = s === 'done' ? 'Marked done' : s === 'dismissed' ? 'Dismissed' : 'Back in inbox'
-  // Todos also change in Slack (done reaction added / removed)
-  if (res?.slack) toast.success(label, { description: res.slack.done ? `Added :${res.slack.reaction}: in Slack` : `Removed :${res.slack.reaction}: in Slack` })
-  else if (res?.warning) toast.warning(`${label} in Dispatch only`, { description: res.warning })
-  else toast.success(label)
+  if (!(await setSlackStatus(deck, props.item, s))) return
   if (props.labelled && s !== 'new') deck.selectedSlackId = next
 }
-/** New Jira issue with this message as context: Claude reads the thread; created issues mark it done */
-const jira = () =>
-  (deck.composer = {
-    mode: 'create',
-    slackItemId: props.item.id,
-    description: props.item.text
-      .split('\n')
-      .map((l) => `> ${l}`)
-      .join('\n'),
-  })
+const jira = () => slackToJira(deck, props.item)
 
 // Shortcuts while the panel is open and nothing else has the keyboard
 useEventListener(window, 'keydown', (e: KeyboardEvent) => {

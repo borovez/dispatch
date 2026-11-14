@@ -5,6 +5,8 @@ import { fullDate, timeAgo } from '@/utils/format'
 import { KIND } from '@/utils/slack'
 import { cn } from '@/lib/utils'
 import SlackActions from './SlackActions.vue'
+import ItemContextMenu from './ItemContextMenu.vue'
+import { useSlackMenu } from '@/composables/itemMenus'
 import JiraPill from './JiraPill.vue'
 import SlackText from './SlackText.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -13,9 +15,11 @@ import { Badge } from '@/components/ui/badge'
 /** Slack inbox row; clicking it opens the message in the side panel. */
 defineProps<{ item: SlackItem }>()
 const deck = useDeck()
+const slackMenu = useSlackMenu()
 </script>
 
 <template>
+  <ItemContextMenu :entries="() => slackMenu(item)">
   <div
     :data-slack-id="item.id"
     :class="cn(
@@ -53,4 +57,5 @@ const deck = useDeck()
     </time>
     <SlackActions :item="item" class="opacity-60 transition-opacity group-hover:opacity-100" />
   </div>
+  </ItemContextMenu>
 </template>
