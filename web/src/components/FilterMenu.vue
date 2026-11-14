@@ -156,7 +156,7 @@ defineExpose({ openOn })
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
       <Button variant="ghost" size="sm" class="relative text-muted-foreground" title="Filter (F)">
-        <PhFunnelSimple /> Filter
+        <PhFunnelSimple /> <span class="@max-3xl:sr-only">Filter</span>
         <span v-if="activeCount" class="absolute -top-1 -right-1 size-2 rounded-full bg-primary" aria-label="Filters on" />
       </Button>
     </PopoverTrigger>

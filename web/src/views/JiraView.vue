@@ -181,8 +181,9 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
       </AlertAction>
     </Alert>
 
-    <div class="flex flex-wrap items-center gap-2">
-      <div class="relative w-64 min-w-40 flex-1 sm:flex-none">
+    <!-- @container: buttons go icon-only when this row is narrow -->
+    <div class="@container flex flex-wrap items-center gap-2">
+      <div class="relative min-w-24 flex-1 sm:max-w-64">
         <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
         <Input v-model="v.query" type="search" placeholder="Search key, summary, assignee, PR…" class="h-8 pl-8" />
       </div>
@@ -195,7 +196,7 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
       <span class="flex-1" />
       <CollapseAllButton v-if="groups.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
       <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
-      <Button v-if="deck.overview?.configured.jira" size="sm" @click="deck.composer = { mode: 'create' }"><PhNotePencil /> New issue</Button>
+      <Button v-if="deck.overview?.configured.jira" size="sm" @click="deck.composer = { mode: 'create' }"><PhNotePencil /> <span class="@max-3xl:sr-only">New issue</span></Button>
     </div>
 
     <!-- The page scrolls (native scrollbar at the window edge, like Settings) -->

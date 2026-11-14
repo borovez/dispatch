@@ -56,8 +56,8 @@ function toggleProperty(key: string, value: string) {
 <template>
   <Popover>
     <PopoverTrigger as-child>
-      <Button variant="ghost" size="sm" class="relative text-muted-foreground">
-        <PhSlidersHorizontal /> Display
+      <Button variant="ghost" size="sm" class="relative text-muted-foreground" title="Display">
+        <PhSlidersHorizontal /> <span class="@max-3xl:sr-only">Display</span>
         <span v-if="customised" class="absolute -top-1 -right-1 size-2 rounded-full bg-primary" aria-label="Customised" />
       </Button>
     </PopoverTrigger>

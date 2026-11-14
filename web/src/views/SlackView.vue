@@ -61,13 +61,14 @@ const chips = computed(() =>
         <Button size="sm" as-child><RouterLink to="/settings">Connect Slack</RouterLink></Button>
       </AlertAction>
     </Alert>
-    <div class="flex flex-wrap items-center gap-2">
+    <!-- @container: buttons go icon-only when this row is narrow -->
+    <div class="@container flex flex-wrap items-center gap-2">
       <Tabs v-model="v.status">
         <TabsList>
           <TabsTrigger v-for="t in STATUS_TABS" :key="t.value" :value="t.value" :count="count(t.value)">{{ t.label }}</TabsTrigger>
         </TabsList>
       </Tabs>
-      <div class="relative w-64 min-w-40 flex-1 sm:flex-none">
+      <div class="relative min-w-24 flex-1 sm:max-w-64">
         <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
         <Input v-model="v.query" type="search" placeholder="Search messages, people, channels…" class="h-8 pl-8" />
       </div>

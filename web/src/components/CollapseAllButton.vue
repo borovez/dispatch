@@ -8,8 +8,8 @@ const emit = defineEmits<{ toggle: [] }>()
 </script>
 
 <template>
-  <Button variant="ghost" size="sm" class="text-muted-foreground" @click="emit('toggle')">
+  <Button variant="ghost" size="sm" class="text-muted-foreground" :title="collapsed ? 'Expand all' : 'Collapse all'" @click="emit('toggle')">
     <PhArrowsOutLineVertical v-if="collapsed" /><PhArrowsInLineVertical v-else />
-    {{ collapsed ? 'Expand all' : 'Collapse all' }}
+    <span class="@max-3xl:sr-only">{{ collapsed ? 'Expand all' : 'Collapse all' }}</span>
   </Button>
 </template>

@@ -133,8 +133,9 @@ async function refresh(id: string) {
   <!-- Width cap on the children, not the page, so the scrollbar sits at the far right -->
   <!-- The graph fills the window; the other tabs scroll the page (native scrollbar, like Settings) -->
   <div class="flex flex-col gap-4" :class="v.tab === 'graph' ? 'h-page' : '*:max-w-6xl'">
-    <div class="flex flex-wrap items-center gap-2">
-      <div v-if="v.tab !== 'graph'" class="relative w-64 min-w-40 flex-1 sm:flex-none">
+    <!-- @container: buttons go icon-only when this row is narrow -->
+    <div class="@container flex flex-wrap items-center gap-2">
+      <div v-if="v.tab !== 'graph'" class="relative min-w-24 flex-1 sm:max-w-64">
         <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
         <Input v-model="v.query" type="search" placeholder="Search PRs, branches, Jira keys…" class="h-8 pl-8" />
       </div>

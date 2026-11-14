@@ -51,8 +51,8 @@ const labelOf = (s: Extract<ViewSection, { type: 'filter' }>) => s.options.find(
 <template>
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
-      <Button variant="ghost" size="sm" class="relative text-muted-foreground">
-        <PhSlidersHorizontal /> View
+      <Button variant="ghost" size="sm" class="relative text-muted-foreground" title="View">
+        <PhSlidersHorizontal /> <span class="@max-3xl:sr-only">View</span>
         <span v-if="customised" class="absolute -top-1 -right-1 size-2 rounded-full bg-primary" aria-label="Customised" />
       </Button>
     </DropdownMenuTrigger>

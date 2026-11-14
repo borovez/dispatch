@@ -261,17 +261,19 @@ const toggleAll = () => {
 
 <template>
   <div :class="v.display === 'board' ? 'h-page flex flex-col gap-4' : 'max-w-6xl space-y-4'">
-    <div class="flex flex-wrap items-center gap-2">
-      <div class="relative w-64 min-w-40 flex-1 sm:flex-none">
+    <!-- One row at any width: buttons go icon-only and the search shrinks when narrow (@container), the tabs scroll -->
+    <div class="@container flex items-center gap-2">
+      <div class="relative min-w-24 flex-1 sm:max-w-64">
         <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
         <Input v-model="v.query" type="search" placeholder="Search title, branch, Jira key, author…" class="h-8 pl-8" />
       </div>
-      <Tabs v-model="v.scope">
+      <Tabs v-model="v.scope" class="shrink">
         <TabsList>
           <TabsTrigger v-for="s in SCOPES" :key="s.value" :value="s.value" :count="scopeCount(s)">{{ s.label }}</TabsTrigger>
         </TabsList>
       </Tabs>
-      <span class="flex-1" />
+      <!-- Filter / Collapse / Display stay together on the right; the search box shrinks before they wrap -->
+      <div class="ml-auto flex shrink-0 items-center gap-1">
       <FilterMenu ref="filterMenu" v-model="v.filters" :fields="fields" />
       <CollapseAllButton v-if="v.display === 'list' && groups.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
       <DisplayMenu
@@ -284,6 +286,7 @@ const toggleAll = () => {
           { value: 'board', label: 'Board', icon: PhSquaresFour },
         ]"
       />
+      </div>
     </div>
     <!-- Active filters, under the toolbar so it never wraps -->
     <div v-if="chips.length || Object.keys(v.filters).length" class="-mt-2 flex flex-wrap items-center gap-1.5">
