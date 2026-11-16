@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { modClickHint, wantsExternal } from '@/lib/external'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { PhCaretRight, PhCheckCircle, PhCircle, PhCircleDashed, PhEye, PhPlus, PhRocketLaunch, PhSlidersHorizontal, PhWarning } from '@phosphor-icons/vue'
@@ -117,6 +118,13 @@ const tiles = computed<Tile[]>(() => {
 })
 const router = useRouter()
 const prsView = layout.view('prs', {} as { focus?: PrFocus | ''; scope?: string; query?: string; repo?: string })
+/** My Jira rows open the Jira panel; Cmd/Ctrl-click (the link's default) opens Jira */
+function openJiraRow(e: MouseEvent, key: string) {
+  if (wantsExternal(e)) return
+  e.preventDefault()
+  deck.selectedJiraKey = key
+}
+
 function openTile(t: Tile) {
   if (t.focus) {
     // Show exactly what the tile counts: clear the scope tab, search and repo filter
@@ -246,7 +254,10 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
               :key="j.key"
               :href="j.url"
               target="_blank"
+              rel="noopener"
+              :title="`Open in Dispatch · ${modClickHint(j.url)}`"
               class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent"
+              @click="openJiraRow($event, j.key)"
             >
               <img v-if="j.typeIconUrl" :src="j.typeIconUrl" class="size-4" alt="" />
               <span class="font-mono text-xs">{{ j.key }}</span>

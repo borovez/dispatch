@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { useArrowNav } from '@/composables/prNav'
 import { useDependencies } from '@/composables/dependencies'
 import { useReleaseNav } from '@/composables/releaseNav'
@@ -239,9 +240,9 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             <Badge v-for="r in pr.relations" :key="r" variant="muted">{{ r.replace('_', ' ') }}</Badge>
           </div>
           <h2 class="leading-snug font-semibold">{{ pr.title }}</h2>
-          <a :href="pr.url" target="_blank" rel="noopener" class="mt-1 flex min-w-0 items-center gap-1 font-mono text-sm text-primary hover:underline">
-            <RepoName :id="pr.id" /><PhArrowSquareOut :size="14" class="shrink-0" />
-          </a>
+          <ExternalLink :href="pr.url" icon="always" :label="pr.id" class="mt-1 flex font-mono text-sm text-primary">
+            <RepoName :id="pr.id" no-title />
+          </ExternalLink>
     </template>
     <template v-if="pr" #actions>
         <template v-if="releaseTarget">
@@ -373,7 +374,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
               </p>
               <p v-if="pr.releasedIn" class="flex items-center gap-1.5">
                 <PhRocketLaunch :size="14" />Released in
-                <a :href="pr.releasedIn.url" target="_blank" rel="noopener" class="font-mono text-primary hover:underline">{{ pr.releasedIn.tag }}</a>
+                <ExternalLink :href="pr.releasedIn.url" class="font-mono text-primary">{{ pr.releasedIn.tag }}</ExternalLink>
               </p>
               <p v-if="pr.backmerge && pr.state === 'MERGED'">
                 <template v-if="pr.backmerge.backmerged">Back in {{ pr.backmerge.into }}.</template>
@@ -412,7 +413,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             <ul class="space-y-1 text-sm">
               <li v-for="f in pr.checks.failing" :key="f.name" class="flex items-center gap-2">
                 <PhXCircle :size="14" weight="fill" class="text-destructive" />
-                <a :href="f.url ?? undefined" target="_blank" class="hover:underline">{{ f.name }}</a>
+                <ExternalLink :href="f.url">{{ f.name }}</ExternalLink>
               </li>
             </ul>
           </section>

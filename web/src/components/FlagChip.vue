@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { PhFlag } from '@phosphor-icons/vue'
+import { PhArrowSquareOut, PhFlag } from '@phosphor-icons/vue'
+import { externalHint } from '@/lib/external'
 import { useDeck } from '@/stores/deck'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import PrListPopover from './PrListPopover.vue'
@@ -23,11 +24,11 @@ const on = computed(() => flag.value?.envs[0]?.on)
         :href="flag?.url"
         target="_blank"
         rel="noopener"
-        class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs"
+        class="group/ext inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs"
         :class="on === true ? 'bg-success/12 text-success' : on === false ? 'bg-warning/12 text-warning' : 'bg-muted text-muted-foreground'"
         @click.stop
       >
-        <PhFlag :size="12" weight="fill" />{{ flagKey }}
+        <PhFlag :size="12" weight="fill" />{{ flagKey }}<PhArrowSquareOut v-if="flag?.url" :size="11" class="-ml-0.5 opacity-0 transition-opacity group-hover/ext:opacity-100" />
       </a>
     </TooltipTrigger>
     <TooltipContent>
@@ -35,6 +36,7 @@ const on = computed(() => flag.value?.envs[0]?.on)
         <div v-for="e in flag.envs" :key="e.key">{{ e.key }}: {{ e.on ? 'on' : 'off' }}</div>
       </template>
       <span v-else>{{ flag?.error ?? (deck.overview?.configured.launchdarkly ? 'Not synced yet' : 'LaunchDarkly not connected') }}</span>
+      <div v-if="flag?.url" class="mt-1 opacity-70">{{ externalHint(flag.url) }}</div>
     </TooltipContent>
   </Tooltip>
   <PrListPopover v-if="prIds.length" compact :ids="prIds" :placeholder="`Go to a PR using ${flagKey}…`" />

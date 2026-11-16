@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref } from 'vue'
 import { PhCircleNotch, PhFlag } from '@phosphor-icons/vue'
 import type { LaunchDarklyConfig } from '@shared/types'
@@ -103,7 +104,7 @@ const submit = () => st.saveSection({ launchdarkly: draft.value }, ld.value ? 'L
     </template>
     <template #dialog-description>
       Open
-      <a class="text-primary hover:underline" :href="tokenPage" target="_blank" rel="noopener">LaunchDarkly → Organization settings → Authorization</a>,
+      <ExternalLink :href="tokenPage" icon="always" class="text-primary">LaunchDarkly → Organization settings → Authorization</ExternalLink>,
       create an <b>access token</b> with the <b>Reader</b> role and paste it below. Dispatch only reads flags.
     </template>
     <template v-if="draft" #form>

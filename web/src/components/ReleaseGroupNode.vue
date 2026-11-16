@@ -40,6 +40,7 @@ export const groupHeight = (d: Pick<ReleaseGroupData, 'rows' | 'expanded'>) =>
 </script>
 
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { PhCaretDown, PhCaretRight, PhGitMerge, PhFlag, PhGitPullRequest, PhRocketLaunch, PhWarning } from '@phosphor-icons/vue'
@@ -145,15 +146,7 @@ const subtitle = computed(() => {
         <span v-else class="flex min-w-0 items-center gap-1.5 font-medium">
           {{ KIND_LABEL[data.kind] }}
           <span v-if="data.kind === 'backmerge'" class="font-mono">{{ data.branch }}</span>
-          <a
-            v-if="data.tag"
-            :href="data.tag.url"
-            target="_blank"
-            rel="noopener"
-            class="font-mono text-primary hover:underline"
-            :title="`Open ${data.tag.name} on GitHub`"
-            @click.stop
-          >{{ data.tag.name }}</a>
+          <ExternalLink v-if="data.tag" :href="data.tag.url" class="font-mono text-primary">{{ data.tag.name }}</ExternalLink>
           <RepoName :repo="data.repo" class="min-w-0 font-mono font-normal text-muted-foreground" />
         </span>
         <span class="flex-1" />

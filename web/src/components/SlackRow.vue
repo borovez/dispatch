@@ -9,6 +9,7 @@ import ItemContextMenu from './ItemContextMenu.vue'
 import { useSlackMenu } from '@/composables/itemMenus'
 import JiraPill from './JiraPill.vue'
 import SlackText from './SlackText.vue'
+import { modClickHint, openInAppOr } from '@/lib/external'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 
@@ -27,7 +28,8 @@ const slackMenu = useSlackMenu()
       item.status !== 'new' && 'opacity-60',
       deck.selectedSlackId === item.id && 'bg-accent ring-2 ring-primary ring-inset',
     )"
-    @click="deck.selectedSlackId = item.id"
+    :title="item.permalink ? `Open in Dispatch · ${modClickHint(item.permalink)}` : undefined"
+    @click="openInAppOr($event, item.permalink, () => (deck.selectedSlackId = item.id))"
   >
     <Avatar class="size-7 shrink-0">
       <AvatarImage v-if="item.userAvatar" :src="item.userAvatar" :alt="item.userName" />

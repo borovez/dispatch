@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { externalHint } from '@/lib/external'
 import { PhArrowSquareOut, PhChatCircle, PhFileCode } from '@phosphor-icons/vue'
 import type { ReviewThread } from '@shared/types'
 import { timeAgo } from '@/utils/format'
@@ -17,6 +18,7 @@ defineProps<{ threads: ReviewThread[] }>()
       :href="t.url"
       target="_blank"
       rel="noopener"
+      :title="externalHint(t.url)"
       class="group block rounded-lg border bg-card p-3 text-sm transition-colors hover:bg-accent"
     >
       <div class="flex items-center gap-2 text-xs text-muted-foreground">

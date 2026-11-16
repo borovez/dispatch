@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { openInAppOr } from '@/lib/external'
 import { computed, ref } from 'vue'
 import {
   PhBuildings,
@@ -313,7 +314,7 @@ const toggleAll = () => {
           <!-- pt-1: the viewport clips, and the selected card's ring draws outside the card; pr-3.5 clears the scrollbar (shown only when the column overflows) -->
           <div class="space-y-2 pt-1 pr-3.5 pb-2 pl-2">
             <PrHover v-for="p in g.prs" :key="p.id" :pr="p">
-              <PrCard :id="p.id" :pr="p" class="cursor-pointer" @click="deck.selectedId = p.id" />
+              <PrCard :id="p.id" :pr="p" class="cursor-pointer" @click="openInAppOr($event, p.url, () => (deck.selectedId = p.id))" />
             </PrHover>
             <p v-if="!g.prs.length" class="py-6 text-center text-xs text-muted-foreground">Nothing here</p>
           </div>

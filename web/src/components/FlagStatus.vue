@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { PhArrowSquareOut, PhFlag } from '@phosphor-icons/vue'
+import { PhFlag } from '@phosphor-icons/vue'
+import ExternalLink from '@/components/ExternalLink.vue'
 import { useDeck } from '@/stores/deck'
 import { useFlagPrs } from '@/composables/flags'
 import { timeAgo } from '@/utils/format'
@@ -59,15 +60,7 @@ function onNested(v: boolean) {
           <div class="flex min-w-0 items-start gap-2">
             <PhFlag :size="14" weight="fill" :class="cn('mt-0.5 shrink-0', iconTone(f.flag?.envs[0]?.on))" />
             <div class="min-w-0 flex-1">
-              <a
-                v-if="f.flag?.url"
-                :href="f.flag.url"
-                target="_blank"
-                rel="noopener"
-                class="flex min-w-0 items-center gap-1 font-mono text-sm break-all hover:underline"
-              >
-                {{ f.key }}<PhArrowSquareOut :size="12" class="shrink-0 text-muted-foreground" />
-              </a>
+              <ExternalLink v-if="f.flag?.url" :href="f.flag.url" icon="always" class="flex font-mono text-sm break-all">{{ f.key }}</ExternalLink>
               <span v-else class="font-mono text-sm break-all">{{ f.key }}</span>
               <div v-if="f.flag && f.flag.name !== f.key" class="truncate text-xs text-muted-foreground">{{ f.flag.name }}</div>
             </div>

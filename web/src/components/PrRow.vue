@@ -20,6 +20,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import JiraPill from './JiraPill.vue'
 import PrHover from './PrHover.vue'
 import RepoName from './RepoName.vue'
+import ExternalLink from './ExternalLink.vue'
+import { modClickHint, openInAppOr } from '@/lib/external'
 import ThreadCount from './ThreadCount.vue'
 import FlagStatus from './FlagStatus.vue'
 import PrListPopover from './PrListPopover.vue'
@@ -50,7 +52,8 @@ const openDeps = computed(() => props.pr.dependsOn.filter((d) => !d.satisfied).l
       deck.selectedId === pr.id && 'bg-accent ring-2 ring-primary ring-inset',
       props.class,
     )"
-    @click="deck.selectedId = pr.id"
+    :title="preview ? undefined : `Open in Dispatch · ${modClickHint(pr.url)}`"
+    @click="openInAppOr($event, pr.url, () => (deck.selectedId = pr.id))"
   >
     <Avatar v-if="show('avatar')" class="mt-0.5 size-7 shrink-0">
       <AvatarImage :src="pr.author.avatarUrl ?? ''" :alt="pr.author.login" />
@@ -63,9 +66,9 @@ const openDeps = computed(() => props.pr.dependsOn.filter((d) => !d.satisfied).l
         <span class="truncate text-sm font-medium" :class="{ 'text-muted-foreground': pr.isDraft }" :title="pr.title">{{ pr.title }}</span>
       </div>
       <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <a v-if="show('repo')" :href="pr.url" target="_blank" rel="noopener" class="min-w-0 font-mono text-foreground/80 hover:underline" @click.stop>
-          <RepoName :repo="pr.repo" :suffix="`#${pr.number}`" />
-        </a>
+        <ExternalLink v-if="show('repo')" :href="pr.url" :label="`${pr.repo}#${pr.number}`" class="font-mono text-foreground/80">
+          <RepoName :repo="pr.repo" :suffix="`#${pr.number}`" no-title />
+        </ExternalLink>
         <span v-if="!compact && show('author')">{{ pr.author.login }}</span>
         <span v-if="!compact && show('updated')">updated {{ timeAgo(pr.updatedAt) }}</span>
         <template v-if="show('jira')">

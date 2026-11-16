@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { externalHint } from '@/lib/external'
 import { computed, reactive } from 'vue'
 import { PhArrowElbowDownRight, PhArrowSquareOut, PhCaretDown, PhCaretRight, PhGitMerge } from '@phosphor-icons/vue'
 import type { ReleaseContents } from '@shared/types'
@@ -63,7 +64,7 @@ const indent = computed(() => ({ paddingLeft: `${props.depth * 20}px` }))
               <Badge variant="merged" title="This PR is a release itself">release · {{ nested.items.length }}</Badge>
             </template>
           </PrRow>
-          <a v-else :href="item.url" target="_blank" rel="noopener" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-accent">
+          <a v-else :href="item.url" target="_blank" rel="noopener" :title="`Not tracked in Dispatch · ${externalHint(item.url)}`" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-accent">
             <PhGitMerge :size="14" class="text-merged" />
             <RepoName :id="item.id" class="max-w-[40%] font-mono text-xs" />
             <span class="min-w-0 flex-1 truncate">{{ item.title }}</span>

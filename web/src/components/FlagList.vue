@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed } from 'vue'
-import { PhArrowSquareOut, PhFlag } from '@phosphor-icons/vue'
+import { PhFlag } from '@phosphor-icons/vue'
 import { useDeck } from '@/stores/deck'
 import { timeAgo } from '@/utils/format'
 import { Badge } from '@/components/ui/badge'
@@ -19,9 +20,7 @@ const rows = computed(() => props.keys.map((k) => ({ key: k, flag: deck.flagByKe
   <div class="space-y-1.5">
     <div v-for="{ key, flag, prs } in rows" :key="key" class="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">
       <PhFlag :size="15" weight="fill" :class="flag?.envs[0] ? (flag.envs[0].on ? 'text-success' : 'text-muted-foreground') : 'text-muted-foreground'" />
-      <a v-if="flag" :href="flag.url" target="_blank" rel="noopener" class="font-mono hover:underline" :title="flag.name">
-        {{ key }} <PhArrowSquareOut :size="12" class="inline text-muted-foreground" />
-      </a>
+      <ExternalLink v-if="flag" :href="flag.url" icon="always" :label="flag.name" class="font-mono">{{ key }}</ExternalLink>
       <span v-else class="font-mono">{{ key }}</span>
       <span v-if="flag && flag.name !== key" class="min-w-0 truncate text-xs text-muted-foreground">{{ flag.name }}</span>
       <Badge v-if="flag?.archived" variant="muted">archived</Badge>

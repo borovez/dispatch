@@ -7,7 +7,7 @@ import { useDeck } from '@/stores/deck'
  * left ("…Systems-Inc/portal"). Plain text otherwise (no slash).
  */
 /** Either `repo` ("owner/name", optional `suffix` kept with the name, e.g. "#123") or a PR `id` ("owner/name#123") */
-const props = defineProps<{ repo?: string; suffix?: string; id?: string }>()
+const props = defineProps<{ repo?: string; suffix?: string; id?: string; /** Leave the tooltip to the parent (e.g. an ExternalLink) */ noTitle?: boolean }>()
 const deck = useDeck()
 const full = computed(() => {
   if (props.id) {
@@ -25,7 +25,7 @@ const parts = computed(() => {
 </script>
 
 <template>
-  <span class="flex min-w-0 items-baseline" :title="full.repo + full.suffix">
+  <span class="flex min-w-0 items-baseline" :title="noTitle ? undefined : full.repo + full.suffix">
     <!-- rtl moves the ellipsis to the left; bdi keeps "owner/" in its normal order -->
     <span v-if="parts.owner" class="min-w-0 truncate text-muted-foreground [direction:rtl]"><bdi>{{ parts.owner }}</bdi></span>
     <!-- Never shrinks (flex shrinks proportionally, so a shrinkable name lost a few pixels to an ellipsis);

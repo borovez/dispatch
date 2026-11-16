@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import { PhArrowCounterClockwise, PhArrowSquareOut, PhCircleNotch, PhGitPullRequest, PhSparkle, PhX } from '@phosphor-icons/vue'
+import { PhArrowCounterClockwise, PhCircleNotch, PhGitPullRequest, PhSparkle, PhX } from '@phosphor-icons/vue'
 import type { PrRewrite } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
@@ -256,9 +257,7 @@ async function save() {
       </div>
 
       <div class="mt-3 flex items-center gap-3 border-t px-4 py-3">
-        <a v-if="pr" :href="pr.url" target="_blank" rel="noopener" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <PhArrowSquareOut /> Open on GitHub
-        </a>
+        <ExternalLink v-if="pr" :href="pr.url" icon="always" class="text-xs text-muted-foreground hover:text-foreground">Open on GitHub</ExternalLink>
         <span class="flex-1" />
         <span v-if="changed.title || changed.body" class="text-xs text-muted-foreground">
           {{ [changed.title && 'title', changed.body && 'description'].filter(Boolean).join(' and ') }} changed

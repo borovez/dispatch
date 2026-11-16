@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PhArrowsClockwise, PhCheckCircle, PhGitBranch, PhGraph, PhListBullets, PhWarning } from '@phosphor-icons/vue'
@@ -233,7 +234,7 @@ async function refresh(id: string) {
                 <span class="flex min-w-0 items-center gap-2">
                   <Badge variant="success" class="shrink-0">{{ t.date ? `Tagged ${timeAgo(t.date)}` : 'Tag' }}</Badge>
                   <RepoName :repo="t.repo" class="max-w-64 font-mono text-xs" />
-                  <a :href="t.url" target="_blank" rel="noopener" class="shrink-0 font-mono text-xs text-primary hover:underline" @click.stop>{{ t.tag }}</a>
+                  <ExternalLink :href="t.url" class="shrink-0 font-mono text-xs text-primary">{{ t.tag }}</ExternalLink>
                   <span v-if="t.previous" class="shrink-0 font-mono text-xs font-normal text-muted-foreground">since {{ t.previous }}</span>
                 </span>
               </template>

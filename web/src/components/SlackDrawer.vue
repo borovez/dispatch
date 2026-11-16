@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
+import { externalHint } from '@/lib/external'
 import { computed, nextTick, ref, watch } from 'vue'
 import { PhCaretRight, PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
 import type { SlackContext, SlackMessage } from '@shared/types'
@@ -236,9 +238,7 @@ async function copyPrompt() {
         <Badge v-if="item.threadTs" variant="muted">in thread</Badge>
       </div>
       <h2 class="mt-1.5 font-semibold">{{ item.userName }}</h2>
-      <a v-if="item.permalink" :href="item.permalink" target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1 text-sm text-primary hover:underline">
-        Open in Slack <PhArrowSquareOut :size="14" class="shrink-0" />
-      </a>
+      <ExternalLink v-if="item.permalink" :href="item.permalink" icon="always" class="mt-1 text-sm text-primary">Open in Slack</ExternalLink>
     </template>
 
     <ScrollArea v-if="item" class="min-h-0 flex-1">
@@ -340,7 +340,7 @@ async function copyPrompt() {
                           rel="noopener"
                           class="text-muted-foreground opacity-0 transition-opacity group-hover/reply:opacity-100 hover:text-foreground focus-visible:opacity-100"
                           aria-label="Open in Slack"
-                          title="Open in Slack"
+                          :title="externalHint(messageLink(r, m.ts))"
                         ><PhArrowSquareOut /></a>
                       </div>
                       <SlackText :text="r.text" :rich="r.rich" class="mt-0.5 text-sm" />

@@ -6,6 +6,7 @@ import { jiraTone } from '@/utils/format'
 import { Badge } from '@/components/ui/badge'
 import { useJiraMenu } from '@/composables/itemMenus'
 import ItemContextMenu from './ItemContextMenu.vue'
+import { modClickHint } from '@/lib/external'
 
 /**
  * An issue's Jira links in aligned columns (relation, key, title, status). Blocking links come first;
@@ -37,8 +38,8 @@ function open(e: MouseEvent, key: string) {
     <ItemContextMenu v-for="l in sorted" :key="l.key + l.label" :entries="menuFor(l.key)">
     <li class="contents">
       <span class="whitespace-nowrap text-muted-foreground">{{ l.label }}</span>
-      <a :href="url(l.key)" target="_blank" rel="noopener" class="font-mono whitespace-nowrap underline underline-offset-2 hover:text-primary" @click="open($event, l.key)">{{ l.key }}</a>
-      <a :href="url(l.key)" target="_blank" rel="noopener" class="truncate underline underline-offset-2 hover:text-primary" :title="l.summary" @click="open($event, l.key)">{{ l.summary }}</a>
+      <a :href="url(l.key)" target="_blank" rel="noopener" class="font-mono whitespace-nowrap hover:text-primary" @click="open($event, l.key)">{{ l.key }}</a>
+      <a :href="url(l.key)" target="_blank" rel="noopener" class="truncate hover:text-primary" :title="`${l.summary} · ${modClickHint(url(l.key))}`" @click="open($event, l.key)">{{ l.summary }}</a>
       <Badge :variant="jiraTone(l.statusCategory)" class="h-4 justify-self-end text-[10px]">{{ l.status }}</Badge>
     </li>
     </ItemContextMenu>

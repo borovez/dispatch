@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
 import { watchDebounced } from '@vueuse/core'
 import { PhArrowClockwise, PhKanban } from '@phosphor-icons/vue'
@@ -145,7 +146,7 @@ async function submit() {
     <template #description>Your Jira tasks, issue status on PRs, transitions, and issues created from Slack.</template>
     <template #dialog-description>
       Create an API token at
-      <a class="text-primary hover:underline" href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener">id.atlassian.com → API tokens</a>.
+      <ExternalLink href="https://id.atlassian.com/manage-profile/security/api-tokens" icon="always" class="text-primary">id.atlassian.com → API tokens</ExternalLink>.
     </template>
     <template v-if="draft" #form>
       <div class="grid grid-cols-2 gap-3">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { externalHint } from '@/lib/external'
 import { PhArrowBendUpLeft, PhArrowCounterClockwise, PhArrowSquareOut, PhCheck, PhKanban, PhX } from '@phosphor-icons/vue'
 import type { SlackItem } from '@shared/types'
 import { useDeck } from '@/stores/deck'
@@ -54,9 +55,9 @@ useEventListener(window, 'keydown', (e: KeyboardEvent) => {
   <div v-else class="flex shrink-0 items-start gap-0.5" @click.stop>
     <Tooltip v-if="showOpen && item.permalink">
       <TooltipTrigger as-child>
-        <Button variant="ghost" size="icon-xs" as="a" :href="item.permalink" target="_blank" aria-label="Open in Slack"><PhArrowSquareOut /></Button>
+        <Button variant="ghost" size="icon-xs" as="a" :href="item.permalink" target="_blank" rel="noopener" aria-label="Open in Slack"><PhArrowSquareOut /></Button>
       </TooltipTrigger>
-      <TooltipContent>Open in Slack</TooltipContent>
+      <TooltipContent>{{ externalHint(item.permalink) }}</TooltipContent>
     </Tooltip>
     <Tooltip v-if="!item.jiraKey">
       <TooltipTrigger as-child>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import { PhArrowCounterClockwise, PhArrowSquareOut, PhArrowsIn, PhArrowsOut, PhCaretRight, PhCheck, PhGitBranch, PhGitPullRequest, PhSlackLogo, PhSparkle, PhCircleNotch, PhDotsThree, PhKanban, PhX } from '@phosphor-icons/vue'
+import { PhArrowCounterClockwise, PhArrowsIn, PhArrowsOut, PhCaretRight, PhCheck, PhGitBranch, PhGitPullRequest, PhSlackLogo, PhSparkle, PhCircleNotch, PhDotsThree, PhKanban, PhX } from '@phosphor-icons/vue'
 import type { JiraAiDraft, JiraFieldMeta, JiraFieldOption, JiraFieldValue, JiraIssueTypeMeta, JiraProjectMeta, JiraValueLabels } from '@shared/types'
 import { api } from '@/api'
 import { cn } from '@/lib/utils'
@@ -518,7 +519,7 @@ async function submit() {
         <Skeleton v-else class="h-7 w-16" />
         <PhCaretRight class="size-3 text-muted-foreground" />
         <DialogTitle class="text-sm font-medium">
-          <a v-if="editKey" :href="url" target="_blank" rel="noopener" class="font-mono hover:underline">{{ editKey }}</a>
+          <ExternalLink v-if="editKey" :href="url" class="font-mono">{{ editKey }}</ExternalLink>
           <template v-else>New issue</template>
         </DialogTitle>
         <DialogDescription class="sr-only">{{ editKey ? 'Edit the Jira issue' : 'Create a Jira issue' }}</DialogDescription>
@@ -716,9 +717,7 @@ async function submit() {
 
       <!-- Footer -->
       <div class="flex items-center gap-3 border-t px-4 py-3">
-        <a v-if="editKey && url" :href="url" target="_blank" rel="noopener" class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <PhArrowSquareOut /> Open in Jira
-        </a>
+        <ExternalLink v-if="editKey && url" :href="url" icon="always" class="text-xs text-muted-foreground hover:text-foreground">Open in Jira</ExternalLink>
         <span class="flex-1" />
         <label v-if="ctx.slackItemId && !editKey" class="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
           <Switch v-model="replyInThread" /> Reply in the Slack thread

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, onMounted, ref } from 'vue'
 import { PhSparkle } from '@phosphor-icons/vue'
 import type { AiConfig, AiProvider } from '@shared/types'
@@ -106,7 +107,7 @@ const details = computed(() => {
       <template v-else>
         <p class="text-sm text-muted-foreground">
           Create a key at
-          <a class="text-primary hover:underline" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com → API keys</a>.
+          <ExternalLink href="https://console.anthropic.com/settings/keys" icon="always" class="text-primary">console.anthropic.com → API keys</ExternalLink>.
           <template v-if="info.env"> The server already has <code>ANTHROPIC_API_KEY</code>, so you can leave it blank.</template>
         </p>
         <Field label="API key">

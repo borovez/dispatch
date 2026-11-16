@@ -3,13 +3,14 @@ import { computed } from 'vue'
 import { useDeck } from '@/stores/deck'
 import { jiraTone } from '@/utils/format'
 import { Badge } from '@/components/ui/badge'
+import { modClickHint, wantsExternal } from '@/lib/external'
 
 const props = defineProps<{ issueKey: string; showSummary?: boolean }>()
 const deck = useDeck()
 const issue = computed(() => deck.jiraByKey.get(props.issueKey))
 /** Opens the Jira panel; Cmd/Ctrl-click opens Jira */
 function open(e: MouseEvent) {
-  if (e.metaKey || e.ctrlKey) return
+  if (wantsExternal(e)) return
   e.preventDefault()
   deck.selectedJiraKey = props.issueKey
 }
@@ -24,7 +25,7 @@ const href = computed(
     target="_blank"
     rel="noopener"
     class="inline-flex max-w-full items-center gap-1 text-xs"
-    :title="issue ? `${issue.key}: ${issue.summary} — ${issue.status}` : issueKey"
+    :title="[issue ? `${issue.key}: ${issue.summary} — ${issue.status}` : issueKey, modClickHint(href)].filter(Boolean).join(' · ')"
     @click.stop="open"
   >
     <img v-if="issue?.typeIconUrl" :src="issue.typeIconUrl" class="size-3.5" alt="" />

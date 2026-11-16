@@ -9,8 +9,8 @@ const model = defineModel<string>({ required: true })
 const picked = computed(() => props.tabs.find((t) => t.key === model.value) ?? null)
 
 const name = (repo: string) => repo.split('/')[1] ?? repo
-/** Item text fills the row so the count sits on the right; the picked repo is tinted primary */
-const ITEM = 'min-w-48 rounded-none [&>span:last-child]:flex-1 data-[state=checked]:bg-primary/10 data-[state=checked]:font-medium data-[state=checked]:text-primary data-[state=checked]:[&_svg]:text-primary'
+/** Item text fills the row so the count sits on the right */
+const ITEM = 'min-w-48 [&>span:last-child]:flex-1'
 const COUNT = 'ml-auto rounded-full bg-muted px-1.5 text-xs leading-5 text-muted-foreground tabular-nums'
 </script>
 

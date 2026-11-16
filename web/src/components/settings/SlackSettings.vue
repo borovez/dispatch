@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref } from 'vue'
 import { PhSlackLogo } from '@phosphor-icons/vue'
 import { SLACK_USER_SCOPES, type SlackConfig } from '@shared/types'
@@ -62,7 +63,7 @@ const submit = () => st.saveSection({ slack: draft.value }, slack.value ? 'Slack
   >
     <template #description>Mentions, unanswered DMs and group chats, saved/bookmarked messages, and messages you marked with a todo reaction.</template>
     <template #dialog-description>
-      Create a Slack app at <a class="text-primary hover:underline" href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a> → OAuth &amp; Permissions,
+      Create a Slack app at <ExternalLink href="https://api.slack.com/apps" icon="always" class="text-primary">api.slack.com/apps</ExternalLink> → OAuth &amp; Permissions,
       add these <b>User Token Scopes</b>, install it to your workspace, and paste the <code>xoxp-…</code> User OAuth Token.
     </template>
     <template v-if="draft" #form>

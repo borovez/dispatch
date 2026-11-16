@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
 import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhArrowsClockwise, PhSquareSplitHorizontal, PhRobot } from '@phosphor-icons/vue'
 import type { JiraIssueDetail } from '@shared/types'
@@ -95,16 +96,7 @@ const details = computed(() => {
     <template v-if="key" #header>
       <div class="flex flex-wrap items-center gap-1.5">
         <img v-if="issue?.typeIconUrl" :src="issue.typeIconUrl" :title="issue.type" class="size-4" alt="" />
-        <a
-          v-if="url"
-          :href="url"
-          target="_blank"
-          rel="noopener"
-          class="flex items-center gap-1 font-mono text-sm font-medium text-primary hover:underline"
-          title="Open in Jira"
-        >
-          {{ key }}<PhArrowSquareOut :size="14" class="shrink-0" />
-        </a>
+        <ExternalLink v-if="url" :href="url" icon="always" class="font-mono text-sm font-medium text-primary">{{ key }}</ExternalLink>
         <span v-else class="font-mono text-sm font-medium">{{ key }}</span>
         <Badge v-if="issue" :variant="jiraTone(issue.statusCategory)">{{ issue.status }}</Badge>
         <span class="flex-1" />
@@ -204,9 +196,9 @@ const details = computed(() => {
               </div>
             </div>
           </div>
-          <a v-if="detail.commentTotal > detail.comments.length && url" :href="url" target="_blank" rel="noopener" class="mt-2 inline-block text-xs text-primary hover:underline">
+          <ExternalLink v-if="detail.commentTotal > detail.comments.length && url" :href="url" icon="always" class="mt-2 text-xs text-primary">
             All {{ detail.commentTotal }} comments in Jira
-          </a>
+          </ExternalLink>
         </section>
       </div>
     </ScrollArea>

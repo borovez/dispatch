@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
+import { externalHint } from '@/lib/external'
 import { ref } from 'vue'
 import { PhArrowSquareOut, PhCaretDown, PhCaretRight } from '@phosphor-icons/vue'
 import type { PrFile } from '@shared/types'
@@ -28,7 +30,7 @@ const lineClass = (l: string) =>
         <span class="min-w-0 flex-1 truncate font-mono [direction:rtl] text-left" :title="f.previousFilename ? `${f.previousFilename} → ${f.filename}` : f.filename"><bdi>{{ f.filename }}</bdi></span>
         <span class="text-success tabular-nums">+{{ f.additions }}</span>
         <span class="text-destructive tabular-nums">−{{ f.deletions }}</span>
-        <a :href="f.url" target="_blank" rel="noopener" class="text-muted-foreground hover:text-foreground" aria-label="Open file on GitHub" @click.stop>
+        <a :href="f.url" target="_blank" rel="noopener" class="text-muted-foreground hover:text-foreground" aria-label="Open file on GitHub" :title="externalHint(f.url)" @click.stop>
           <PhArrowSquareOut :size="13" />
         </a>
       </button>
@@ -37,9 +39,9 @@ const lineClass = (l: string) =>
           <pre class="min-w-max font-mono text-[11px] leading-[1.15rem]"><div v-for="(l, i) in f.patch.split('\n')" :key="i" :class="cn('px-3', lineClass(l))">{{ l || ' ' }}</div></pre>
         </div>
         <p v-else class="px-3 py-2 text-xs text-muted-foreground">No diff to show (binary or very large file).</p>
-        <a v-if="f.patchTruncated" :href="f.url" target="_blank" rel="noopener" class="block border-t px-3 py-1.5 text-xs text-primary hover:underline">Diff shortened: see the full file on GitHub</a>
+        <ExternalLink v-if="f.patchTruncated" :href="f.url" icon="always" class="flex border-t px-3 py-1.5 text-xs text-primary">Diff shortened: see the full file on GitHub</ExternalLink>
       </template>
     </div>
-    <a v-if="truncated" :href="`${prUrl}/files`" target="_blank" rel="noopener" class="block text-xs text-primary hover:underline">More files changed: see them all on GitHub</a>
+    <ExternalLink v-if="truncated" :href="`${prUrl}/files`" icon="always" class="flex text-xs text-primary">More files changed: see them all on GitHub</ExternalLink>
   </div>
 </template>

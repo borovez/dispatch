@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ExternalLink from '@/components/ExternalLink.vue'
+import { modClickHint, openInAppOr } from '@/lib/external'
 import { computed } from 'vue'
 import type { JiraIssueView, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
@@ -17,7 +19,7 @@ const props = defineProps<{ issueKey: string; issue: JiraIssueView | null; prs: 
 /** Opens the Jira panel, unless the click was on a linked PR, a link or a button (they do their own thing) */
 function select(e: MouseEvent) {
   if ((e.target as HTMLElement).closest('a, button, [data-pr-id], [role="menu"]')) return
-  deck.selectedJiraKey = props.issueKey
+  openInAppOr(e, href.value, () => (deck.selectedJiraKey = props.issueKey))
 }
 const deck = useDeck()
 const jiraMenu = useJiraMenu()
@@ -43,6 +45,7 @@ const initials = (name: string) =>
   <div
     :data-jira-id="issueKey"
     :class="cn('group cursor-pointer rounded-lg px-3 py-2.5 transition-colors hover:bg-accent', deck.selectedJiraKey === issueKey && 'bg-accent ring-2 ring-primary ring-inset')"
+    :title="href ? `Open in Dispatch · ${modClickHint(href)}` : undefined"
     @click="select"
   >
     <div class="flex flex-wrap items-start gap-x-2 gap-y-1.5 sm:flex-nowrap">
@@ -50,7 +53,7 @@ const initials = (name: string) =>
       <div class="min-w-0 flex-1">
         <!-- Narrow screens: the summary wraps to two lines instead of a few truncated characters -->
         <div class="flex items-baseline gap-2">
-          <a :href="href" target="_blank" rel="noopener" class="shrink-0 font-mono text-xs font-medium hover:underline">{{ issueKey }}</a>
+          <ExternalLink :href="href" class="shrink-0 font-mono text-xs font-medium">{{ issueKey }}</ExternalLink>
           <span v-if="issue" class="line-clamp-2 text-sm font-medium sm:truncate" :title="issue.summary">{{ issue.summary }}</span>
           <span v-else class="line-clamp-2 text-sm text-muted-foreground sm:truncate">{{ prs[0]?.title ?? 'Not loaded from Jira' }}</span>
         </div>
