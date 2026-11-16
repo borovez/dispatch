@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
+import { PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
 import type { SlackContext, SlackMessage } from '@shared/types'
 import { toast } from 'vue-sonner'
 import { api } from '@/api'
@@ -8,7 +8,7 @@ import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
 import { useArrowNav } from '@/composables/prNav'
 import { useReleaseNav } from '@/composables/releaseNav'
-import { copySlackPrompt } from '@/composables/itemMenus'
+import { copySlackPrompt, copyText } from '@/composables/itemMenus'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
@@ -264,6 +264,14 @@ async function copyPrompt() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Open in Slack</TooltipContent>
+              </Tooltip>
+              <Tooltip v-if="messageLink(m)">
+                <TooltipTrigger as-child>
+                  <Button variant="outline" size="icon-xs" class="bg-background" aria-label="Copy link" @click="copyText(messageLink(m)!, 'link')">
+                    <PhLink />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copy link</TooltipContent>
               </Tooltip>
             </div>
             <div class="min-w-0 flex-1">
