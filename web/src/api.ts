@@ -73,6 +73,7 @@ export const api = {
     call<SlackContext>('GET', `/slack/${encodeURIComponent(id)}/around?before=${before}&after=${after}`),
   slackPrompt: (id: string, before?: number, after?: number) =>
     call<{ prompt: string }>('GET', `/slack/${encodeURIComponent(id)}/prompt${before === undefined ? '' : `?before=${before}&after=${after ?? before}`}`),
+  setupPrompt: () => call<{ prompt: string }>('GET', '/setup/prompt'),
   slackThread: (id: string, ts: string) => call<SlackMessage[]>('GET', `/slack/${encodeURIComponent(id)}/thread-replies?ts=${encodeURIComponent(ts)}`),
   slackReply: (id: string, text: string, threadTs?: string | null) => call<{ ok: boolean }>('POST', `/slack/${encodeURIComponent(id)}/reply`, { text, threadTs }),
   slackUser: (id: string) => call<SlackUserProfile>('GET', `/slack/users/${encodeURIComponent(id)}`),

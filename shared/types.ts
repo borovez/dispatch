@@ -724,6 +724,25 @@ export interface Settings {
   defaultReleaseRef: string // "latest-release" | branch name
 }
 
+/** User token scopes Dispatch's Slack features use (Settings → Slack, the setup prompt's app manifest) */
+export const SLACK_USER_SCOPES = [
+  'search:read',
+  'im:history',
+  'mpim:history',
+  'im:read',
+  'mpim:read',
+  'channels:history',
+  'groups:history',
+  'users:read',
+  'users:read.email',
+  'channels:read',
+  'groups:read',
+  'stars:read',
+  'reactions:read',
+  'reactions:write',
+  'chat:write',
+]
+
 export const DEFAULT_SETTINGS: Settings = {
   github: { accounts: [] },
   trackedRepos: [],

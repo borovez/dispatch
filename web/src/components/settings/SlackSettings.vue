@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { PhSlackLogo } from '@phosphor-icons/vue'
-import type { SlackConfig } from '@shared/types'
+import { SLACK_USER_SCOPES, type SlackConfig } from '@shared/types'
 import { api } from '@/api'
 import { useSettings } from '@/stores/settings'
 import { clone, splitList } from '@/utils/format'
@@ -26,8 +26,7 @@ const DEFAULTS: SlackConfig = {
   todoReactions: ['todo', 'bookmark'],
   doneReactions: ['white_check_mark', 'heavy_check_mark', 'done'],
 }
-const SCOPES =
-  'search:read, im:history, mpim:history, im:read, mpim:read, channels:history, groups:history, users:read, users:read.email, channels:read, groups:read, stars:read, reactions:read, reactions:write, chat:write'
+const SCOPES = SLACK_USER_SCOPES.join(', ')
 
 const details = computed(() => {
   const s = slack.value

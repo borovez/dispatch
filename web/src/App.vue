@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import {
   PhGauge,
   PhGear,
+  PhRobot,
   PhGitPullRequest,
   PhGraph,
   PhRocketLaunch,
@@ -31,6 +32,7 @@ import JiraDrawer from '@/components/JiraDrawer.vue'
 import JiraComposer from '@/components/JiraComposer.vue'
 import PrWriter from '@/components/PrWriter.vue'
 import AgentPromptDialog from '@/components/AgentPromptDialog.vue'
+import SetupPromptDialog from '@/components/SetupPromptDialog.vue'
 import { onKeyStroke } from '@vueuse/core'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -190,8 +192,9 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
           <Alert v-if="needsSetup && route.name !== 'settings'" class="mb-4">
             <PhGear />
             <AlertTitle>Finish setup</AlertTitle>
-            <AlertDescription>Connect GitHub (and optionally Jira and Slack) to get started.</AlertDescription>
-            <AlertAction>
+            <AlertDescription>Connect GitHub (and optionally Jira and Slack) to get started, or let an AI agent walk you through it.</AlertDescription>
+            <AlertAction class="flex gap-2">
+              <Button size="sm" variant="outline" @click="deck.setupPromptOpen = true"><PhRobot /> Set up with AI</Button>
               <Button size="sm" as-child><RouterLink to="/settings">Open setup</RouterLink></Button>
             </AlertAction>
           </Alert>
@@ -205,6 +208,7 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
     <JiraComposer />
     <PrWriter />
     <AgentPromptDialog />
+    <SetupPromptDialog />
     <Toaster :theme="theme === 'auto' ? 'system' : theme" position="bottom-right" close-button />
   </TooltipProvider>
 </template>

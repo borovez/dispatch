@@ -11,6 +11,8 @@ import { replyInThread, threadContext } from './slack.ts'
 import { buildOverview } from './model.ts'
 import { normaliseRef } from './refs.ts'
 import { runSync } from './sync.ts'
+import { buildSetupPrompt } from './setupPrompt.ts'
+import { connectGhCli, maskSettings, SettingsPatch, updateSettings } from './settingsPatch.ts'
 
 // stdio MCP server over the same SQLite cache the web app uses.
 // Register in Claude Code:  claude mcp add dispatch --scope user -- <node> <tsx cli> <this file>
@@ -426,6 +428,55 @@ server.registerTool(
       input.comment?.trim() && 'comment added',
     ].filter(Boolean)
     return text(`Updated ${issue.key} (${changed.join(', ') || 'nothing changed'}): ${issue.url}`)
+  },
+)
+
+// ---------- Setup ----------
+const ORIGIN = `http://127.0.0.1:${process.env.DISPATCH_PORT ?? process.env.PRDECK_PORT ?? 4317}`
+
+server.registerTool(
+  'setup_status',
+  {
+    title: 'Dispatch setup status',
+    description:
+      "What's connected (GitHub, Jira, Slack, LaunchDarkly, Claude drafting), what's missing, where each token comes from and which scopes it needs, plus the current non-secret settings as JSON. Use it to guide the user through setup; tokens are always pasted by the user into Dispatch → Settings, never into the chat.",
+    inputSchema: {},
+  },
+  async () => {
+    const { github, jira, slack, launchdarkly, ai, ...rest } = maskSettings(getSettings())
+    const current = { ...rest, github: { accounts: github.accounts.map(({ token: _t, ...a }) => a) }, jira, slack, launchdarkly, ai }
+    return text(`${await buildSetupPrompt(ORIGIN)}
+## Current settings (no secrets)
+
+\`\`\`json\n${JSON.stringify(current, null, 2)}\n\`\`\`\n`)
+  },
+)
+
+server.registerTool(
+  'update_settings',
+  {
+    title: 'Update Dispatch settings',
+    description:
+      'Change non-secret settings: tracked repos (set / add / remove), GitHub account labels and org limits, sync, dependency writing, Jira site / email / projects / JQL / create defaults, Slack reactions and look-back, LaunchDarkly project and environments, Claude provider and model, release refs. Only the fields given change; returns each change. Tokens and API keys cannot be set here: the user pastes them in Dispatch → Settings.',
+    inputSchema: SettingsPatch.shape,
+  },
+  async (patch) => {
+    const changes = updateSettings(patch)
+    return text(changes.length ? `Saved:\n${changes.map((c) => `- ${c}`).join('\n')}` : 'Nothing changed.')
+  },
+)
+
+server.registerTool(
+  'connect_github_gh_cli',
+  {
+    title: 'Connect GitHub from the gh CLI login',
+    description:
+      "Adds (or refreshes) a GitHub account from the local gh CLI login: Dispatch reads `gh auth token` itself, so the token never passes through the chat. Needs `gh auth login` with the repo and read:org scopes (`gh auth refresh -s repo,read:org`). Run sync afterwards to load PRs.",
+    inputSchema: {},
+  },
+  async () => {
+    const { me } = await connectGhCli()
+    return text(`Connected GitHub as ${me.login} via the gh CLI. Next: pick tracked repos / org limits (update_settings) and run sync.`)
   },
 )
 

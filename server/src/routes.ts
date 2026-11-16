@@ -34,6 +34,8 @@ import { draftJiraIssue, draftPrText, envCredentials, testAi } from './ai.ts'
 import { keepDeclarations } from './prWriter.ts'
 import { buildAgentPrompt } from './agentPrompt.ts'
 import { buildSlackPrompt } from './slackPrompt.ts'
+import { buildSetupPrompt } from './setupPrompt.ts'
+import { connectGhCli, maskSettings, updateSettings } from './settingsPatch.ts'
 import { startUpdate, updateStatus, VERSION } from './updates.ts'
 import { claudeMdGuide } from './guides.ts'
 import { claudeBin } from './claudeCode.ts'
@@ -73,16 +75,6 @@ api.onError((err, c) => {
 const bad = (msg: string) => Object.assign(new Error(msg), { status: 400 })
 
 /** Tokens never leave the server. */
-function maskSettings(s: Settings): Settings {
-  return {
-    ...s,
-    github: { accounts: s.github.accounts.map((a) => ({ ...a, token: '', hasToken: !!a.token })) },
-    jira: s.jira ? { ...s.jira, apiToken: '', hasToken: !!s.jira.apiToken } : null,
-    slack: s.slack ? { ...s.slack, token: '', hasToken: !!s.slack.token } : null,
-    launchdarkly: s.launchdarkly ? { ...s.launchdarkly, apiToken: '', hasToken: !!s.launchdarkly.apiToken } : null,
-    ai: { ...s.ai, apiKey: '', hasKey: !!s.ai.apiKey },
-  }
-}
 
 api.get('/health', (c) => c.json({ ok: true, version: VERSION }))
 
@@ -114,6 +106,12 @@ api.put('/sync/auto', async (c) => {
 
 // ---------- Settings ----------
 api.get('/settings', (c) => c.json(maskSettings(getSettings())))
+
+/** Change some non-secret settings (the same patch as the MCP `update_settings` tool); returns what changed */
+api.patch('/settings', async (c) => {
+  const changes = updateSettings(await c.req.json())
+  return c.json({ changes, settings: maskSettings(getSettings()) })
+})
 
 api.put('/settings', async (c) => {
   const incoming = (await c.req.json()) as Settings
@@ -171,16 +169,8 @@ api.post('/setup/github/test', async (c) => {
 
 /** Create (or refresh) an account from `gh auth token`. */
 api.post('/setup/github/gh-cli', async (c) => {
-  const token = await ghCliToken()
-  const me = await whoAmI(token)
-  const s = getSettings()
-  const existing = s.github.accounts.find((a) => a.source === 'gh-cli')
-  const account: GithubAccount = existing
-    ? { ...existing, token, login: me.login }
-    : { id: randomUUID(), label: `${me.login} (gh CLI)`, token, login: me.login, orgs: [], source: 'gh-cli' }
-  s.github.accounts = existing ? s.github.accounts.map((a) => (a.id === account.id ? account : a)) : [...s.github.accounts, account]
-  saveSettings(s)
-  return c.json({ ...me, settings: maskSettings(s) })
+  const { me, settings } = await connectGhCli()
+  return c.json({ ...me, settings: maskSettings(settings) })
 })
 
 /** Every repo the accounts can see (all their orgs), kept an hour; `?refresh=1` lists again */
@@ -232,6 +222,13 @@ api.get('/setup/mcp', (c) => {
     dbPath: DB_PATH,
     tsxCandidates: [tsx, fallbackTsx],
   })
+})
+
+/** A brief for an AI agent to walk me through setting Dispatch up (status, where tokens come from; no secrets) */
+api.get('/setup/prompt', async (c) => {
+  const prompt = await buildSetupPrompt(new URL(c.req.url).origin)
+  // ?text=1: plain text, for `claude "$(curl -s …)"` in a terminal
+  return c.req.query('text') ? c.text(prompt) : c.json({ prompt })
 })
 
 // ---------- Dependencies ----------

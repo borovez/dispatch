@@ -14,6 +14,42 @@ const PORT = Number(process.env.DISPATCH_PORT ?? process.env.PRDECK_PORT ?? 4317
 const HOST = '127.0.0.1'
 
 const app = new Hono()
+
+/**
+ * Local-only guard. Binding to loopback keeps other machines out, but not web pages open in a browser on
+ * this one, which can send requests to 127.0.0.1:
+ * - Host must be a loopback name, so a DNS-rebinding page (evil.example → 127.0.0.1) gets nothing.
+ * - Writes (anything but GET / HEAD / OPTIONS) must come from Dispatch itself or a non-browser client
+ *   (curl, the MCP server, Claude Code): a browser's Origin must be Dispatch's own (this port, or the Vite
+ *   dev server), Sec-Fetch-Site may not be cross-site, and a body must be JSON (a cross-site form or
+ *   text/plain POST is refused, and JSON from another origin needs a CORS preflight Dispatch never grants).
+ */
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
+const DEV_PORT = Number(process.env.DISPATCH_DEV_PORT ?? 5317)
+const hostOf = (h: string) => (h.startsWith('[') ? h.slice(0, h.indexOf(']') + 1) : h.split(':')[0]).toLowerCase()
+app.use('*', async (c, next) => {
+  const host = c.req.header('host')
+  if (host && !LOOPBACK.has(hostOf(host))) return c.json({ error: 'Dispatch only answers on 127.0.0.1 / localhost' }, 403)
+  if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return next()
+  const origin = c.req.header('origin')
+  if (origin) {
+    let ok = false
+    try {
+      const u = new URL(origin)
+      ok = LOOPBACK.has(u.hostname.toLowerCase()) && [PORT, DEV_PORT].includes(Number(u.port || (u.protocol === 'https:' ? 443 : 80)))
+    } catch {
+      /* "null" or garbage: refused */
+    }
+    if (!ok) return c.json({ error: `Requests from ${origin} are not allowed` }, 403)
+  }
+  if (c.req.header('sec-fetch-site') === 'cross-site') return c.json({ error: 'Cross-site requests are not allowed' }, 403)
+  const hasBody = Number(c.req.header('content-length') ?? 0) > 0 || !!c.req.header('transfer-encoding')
+  if (hasBody && !(c.req.header('content-type') ?? '').toLowerCase().startsWith('application/json')) {
+    return c.json({ error: 'Send JSON (Content-Type: application/json)' }, 415)
+  }
+  return next()
+})
+
 app.route('/api', api)
 
 // In production, serve the built Vue app.

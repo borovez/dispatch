@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { PhCheck, PhCircleNotch, PhPlug, PhGraph, PhTimer } from '@phosphor-icons/vue'
+import { PhCheck, PhCircleNotch, PhPlug, PhGraph, PhRobot, PhTimer } from '@phosphor-icons/vue'
+import { useDeck } from '@/stores/deck'
 import { api } from '@/api'
 import { useSettings } from '@/stores/settings'
 import ActionBar from '@/components/ActionBar.vue'
@@ -18,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
 const st = useSettings()
+const deck = useDeck()
 const mcp = ref<Awaited<ReturnType<typeof api.mcpInfo>> | null>(null)
 
 onMounted(async () => {
@@ -28,6 +30,21 @@ onMounted(async () => {
 
 <template>
   <div v-if="st.s" class="max-w-4xl space-y-6 pb-24">
+    <!-- Setup help from an AI agent: prominent until GitHub is connected -->
+    <Card :class="!deck.overview?.configured.github && 'border-primary/50 bg-primary/5'">
+      <CardContent class="flex flex-wrap items-center gap-3">
+        <PhRobot :size="22" class="shrink-0 text-primary" />
+        <div class="min-w-0 flex-1">
+          <p class="font-medium">{{ deck.overview?.configured.github ? 'Setup help from an AI agent' : 'Set up Dispatch with an AI agent' }}</p>
+          <p class="text-sm text-muted-foreground">
+            A prompt for Claude Code (or any agent) with what's connected, what's missing, where each token comes from and which scopes it needs.
+            You paste tokens here, never into the chat.
+          </p>
+        </div>
+        <Button :variant="deck.overview?.configured.github ? 'outline' : 'default'" size="sm" @click="deck.setupPromptOpen = true"><PhRobot /> Setup prompt</Button>
+      </CardContent>
+    </Card>
+
     <GithubSettings />
 
     <Card>
