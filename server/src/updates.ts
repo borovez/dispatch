@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import type { UpdateStatus } from '../../shared/types.ts'
-import { kvGet, kvSet } from './db.ts'
+import { getSettings, kvGet, kvSet } from './db.ts'
+import { ghCliToken } from './github.ts'
 
 const run = promisify(execFile)
 const ROOT = fileURLToPath(new URL('../..', import.meta.url))
@@ -31,16 +32,41 @@ type Latest =
   | { version: string; url: string; notes: string; publishedAt: string; checkedAt: string; downloadUrl?: string | null }
   | { error: string; checkedAt: string }
 
-/** The newest GitHub release of this repo (no token needed for a public repo); cached six hours */
+/**
+ * GET a GitHub API path for this repo: anonymously first (a public repo), then with each GitHub token
+ * Dispatch has (Settings → GitHub), then the gh CLI login, so a private repo works for anyone with access.
+ * Returns the first answer that isn't a 404 (or the last 404), and whether any token was tried.
+ */
+async function repoApi(path: string): Promise<{ res: Response; withToken: boolean }> {
+  const url = `https://api.github.com/repos/${REPO}${path}`
+  const headers = { Accept: 'application/vnd.github+json' }
+  let res = await fetch(url, { headers })
+  if (res.status !== 404) return { res, withToken: false }
+  const tokens = getSettings().github.accounts.map((a) => a.token).filter(Boolean)
+  const gh = await ghCliToken().catch(() => '')
+  if (gh && !tokens.includes(gh)) tokens.push(gh)
+  for (const token of tokens) {
+    res = await fetch(url, { headers: { ...headers, Authorization: `Bearer ${token}` } })
+    if (res.status !== 404) return { res, withToken: true }
+  }
+  return { res, withToken: tokens.length > 0 }
+}
+
+/** The newest GitHub release of this repo (public, or private with a token that can see it); cached six hours */
 async function latestRelease(force: boolean): Promise<Latest> {
   const cached = kvGet<Latest | null>('updateCheck', null)
   if (!force && cached && Date.now() - Date.parse(cached.checkedAt) < CHECK_EVERY_MS) return cached
   const checkedAt = new Date().toISOString()
   let latest: Latest
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
-    if (res.status === 404) latest = { version: VERSION, url: `https://github.com/${REPO}/releases`, notes: '', publishedAt: '', checkedAt }
-    else if (!res.ok) latest = { error: `GitHub ${res.status}`, checkedAt }
+    const { res, withToken } = await repoApi('/releases/latest')
+    if (res.status === 404) {
+      // No release yet, or a private repo none of my tokens can see
+      const repo = withToken ? (await repoApi('')).res : res
+      latest = repo.ok
+        ? { version: VERSION, url: `https://github.com/${REPO}/releases`, notes: '', publishedAt: '', checkedAt }
+        : { error: `Can't see ${REPO} on GitHub: it may be private, and no GitHub login in Dispatch (or gh CLI) has access`, checkedAt }
+    } else if (!res.ok) latest = { error: `GitHub ${res.status}`, checkedAt }
     else {
       const r = (await res.json()) as {
         tag_name: string

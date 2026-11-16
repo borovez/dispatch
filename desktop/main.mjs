@@ -10,7 +10,6 @@ import { fileURLToPath } from 'node:url'
 
 const PORT = Number(process.env.DISPATCH_PORT ?? 4317)
 const BASE = `http://127.0.0.1:${PORT}`
-const REPO = 'borovez/prdeck'
 const HERE = fileURLToPath(new URL('.', import.meta.url))
 const LOG = join(homedir(), 'Library', 'Logs', 'Dispatch-desktop.log')
 
@@ -147,20 +146,23 @@ function createWindow() {
   window.on('closed', () => (window = null))
 }
 
-/** Newer GitHub release? Offer its .dmg (the app isn't signed, so it can't replace itself) */
+/**
+ * Newer GitHub release? Offer its .dmg (the app isn't signed, so it can't replace itself). Asks the local
+ * server, which checks GitHub with the GitHub logins Dispatch has, so a private repo works too.
+ */
 async function checkForUpdate(manual = false) {
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
-    if (!r.ok) throw new Error(`GitHub ${r.status}`)
-    const rel = await r.json()
-    const latest = String(rel.tag_name).replace(/^v/, '')
+    const r = await fetch(`${BASE}/api/update${manual ? '?refresh=1' : ''}`)
+    if (!r.ok) throw new Error(`Dispatch ${r.status}`)
+    const u = await r.json()
+    if (u.error) throw new Error(u.error)
+    const latest = u.latest ?? app.getVersion()
+    const rel = { html_url: u.url }
+    const dmg = u.downloadUrl ? { browser_download_url: u.downloadUrl } : null
     if (!newer(latest, app.getVersion())) {
       if (manual) dialog.showMessageBox({ message: `Dispatch ${app.getVersion()} is the latest version.` })
       return
     }
-    const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
-    const dmgs = (rel.assets ?? []).filter((a) => a.name.endsWith('.dmg'))
-    const dmg = dmgs.find((a) => a.name.includes(arch)) ?? dmgs[0]
     const { response } = await dialog.showMessageBox({
       type: 'info',
       message: `Dispatch ${latest} is available`,
