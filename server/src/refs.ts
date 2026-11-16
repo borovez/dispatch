@@ -120,3 +120,24 @@ export function parseFeatureFlags(body: string | null | undefined): string[] {
   for (const m of body.matchAll(/launchdarkly\.com\/(?:projects\/[\w.-]+\/flags|[\w.-]+\/[\w.-]+\/features)\/([\w.-]+)/gi)) add(m[1])
   return [...keys]
 }
+
+/**
+ * PRs a release's description lists as its contents. Only list items and table rows that start with
+ * the PR ("- #12 …", "- [x] owner/repo#12", "1. https://github.com/o/r/pull/12", "| #12 |"): prose that
+ * merely mentions a PR ("Split out of #724", "Independent of #724") and the dependency / flag lines
+ * (Depends on:, Requires release of:, Blocks:, Release blocks:) are not contents.
+ */
+export function descriptionContentRefs(body: string, repo: string): { owner: string; name: string; number: number }[] {
+  const [owner, name] = repo.split('/')
+  const out = new Map<string, { owner: string; name: string; number: number }>()
+  const DECLARATION = /^\s*(?:[-*+]\s+)?(?:\*\*)?(?:depends on|requires release of|blocks|release blocks|feature flags?|flags?)(?:\*\*)?\s*:/i
+  const ITEM = /^\s*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|\|\s*)(?:\*\*|`)?(?:(https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+))|(?:([\w.-]+)\/([\w.-]+))?#(\d{1,6})\b)/
+  for (const line of body.split('\n')) {
+    if (DECLARATION.test(line)) continue
+    const m = ITEM.exec(line)
+    if (!m) continue
+    const ref = m[1] ? { owner: m[2], name: m[3], number: Number(m[4]) } : { owner: m[5] ?? owner, name: m[6] ?? name, number: Number(m[7]) }
+    out.set(`${ref.owner}/${ref.name}#${ref.number}`.toLowerCase(), ref)
+  }
+  return [...out.values()]
+}

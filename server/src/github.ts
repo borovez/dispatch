@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { CheckState, GithubAccount, LinkedPr, PrRecord, PrDetail } from '../../shared/types.ts'
-import { prId } from './refs.ts'
+import { descriptionContentRefs, prId } from './refs.ts'
 
 const API = 'https://api.github.com'
 
@@ -472,11 +472,10 @@ export async function releaseContents(
   for (const prs of (await prsForCommits(account, owner, name, [...picked])).values())
     for (const p of prs) if (p.number !== number) add(p, 'cherry-pick')
 
-  // 3. PRs referenced in the description: #12 (this repo) and PR URLs (any repo)
+  // 3. PRs the description lists as contents (list items / table rows starting with the PR; not prose
+  // mentions or dependency lines: descriptionContentRefs)
   const refs = new Map<string, { owner: string; name: string; number: number }>()
-  for (const m of body.matchAll(/(?<![\w/&])#(\d{1,6})\b/g)) refs.set(`${repo.toLowerCase()}#${m[1]}`, { owner, name, number: Number(m[1]) })
-  for (const m of body.matchAll(/https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/g))
-    refs.set(`${m[1]}/${m[2]}`.toLowerCase() + `#${m[3]}`, { owner: m[1], name: m[2], number: Number(m[3]) })
+  for (const r of descriptionContentRefs(body, repo)) refs.set(prId(`${r.owner}/${r.name}`, r.number), r)
   const missing = [...refs].filter(([k]) => !found.has(k) && !(k === `${repo.toLowerCase()}#${number}`)).slice(0, 60)
   for (let i = 0; i < missing.length; i += 30) {
     const part = missing.slice(i, i + 30)

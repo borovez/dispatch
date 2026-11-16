@@ -10,11 +10,15 @@ export const accountFor = (accounts: GithubAccount[], pr: PrRecord) => accounts.
 /** Backmerges show up among a release's commits; they ship nothing new */
 const BACKMERGE = /back-?merge/i
 
+/** Bumped when the way contents are worked out changes: 2 = description refs only from lists (descriptionContentRefs) */
+const CONTENTS_VERSION = 2
+
 /** Work out (and cache) what a release PR ships */
 export async function computeReleaseContents(account: GithubAccount, pr: PrRecord): Promise<ReleaseContents> {
   const projectKeys = getSettings().jira?.projectKeys ?? []
   const base: Omit<ReleaseContents, 'items' | 'jiraKeys' | 'commitsScanned' | 'truncated'> = {
     prId: pr.id,
+    version: CONTENTS_VERSION,
     forUpdatedAt: pr.updatedAt,
     fetchedAt: new Date().toISOString(),
   }
@@ -54,7 +58,7 @@ export async function syncReleaseFlow(accounts: GithubAccount[], errors: string[
   for (const pr of prs) {
     if (prFlow(pr, integration) !== 'release' || pr.state === 'CLOSED') continue
     const c = cached.get(pr.id)
-    const stale = !c || (pr.state === 'OPEN' && c.forUpdatedAt !== pr.updatedAt) || (c.error && c.forUpdatedAt !== pr.updatedAt)
+    const stale = !c || (c.version ?? 1) < CONTENTS_VERSION || (pr.state === 'OPEN' && c.forUpdatedAt !== pr.updatedAt) || (c.error && c.forUpdatedAt !== pr.updatedAt)
     if (!stale) continue
     const acc = accountFor(accounts, pr)
     if (!acc) continue

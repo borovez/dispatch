@@ -153,6 +153,8 @@ export interface ReleaseItem {
 /** What a release PR contains. Cached per release PR and recomputed when the PR changes. */
 export interface ReleaseContents {
   prId: PrId
+  /** How it was worked out; older versions are recomputed (releases.ts CONTENTS_VERSION) */
+  version?: number
   /** The release PR's updatedAt it was computed for */
   forUpdatedAt: string
   items: ReleaseItem[]

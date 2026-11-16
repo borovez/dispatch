@@ -354,7 +354,8 @@ function buildTrains(prs: PrView[], edges: DepEdge[], releases: ReleaseContents[
       for (const b of holders(e.from)) {
         // Same release, or one release inside the other: no order between them. Only open releases can wait.
         if (a === b || contains.get(a)!.has(b) || contains.get(b)!.has(a) || byId.get(b)!.state !== 'OPEN') continue
-        link(a, b, 'order', `${e.from} needs ${e.to} ${e.kind === 'release' ? 'released' : 'merged'}`)
+        // Say when the wait is inherited through what a release ships, so it can be told apart from a direct one
+        link(a, b, 'order', `${b === e.from ? '' : `ships ${e.from}, which `}${b === e.from ? `${e.from} needs` : 'needs'} ${a === e.to ? e.to : `${e.to} (shipped by ${a})`} ${e.kind === 'release' ? 'released' : 'merged'}`)
       }
   const open = live.filter((r) => byId.get(r.prId)!.state === 'OPEN')
   for (let i = 0; i < open.length; i++)
