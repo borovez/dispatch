@@ -2,9 +2,10 @@
 /**
  * Full-width grab bar under a section: drag up/down to change the section's height (v-model, px),
  * double-click to go back to `reset`. `target` is the element being sized, measured when a drag starts
- * so the drag begins from what's on screen. `line` draws it as a divider line instead of a pill.
+ * so the drag begins from what's on screen. `line` draws it as a divider line instead of a pill;
+ * `invert` is for a bar above the section (dragging up makes it taller).
  */
-const props = withDefaults(defineProps<{ target?: () => HTMLElement | null | undefined; min?: number; max?: number; reset?: number; line?: boolean }>(), {
+const props = withDefaults(defineProps<{ target?: () => HTMLElement | null | undefined; min?: number; max?: number; reset?: number; line?: boolean; invert?: boolean }>(), {
   min: 48,
   max: () => Math.round(window.innerHeight * 0.7),
 })
@@ -18,7 +19,7 @@ function start(e: PointerEvent) {
   bar.setPointerCapture(e.pointerId)
   const from = e.clientY
   const base = props.target?.()?.offsetHeight ?? height.value
-  const move = (ev: PointerEvent) => (height.value = clamp(base + ev.clientY - from))
+  const move = (ev: PointerEvent) => (height.value = clamp(base + (props.invert ? from - ev.clientY : ev.clientY - from)))
   const end = () => {
     bar.removeEventListener('pointermove', move)
     bar.removeEventListener('pointerup', end)
@@ -32,8 +33,9 @@ function start(e: PointerEvent) {
 }
 function onKey(e: KeyboardEvent) {
   const step = e.shiftKey ? 48 : 16
-  if (e.key === 'ArrowUp') height.value = clamp(height.value - step)
-  else if (e.key === 'ArrowDown') height.value = clamp(height.value + step)
+  const up = props.invert ? step : -step
+  if (e.key === 'ArrowUp') height.value = clamp(height.value + up)
+  else if (e.key === 'ArrowDown') height.value = clamp(height.value - up)
   else return
   e.preventDefault()
 }

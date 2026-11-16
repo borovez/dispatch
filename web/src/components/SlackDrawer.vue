@@ -5,6 +5,7 @@ import type { SlackContext, SlackMessage } from '@shared/types'
 import { toast } from 'vue-sonner'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
+import { useLayout } from '@/stores/layout'
 import { useArrowNav } from '@/composables/prNav'
 import { useReleaseNav } from '@/composables/releaseNav'
 import { copySlackPrompt } from '@/composables/itemMenus'
@@ -25,6 +26,8 @@ import { KIND } from '@/utils/slack'
 
 /** Side panel for a Slack inbox item: the message with the two before and after it. */
 const deck = useDeck()
+/** Reply box height (0: grows with the text), kept between messages */
+const sv = useLayout().view('slack-panel', { replyHeight: 0 })
 const item = computed(() => deck.selectedSlack)
 /** The release the message is about: a linked PR's release, else a mentioned Jira issue's */
 const nav = useReleaseNav()
@@ -286,6 +289,7 @@ async function copyPrompt() {
       v-if="item && replying"
       ref="box"
       v-model="draft"
+      v-model:height="sv.replyHeight"
       :label="replyLabel"
       :quote="replyTo?.text"
       :people="people"
