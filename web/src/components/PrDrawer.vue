@@ -445,11 +445,27 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             </div>
             <div v-if="!jira.length" class="text-sm text-muted-foreground">No issue key found in title or branch.</div>
             <ItemContextMenu v-for="{ key, issue } in jira" :key="key" :entries="() => jiraMenu(key, issue ?? null, deck.prs.filter((p) => p.jiraKeys.includes(key)))">
-            <div :class="['mb-2 rounded-lg border p-3', issue && jiraCardTone(issue.statusCategory)]">
+            <!-- The card opens the issue in the panel; buttons and links inside keep their own actions -->
+            <div
+              :class="['mb-2 cursor-pointer rounded-lg border p-3 transition-colors hover:border-primary/60', issue && jiraCardTone(issue.statusCategory)]"
+              role="button"
+              tabindex="0"
+              :aria-label="`Open ${key} in the panel`"
+              @click="(e) => !(e.target as HTMLElement).closest('a, button, [role=combobox], [role=menuitem]') && (deck.selectedJiraKey = key)"
+              @keydown.enter.self="deck.selectedJiraKey = key"
+            >
               <template v-if="issue">
                 <div class="flex items-center gap-2">
                   <img v-if="issue.typeIconUrl" :src="issue.typeIconUrl" class="size-4" alt="" />
-                  <a :href="issue.url" target="_blank" class="font-mono text-sm hover:underline">{{ issue.key }}</a>
+                  <span class="font-mono text-sm">{{ issue.key }}</span>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button variant="ghost" size="icon-xs" class="text-muted-foreground" as="a" :href="issue.url" target="_blank" rel="noopener" :aria-label="`Open ${issue.key} in Jira`">
+                        <PhArrowSquareOut />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open in Jira</TooltipContent>
+                  </Tooltip>
                   <span class="flex-1" />
                   <Button variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-primary" :aria-label="`Prompt for an AI agent to implement ${issue.key}`" title="Prompt for an AI agent" @click="deck.agentPromptKey = issue.key">
                     <PhRobot />
