@@ -28,6 +28,7 @@ gh release create "$VERSION" --title "Dispatch $VERSION" --generate-notes
 if [ "$(uname)" = "Darwin" ] && [ "${WITH_DESKTOP:-}" = "1" ]; then
   echo "Building the Mac app…"
   npm run desktop:dist:all
-  gh release upload "$VERSION" desktop/dist/Dispatch-*.dmg --clobber
+  # Only this version's files: desktop/dist keeps older builds
+  gh release upload "$VERSION" "desktop/dist/Dispatch-${VERSION#v}-"*.dmg --clobber
 fi
 echo "Released $VERSION"
