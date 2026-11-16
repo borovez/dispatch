@@ -11,6 +11,7 @@ import PrRow from './PrRow.vue'
 import RepoName from './RepoName.vue'
 import JiraPill from './JiraPill.vue'
 import FlagChip from './FlagChip.vue'
+import JiraBulkStatus from './JiraBulkStatus.vue'
 
 /**
  * PRs and Jira issues a release ships. Synced PRs render as rows (they open the PR panel); others link to GitHub.
@@ -32,6 +33,10 @@ const flags = computed(() => {
   const own = deck.byId.get(props.contents.prId)?.flags ?? []
   return [...new Set([...own, ...props.contents.items.flatMap((i) => deck.byId.get(i.id)?.flags ?? [])])]
 })
+/** "owner/repo" of a PR id ("owner/repo#12") or tag id ("owner/repo@v1.2") */
+const repoOf = (id: string) => id.toLowerCase().replace(/[#@][^/]*$/, '')
+/** Items from the release's own repo show just "#12" */
+const sameRepo = (id: string) => repoOf(id) === repoOf(props.contents.prId)
 const indent = computed(() => ({ paddingLeft: `${props.depth * 20}px` }))
 </script>
 
@@ -40,6 +45,9 @@ const indent = computed(() => ({ paddingLeft: `${props.depth * 20}px` }))
     <div v-if="!depth && contents.jiraKeys.length" class="flex flex-wrap items-center gap-1.5 px-2.5 pt-1">
       <span class="text-xs text-muted-foreground">Jira</span>
       <JiraPill v-for="k in contents.jiraKeys" :key="k" :issue-key="k" />
+      <span v-if="deck.overview?.configured.jira && contents.jiraKeys.length > 1" class="ml-auto">
+        <JiraBulkStatus :keys="contents.jiraKeys" context="The Jira issues this release ships." />
+      </span>
     </div>
     <div v-if="!depth && flags.length" class="flex flex-wrap items-center gap-1.5 px-2.5">
       <span class="text-xs text-muted-foreground">Flags</span>
@@ -47,8 +55,9 @@ const indent = computed(() => ({ paddingLeft: `${props.depth * 20}px` }))
     </div>
     <div>
       <div v-for="{ item, pr, nested } in rows" :key="item.id">
-        <div class="flex min-w-0 items-center py-1" :style="indent">
-          <PhArrowElbowDownRight :size="14" class="ml-2.5 text-muted-foreground/70" />
+        <!-- Untracked PRs are one dense line each; tracked ones keep the PrRow spacing -->
+        <div :class="['flex min-w-0 items-center', pr && 'py-1']" :style="indent">
+          <PhArrowElbowDownRight :size="13" class="ml-2.5 shrink-0 text-muted-foreground/70" />
           <button
             v-if="nested"
             type="button"
@@ -59,19 +68,19 @@ const indent = computed(() => ({ paddingLeft: `${props.depth * 20}px` }))
           >
             <PhCaretDown v-if="open[item.id]" :size="12" /><PhCaretRight v-else :size="12" />
           </button>
-          <PrRow v-if="pr" :pr="pr" compact class="min-w-0 flex-1">
+          <PrRow v-if="pr" :pr="pr" compact :short-repo="sameRepo(item.id)" class="min-w-0 flex-1">
             <template v-if="nested" #badges>
               <Badge variant="merged" title="This PR is a release itself">release · {{ nested.items.length }}</Badge>
             </template>
           </PrRow>
-          <a v-else :href="item.url" target="_blank" rel="noopener" :title="`Not tracked in Dispatch · ${externalHint(item.url)}`" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-accent">
-            <PhGitMerge :size="14" class="text-merged" />
-            <RepoName :id="item.id" class="max-w-[40%] font-mono text-xs" />
+          <a v-else :href="item.url" target="_blank" rel="noopener" :title="`Not tracked in Dispatch · ${externalHint(item.url)}`" class="group flex min-w-0 flex-1 items-center gap-2 rounded-md px-2.5 py-0.5 text-[13px] leading-5 transition-colors hover:bg-accent">
+            <PhGitMerge :size="13" class="shrink-0 text-merged" />
+            <RepoName :id="item.id" :short="sameRepo(item.id)" class="max-w-[40%] shrink-0 font-mono text-[11px]" />
             <span class="min-w-0 flex-1 truncate">{{ item.title }}</span>
-            <span class="shrink-0 text-xs text-muted-foreground">{{ item.author }}<template v-if="item.mergedAt"> · {{ timeAgo(item.mergedAt) }}</template></span>
+            <span class="shrink-0 text-[11px] text-muted-foreground">{{ item.author }}<template v-if="item.mergedAt"> · {{ timeAgo(item.mergedAt) }}</template></span>
             <Badge v-if="item.via !== 'commit'" variant="muted" class="shrink-0" :title="VIA_LABEL[item.via]">{{ item.via }}</Badge>
             <Badge v-if="nested" variant="merged" class="shrink-0" title="This PR is a release itself">release · {{ nested.items.length }}</Badge>
-            <PhArrowSquareOut :size="13" class="text-muted-foreground" />
+            <PhArrowSquareOut :size="12" class="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </a>
         </div>
         <ReleaseItems v-if="nested && open[item.id]" :contents="nested" :depth="depth + 1" :seen="path" />

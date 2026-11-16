@@ -30,7 +30,7 @@ import ItemContextMenu from './ItemContextMenu.vue'
 import { usePrMenu } from '@/composables/itemMenus'
 
 /** preview: hover preview (off for rows inside side panels) */
-const props = withDefaults(defineProps<{ pr: PrView; compact?: boolean; preview?: boolean; class?: HTMLAttributes['class']; /** Flags to show instead of the PR's own (e.g. a release's roll-up) */ flags?: string[]; /** Parts to leave out (PR_PROPERTIES keys) */ hide?: string[] }>(), { preview: true })
+const props = withDefaults(defineProps<{ pr: PrView; compact?: boolean; preview?: boolean; class?: HTMLAttributes['class']; /** Flags to show instead of the PR's own (e.g. a release's roll-up) */ flags?: string[]; /** Parts to leave out (PR_PROPERTIES keys) */ hide?: string[]; /** Show only "#123" for the repo (it's clear from context) */ shortRepo?: boolean }>(), { preview: true })
 const deck = useDeck()
 const check = computed(() => CHECK_STYLE[props.pr.checks.state])
 const show = (part: string) => !props.hide?.includes(part)
@@ -72,7 +72,7 @@ const openDeps = computed(() => props.pr.dependsOn.filter((d) => !d.satisfied).l
       </div>
       <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <ExternalLink v-if="show('repo')" :href="pr.url" :label="`${pr.repo}#${pr.number}`" class="font-mono text-foreground/80">
-          <RepoName :repo="pr.repo" :suffix="`#${pr.number}`" no-title />
+          <RepoName :repo="pr.repo" :suffix="`#${pr.number}`" no-title :short="shortRepo" />
         </ExternalLink>
         <span v-if="!compact && show('author')">{{ pr.author.login }}</span>
         <span v-if="!compact && show('updated')">updated {{ timeAgo(pr.updatedAt) }}</span>
