@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { CheckState, GithubAccount, PrRecord, PrDetail } from '../../shared/types.ts'
+import type { CheckState, GithubAccount, LinkedPr, PrRecord, PrDetail } from '../../shared/types.ts'
 import { prId } from './refs.ts'
 
 const API = 'https://api.github.com'
@@ -610,4 +610,39 @@ export async function tagContents(
   const picked = cmp.commits.flatMap((c) => [...c.commit.message.matchAll(/\(cherry picked from commit ([0-9a-f]{7,40})\)/g)].map((m) => m[1]))
   for (const prs of (await prsForCommits(account, owner, name, picked)).values()) for (const p of prs) add(p, 'cherry-pick')
   return { items: [...found.values()], commitsScanned: cmp.commits.length, truncated: cmp.total_commits > cmp.commits.length }
+}
+
+/**
+ * PRs naming a Jira key, any author and age, in the given owners' repos (orgs or users). GitHub's
+ * search is fuzzy, so only PRs with the exact key in the title, branch or description are kept.
+ */
+export async function searchPrsMentioning(account: GithubAccount, key: string, owners: string[], max = 30): Promise<LinkedPr[]> {
+  const scope = owners.map((o) => ` user:${o}`).join('')
+  const data: any = await graphql(
+    account.token,
+    `query($q: String!, $n: Int!) {
+       search(query: $q, type: ISSUE, first: $n) {
+         nodes { ... on PullRequest { number title url state updatedAt headRefName body author { login } repository { nameWithOwner } } }
+       }
+     }`,
+    { q: `is:pr "${key}"${scope}`, n: max },
+  )
+  const exact = new RegExp(`(^|[^A-Za-z0-9])${key.replace(/[^A-Za-z0-9-]/g, '')}(?![0-9])`, 'i')
+  const out: LinkedPr[] = []
+  for (const n of data.search.nodes ?? []) {
+    if (!n?.number || !exact.test(`${n.title}\n${n.headRefName}\n${n.body ?? ''}`)) continue
+    const repo = n.repository.nameWithOwner
+    out.push({
+      id: prId(repo, n.number),
+      repo,
+      number: n.number,
+      title: n.title,
+      state: n.state === 'MERGED' ? 'MERGED' : n.state === 'CLOSED' ? 'CLOSED' : 'OPEN',
+      url: n.url,
+      author: n.author?.login ?? null,
+      updatedAt: n.updatedAt ?? null,
+      sources: ['github'],
+    })
+  }
+  return out
 }

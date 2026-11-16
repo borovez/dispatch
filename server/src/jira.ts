@@ -1,5 +1,6 @@
 import { adfToMarkdown, markdownToAdf, type AdfDoc } from '../../shared/adf.ts'
 import type {
+  LinkedPr,
   JiraConfig,
   JiraCreateMeta,
   JiraEditable,
@@ -634,4 +635,38 @@ export async function resolveFieldInput(
     }
   }
   return { values, problems }
+}
+
+/**
+ * The PRs on an issue's development panel (Jira's "linked pull requests", from its GitHub app). Uses
+ * Jira's internal dev-status API (what Jira's own UI calls; not in the public REST docs): the summary
+ * names the integrations that have PRs, then each one's detail lists them. GitHub PRs only.
+ */
+export async function devPullRequests(cfg: JiraConfig, key: string): Promise<LinkedPr[]> {
+  const { id } = await request<{ id: string }>(cfg, `/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary`)
+  const summary = await request<any>(cfg, `/rest/dev-status/latest/issue/summary?issueId=${id}`)
+  const types = Object.keys(summary?.summary?.pullrequest?.byInstanceType ?? {})
+  const out: LinkedPr[] = []
+  for (const type of types) {
+    const d = await request<any>(cfg, `/rest/dev-status/latest/issue/detail?issueId=${id}&applicationType=${encodeURIComponent(type)}&dataType=pullrequest`)
+    for (const det of d?.detail ?? [])
+      for (const pr of det?.pullRequests ?? []) {
+        const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(pr.url ?? '')
+        if (!m) continue
+        const number = Number(m[2])
+        const status = String(pr.status ?? '').toUpperCase()
+        out.push({
+          id: `${m[1].toLowerCase()}#${number}`,
+          repo: m[1],
+          number,
+          title: pr.name ?? `#${number}`,
+          state: status === 'MERGED' ? 'MERGED' : status === 'OPEN' ? 'OPEN' : 'CLOSED',
+          url: pr.url,
+          author: pr.author?.name ?? null,
+          updatedAt: pr.lastUpdate ?? null,
+          sources: ['jira'],
+        })
+      }
+  }
+  return out
 }

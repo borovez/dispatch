@@ -617,6 +617,30 @@ export interface JiraWriteInput {
 
 // ---------- Settings ----------
 
+/**
+ * A PR that names a Jira issue, found outside Dispatch's synced PRs: a GitHub search for the key
+ * (any author, any age) and Jira's own development panel (what its "linked pull requests" show).
+ */
+export interface LinkedPr {
+  id: PrId
+  repo: string
+  number: number
+  title: string
+  state: 'OPEN' | 'MERGED' | 'CLOSED'
+  url: string
+  author: string | null
+  updatedAt: string | null
+  /** Where it was found */
+  sources: ('github' | 'jira')[]
+}
+
+export interface LinkedPrs {
+  prs: LinkedPr[]
+  /** Per source, e.g. a missing token or a Jira without the GitHub app */
+  errors: string[]
+  fetchedAt: string
+}
+
 export interface GithubAccount {
   id: string
   label: string

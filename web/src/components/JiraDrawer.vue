@@ -3,7 +3,8 @@ import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
 import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhArrowsClockwise, PhSquareSplitHorizontal, PhRobot } from '@phosphor-icons/vue'
-import type { JiraIssueDetail } from '@shared/types'
+import type { JiraIssueDetail, LinkedPrs } from '@shared/types'
+import LinkedPrRow from './LinkedPrRow.vue'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useArrowNav } from '@/composables/prNav'
@@ -62,13 +63,41 @@ async function loadDetail(k: string | null, force = false) {
 }
 watch(key, (k) => loadDetail(k), { immediate: true })
 
+/**
+ * PRs naming the issue that Dispatch doesn't list from its own sync (older merged PRs, other people's,
+ * untracked repos): GitHub search and Jira's development panel, once per issue for this page session.
+ * Ones Dispatch has show as PR rows, the rest as links to GitHub.
+ */
+const linkedCache = new Map<string, Promise<LinkedPrs>>()
+const linked = ref<LinkedPrs | null>(null)
+const linkedLoading = ref(false)
+async function loadLinked(k: string | null, force = false) {
+  if (!force) linked.value = null
+  if (!k) return
+  if (force || !linkedCache.has(k)) linkedCache.set(k, api.jiraLinkedPrs(k, force))
+  linkedLoading.value = true
+  try {
+    const v = await linkedCache.get(k)!
+    if (key.value === k) linked.value = v
+  } catch (e) {
+    linkedCache.delete(k)
+    if (key.value === k) linked.value = { prs: [], errors: [(e as Error).message], fetchedAt: '' }
+  }
+  if (key.value === k) linkedLoading.value = false
+}
+watch(key, (k) => loadLinked(k), { immediate: true })
+const shownIds = computed(() => new Set(prs.value.map((p) => p.id)))
+/** Found PRs not already listed: synced ones as rows, others as links */
+const extraSynced = computed(() => (linked.value?.prs ?? []).filter((p) => !shownIds.value.has(p.id)).flatMap((p) => deck.byId.get(p.id) ?? []))
+const extraLinks = computed(() => (linked.value?.prs ?? []).filter((p) => !shownIds.value.has(p.id) && !deck.byId.has(p.id)))
+
 /** Reload: the issue's fields (into the cache, so it shows even when the sync didn't fetch it) and its description and comments */
 const reloading = ref(false)
 async function reload() {
   const k = key.value
   if (!k || reloading.value) return
   reloading.value = true
-  await Promise.all([deck.mutate(() => api.jiraRefresh(k)), loadDetail(k, true)])
+  await Promise.all([deck.mutate(() => api.jiraRefresh(k)), loadDetail(k, true), loadLinked(k, true)])
   reloading.value = false
 }
 
@@ -153,8 +182,15 @@ const details = computed(() => {
               <PhGraph /> Show dependencies
             </Button>
           </div>
-          <div v-if="prs.length" class="-mx-3"><PrRow v-for="p in prs" :key="p.id" :pr="p" compact :preview="false" /></div>
-          <p v-else class="text-sm text-muted-foreground">No linked pull requests</p>
+          <div v-if="prs.length || extraSynced.length" class="-mx-3">
+            <PrRow v-for="p in [...prs, ...extraSynced]" :key="p.id" :pr="p" compact :preview="false" />
+          </div>
+          <div v-if="extraLinks.length" class="-mx-3"><LinkedPrRow v-for="p in extraLinks" :key="p.id" :pr="p" /></div>
+          <p v-if="linkedLoading && !linked" class="text-xs text-muted-foreground">Looking on GitHub and in Jira…</p>
+          <p v-else-if="!prs.length && !extraSynced.length && !extraLinks.length" class="text-sm text-muted-foreground">No linked pull requests</p>
+          <p v-if="linked?.errors.length" class="mt-1 text-xs text-muted-foreground" :title="linked.errors.join('\n')">
+            Couldn't check {{ linked.errors.length === 1 ? 'one source' : `${linked.errors.length} sources` }} for more PRs (hover for details).
+          </p>
         </section>
 
         <section v-if="flags.length">
