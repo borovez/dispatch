@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { chmodSync, existsSync, mkdirSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type {
+import type { LinkedPr,
   DependencyKind,
   JiraIssue,
   PrId,
@@ -85,6 +85,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS backmerges (pr_id TEXT PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS feature_flags (key TEXT PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS tag_contents (id TEXT PRIMARY KEY, repo TEXT NOT NULL, data TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS linked_prs (key TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL);
 `)
 
 // ---------- kv ----------
@@ -252,6 +253,23 @@ export function setPrBody(id: PrId, body: string) {
 
 export function setRelease(id: PrId, release: ReleaseInfo) {
   db.prepare('UPDATE prs SET release = ? WHERE id = ?').run(JSON.stringify(release), id)
+}
+
+// ---------- PRs naming a Jira issue, found beyond the synced ones (linkedPrs.ts) ----------
+export function listLinkedPrs(): { key: string; prs: LinkedPr[]; fetchedAt: string }[] {
+  return (db.prepare('SELECT key, data, fetched_at FROM linked_prs').all() as { key: string; data: string; fetched_at: string }[]).map((r) => ({
+    key: r.key,
+    prs: JSON.parse(r.data),
+    fetchedAt: r.fetched_at,
+  }))
+}
+export function setLinkedPrs(key: string, prs: LinkedPr[], fetchedAt: string) {
+  db.prepare('INSERT INTO linked_prs (key, data, fetched_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at').run(key, JSON.stringify(prs), fetchedAt)
+}
+/** Drop issues no longer in the Jira cache */
+export function pruneLinkedPrs(keep: Set<string>) {
+  const del = db.prepare('DELETE FROM linked_prs WHERE key = ?')
+  for (const { key } of db.prepare('SELECT key FROM linked_prs').all() as { key: string }[]) if (!keep.has(key)) del.run(key)
 }
 
 // ---------- release contents / hotfix backmerges ----------

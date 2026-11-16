@@ -20,6 +20,7 @@ import {
   upsertPr,
 } from './db.ts'
 import { syncReleaseFlow, syncTags } from './releases.ts'
+import { syncLinkedPrs } from './linkedPrs.ts'
 import { integrationBranches, releaseBranches, releaseRefFor } from './flow.ts'
 import { fetchPrsByNodeId, fetchPrsByRef, isCommitIn, resolveReleaseRef, searchPrHits, whoAmI, type PrHit } from './github.ts'
 import { fetchIssuesByKey, searchJql } from './jira.ts'
@@ -44,6 +45,7 @@ const STEPS: [id: string, label: string][] = [
   ['releases', 'Release contents and tags'],
   ['flags', 'LaunchDarkly flags'],
   ['jira', 'Jira issues'],
+  ['linked', 'Linked PRs of Jira issues'],
   ['slack', 'Slack inbox'],
 ]
 
@@ -363,6 +365,10 @@ async function doSync(): Promise<SyncState> {
         errors.push(`[jira] ${(e as Error).message}`)
       }
     }, () => `${jiraCount} issues`)
+
+    // 5b. PRs naming those issues beyond the synced ones (a few issues per sync)
+    if (!jira?.apiToken && !accounts.length) p.skip('linked', 'Nothing connected')
+    else await p.run('linked', errors, (errors) => syncLinkedPrs(errors), (n) => (n ? `${n} issues checked` : 'Up to date'))
 
   })()
   await Promise.all([releaseSteps, flagSteps, jiraStep, slackStep])

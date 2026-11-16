@@ -3,7 +3,7 @@ import ExternalLink from '@/components/ExternalLink.vue'
 import { modClickHint, openInAppOr } from '@/lib/external'
 import { computed, ref } from 'vue'
 import { useRowArming } from '@/composables/arming'
-import type { JiraIssueView, PrView } from '@shared/types'
+import type { LinkedPr, JiraIssueView, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
@@ -12,11 +12,13 @@ import PrListPopover from './PrListPopover.vue'
 import ItemContextMenu from './ItemContextMenu.vue'
 import { useJiraMenu } from '@/composables/itemMenus'
 import PrRow from './PrRow.vue'
+import LinkedPrRow from './LinkedPrRow.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { PhRobot } from '@phosphor-icons/vue'
 
-const props = defineProps<{ issueKey: string; issue: JiraIssueView | null; prs: PrView[]; dense?: boolean }>()
+/** links: PRs naming the issue that Dispatch doesn't sync (GitHub search, Jira's development panel) */
+const props = defineProps<{ issueKey: string; issue: JiraIssueView | null; prs: PrView[]; links?: LinkedPr[]; dense?: boolean }>()
 /** Opens the Jira panel, unless the click was on a linked PR, a link or a button (they do their own thing) */
 function select(e: MouseEvent) {
   if ((e.target as HTMLElement).closest('a, button, [data-pr-id], [role="menu"]')) return
@@ -76,6 +78,7 @@ const initials = (name: string) =>
           <span v-if="issue?.fixVersions.length">{{ issue.fixVersions.join(', ') }}</span>
           <span v-if="issue">updated {{ timeAgo(issue.updated) }}</span>
           <PrListPopover v-if="dense && prs.length" compact :ids="prs.map((p) => p.id)" :placeholder="`Go to a PR for ${issueKey}…`" />
+          <span v-if="dense && links?.length" :title="links.map((l) => `${l.repo}#${l.number}: ${l.title}`).join('\n')">+{{ links.length }} on GitHub</span>
           <span v-if="prSummary">{{ prSummary }}</span>
         </div>
       </div>
@@ -92,8 +95,9 @@ const initials = (name: string) =>
       <div v-if="issue" class="w-full pl-6 sm:w-auto sm:pl-0"><JiraTransition :issue-key="issueKey" /></div>
     </div>
 
-    <div v-if="prs.length && !dense" class="mt-1 ml-1.5 border-l pl-2">
+    <div v-if="(prs.length || links?.length) && !dense" class="mt-1 ml-1.5 border-l pl-2">
       <PrRow v-for="p in prs" :key="p.id" :pr="p" compact />
+      <LinkedPrRow v-for="l in links" :key="l.id" :pr="l" />
     </div>
     <div v-else-if="!dense" class="mt-1 ml-6 text-xs text-muted-foreground">No linked pull requests</div>
   </div>

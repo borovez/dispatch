@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useDeck } from '@/stores/deck'
 
 /**
- * "owner/name" with the name kept visible: the owner (grey) gives way first, with its ellipsis on the
+ * "owner/name" with the name kept visible: the owner (grey) is capped at 14 characters and gives way first, with its ellipsis on the
  * left ("…Systems-Inc/portal"). Plain text otherwise (no slash).
  */
 /** Either `repo` ("owner/name", optional `suffix` kept with the name, e.g. "#123") or a PR `id` ("owner/name#123") */
@@ -29,7 +29,7 @@ const parts = computed(() => {
     <!-- rtl moves the ellipsis to the left; bdi keeps "owner/" in its normal order -->
     <span v-if="short && full.suffix" class="shrink-0">{{ full.suffix }}</span>
     <template v-else>
-    <span v-if="parts.owner" class="min-w-0 truncate text-muted-foreground [direction:rtl]"><bdi>{{ parts.owner }}</bdi></span>
+    <span v-if="parts.owner" class="max-w-[14ch] min-w-0 truncate text-muted-foreground [direction:rtl]"><bdi>{{ parts.owner }}</bdi></span>
     <!-- Never shrinks (flex shrinks proportionally, so a shrinkable name lost a few pixels to an ellipsis);
          only truncates when the name alone is wider than the space -->
     <span class="max-w-full shrink-0 truncate">{{ parts.name }}{{ full.suffix }}</span>

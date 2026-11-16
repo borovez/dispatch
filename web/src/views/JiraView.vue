@@ -3,7 +3,7 @@ import JiraBulkStatus from '@/components/JiraBulkStatus.vue'
 import StickyToolbar from '@/components/StickyToolbar.vue'
 import { computed } from 'vue'
 import { PhListChecks, PhCircleHalf, PhKanban, PhMagnifyingGlass, PhNotePencil } from '@phosphor-icons/vue'
-import type { JiraIssueView, PrView } from '@shared/types'
+import type { LinkedPr, JiraIssueView, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useLayout, type SortDir } from '@/stores/layout'
 import { priorityRank, statusRank } from '@/utils/jiraOrder'
@@ -26,6 +26,8 @@ interface Item {
   project: string
   issue: JiraIssueView | null
   prs: PrView[]
+  /** PRs naming it that Dispatch doesn't sync (Overview linkedPrs): links to GitHub */
+  links: LinkedPr[]
   mine: boolean
   done: boolean
   updated: string
@@ -35,8 +37,8 @@ type Scope = 'all' | 'mine' | 'linked' | 'unlinked'
 const SCOPES: { value: Scope; label: string; match: (i: Item) => boolean }[] = [
   { value: 'all', label: 'All', match: () => true },
   { value: 'mine', label: 'Mine', match: (i) => i.mine },
-  { value: 'linked', label: 'With PRs', match: (i) => i.prs.length > 0 },
-  { value: 'unlinked', label: 'No PRs', match: (i) => i.prs.length === 0 },
+  { value: 'linked', label: 'With PRs', match: (i) => i.prs.length + i.links.length > 0 },
+  { value: 'unlinked', label: 'No PRs', match: (i) => i.prs.length + i.links.length === 0 },
 ]
 const CATEGORIES = [
   { value: 'new', label: 'To do' },
@@ -94,14 +96,20 @@ const items = computed<Item[]>(() => {
   const keys = new Map<string, PrView[]>()
   for (const p of deck.prs) for (const k of p.jiraKeys) keys.set(k, [...(keys.get(k) ?? []), p])
   for (const j of deck.overview?.jira ?? []) if (!j.parentOnly && !keys.has(j.key)) keys.set(j.key, [])
-  return [...keys].map(([key, prs]) => {
+  const linked = deck.overview?.linkedPrs ?? {}
+  return [...keys].map(([key, synced]) => {
     const issue = deck.jiraByKey.get(key) ?? null
+    // Found by GitHub search / Jira: synced ones join the PR rows, the rest are links
+    const found = (linked[key] ?? []).filter((l) => !synced.some((p) => p.id === l.id))
+    const prs = [...synced, ...found.flatMap((l) => deck.byId.get(l.id) ?? [])]
+    const links = found.filter((l) => !deck.byId.has(l.id))
     const updated = [issue?.updated ?? '', ...prs.map((p) => p.updatedAt)].sort().at(-1)!
     return {
       key,
       project: key.split('-')[0],
       issue,
       prs,
+      links,
       mine: !!issue?.isMine || prs.some((p) => p.isMine),
       done: issue ? issue.statusCategory === 'done' : prs.every((p) => p.state !== 'OPEN'),
       updated,
@@ -119,7 +127,7 @@ const base = computed(() => {
       (!v.project || i.project === v.project) &&
       (!v.category || i.issue?.statusCategory === v.category) &&
       (!q ||
-        [i.key, i.issue?.summary, i.issue?.assignee?.displayName, i.issue?.status, ...i.prs.map((p) => `${p.id} ${p.title}`)]
+        [i.key, i.issue?.summary, i.issue?.assignee?.displayName, i.issue?.status, ...i.prs.map((p) => `${p.id} ${p.title}`), ...i.links.map((l) => `${l.id} ${l.title}`)]
           .join(' ')
           .toLowerCase()
           .includes(q)),
@@ -227,7 +235,7 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
             <span class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-full" :class="DOT[g.category] ?? 'bg-muted-foreground'" />{{ g.label }}</span>
           </template>
           <div>
-            <JiraRow v-for="i in g.items" :key="i.key" :issue-key="i.key" :issue="i.issue" :prs="i.prs" :dense="layout.prefs.dense" />
+            <JiraRow v-for="i in g.items" :key="i.key" :issue-key="i.key" :issue="i.issue" :prs="i.prs" :links="i.links" :dense="layout.prefs.dense" />
           </div>
         </GroupCard>
         <div v-if="!filtered.length" class="py-16 text-center text-muted-foreground">No Jira issues match.</div>

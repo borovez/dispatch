@@ -310,6 +310,8 @@ export interface Overview {
   /** Latest tags of tag-based repos, newest first, with what each shipped */
   tags: TagRelease[]
   jira: JiraIssueView[]
+  /** Per Jira key: PRs naming it found beyond the synced ones (GitHub search, Jira's development panel); keys with none are left out */
+  linkedPrs: Record<string, LinkedPr[]>
   slack: SlackItem[]
   stats: Record<Bucket, number> & {
     reviewRequests: number

@@ -7,7 +7,7 @@ import { adfToMarkdown } from '../../shared/adf.ts'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
-import type { AiProvider, GithubAccount, LinkedPr, LinkedPrs, PrRecord, JiraFieldKind, JiraFieldOption, Settings } from '../../shared/types.ts'
+import type { AiProvider, GithubAccount, LinkedPrs, PrRecord, JiraFieldKind, JiraFieldOption, Settings } from '../../shared/types.ts'
 import {
   listPrs,
   addManualDep,
@@ -40,7 +40,7 @@ import { startUpdate, updateStatus, VERSION } from './updates.ts'
 import { claudeMdGuide } from './guides.ts'
 import { claudeBin } from './claudeCode.ts'
 import { messagesAround, threadReplies, postMessage, replyInThread, userProfile, slackAuthTest, threadContext } from './slack.ts'
-import { fetchPrsByNodeId, fetchPrsByRef, getPrText, ghCliToken, listRepos, prCommits, prDetail, prFileNames, prTemplate, searchPrsMentioning, updatePrText, whoAmI } from './github.ts'
+import { fetchPrsByNodeId, fetchPrsByRef, getPrText, ghCliToken, listRepos, prCommits, prDetail, prFileNames, prTemplate, updatePrText, whoAmI } from './github.ts'
 import {
   addAttachments,
   addComment,
@@ -59,8 +59,8 @@ import {
   projectIssueTypes,
   transition,
   fetchIssuesByKey,
-  devPullRequests,
 } from './jira.ts'
+import { findLinkedPrs } from './linkedPrs.ts'
 import { buildOverview } from './model.ts'
 import { extractJiraKeys, normaliseRef, parseBodyDependencies, parsePrId } from './refs.ts'
 import { accountForOwner, runSync } from './sync.ts'
@@ -445,38 +445,11 @@ api.get('/jira/:key/linked-prs', async (c) => {
   if (!/^[A-Z][A-Z0-9_]*-\d+$/.test(key)) throw bad('Not a Jira key')
   const hit = linkedCache.get(key)
   if (hit && !c.req.query('refresh') && Date.now() - hit.at < 10 * 60_000) return c.json(await hit.value)
-  const value = linkedPrs(key)
+  const value = findLinkedPrs(key)
   linkedCache.set(key, { at: Date.now(), value })
   value.catch(() => linkedCache.delete(key))
   return c.json(await value)
 })
-
-/** GitHub search per account (its orgs, else the owners of tracked repos) and Jira's development panel, merged by PR */
-async function linkedPrs(key: string): Promise<LinkedPrs> {
-  const s = getSettings()
-  const errors: string[] = []
-  const tasks: Promise<LinkedPr[]>[] = []
-  for (const acc of s.github?.accounts ?? []) {
-    if (!acc.token) continue
-    const owners = acc.orgs.length
-      ? acc.orgs
-      : [...new Set([...(acc.login ? [acc.login] : []), ...s.trackedRepos.filter((r) => accountForOwner(s.github!.accounts, r.split('/')[0])?.id === acc.id).map((r) => r.split('/')[0])])]
-    if (!owners.length) continue
-    tasks.push(searchPrsMentioning(acc, key, owners).catch((e) => (errors.push(`GitHub (${acc.label}): ${(e as Error).message}`), [])))
-  }
-  if (s.jira?.apiToken)
-    tasks.push(devPullRequests(s.jira, key).catch((e) => (errors.push(`Jira development panel: ${(e as Error).message}`), [])))
-  const byId = new Map<string, LinkedPr>()
-  for (const list of await Promise.all(tasks))
-    for (const pr of list) {
-      const prev = byId.get(pr.id)
-      // GitHub's copy wins (live state, exact title); sources add up
-      byId.set(pr.id, prev ? { ...(prev.sources.includes('github') ? prev : pr), sources: [...new Set([...prev.sources, ...pr.sources])] } : pr)
-    }
-  const rank = { OPEN: 0, MERGED: 1, CLOSED: 2 }
-  const prs = [...byId.values()].sort((a, b) => rank[a.state] - rank[b.state] || (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
-  return { prs, errors, fetchedAt: new Date().toISOString() }
-}
 
 // ---------- Jira transitions ----------
 api.get('/jira/:key/transitions', async (c) => {
