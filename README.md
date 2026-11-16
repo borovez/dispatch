@@ -49,9 +49,59 @@ nothing is hosted.
 
 ## Getting started
 
+### With an AI agent
+
+Paste this into [Claude Code](https://claude.com/claude-code) (or any coding agent that can run
+commands) in the folder where you keep your projects. It installs Dispatch, runs it, and walks you
+through connecting GitHub, Jira, Slack and the rest. Tokens never go into the chat: the agent tells
+you where to create them and you paste them into Dispatch's Settings page.
+
+````text
+Install, run and set up Dispatch (https://github.com/borovez/dispatch), a local dashboard for my
+pull requests, Jira issues and Slack inbox. Work step by step and check each step worked.
+
+Rules:
+- Never ask me to paste a token, password or API key into this chat, and never read one from my
+  browser, keychain or files. I paste tokens into Dispatch's Settings page myself.
+- Ask before installing anything system-wide (Homebrew packages, nvm, Node).
+
+1. Install
+   - macOS only. Needs Node.js 24 (`node -v`). If it's missing or older, suggest nvm
+     (`nvm install 24`); the repo's `.nvmrc` pins the version.
+   - If it isn't cloned yet: `git clone https://github.com/borovez/dispatch.git && cd dispatch`
+     (if it is, `cd` into it and `git pull`). Then `npm install`.
+
+2. Run
+   - `npm run app:install` builds it and runs the server in the background at login (a macOS
+     LaunchAgent on port 4317; log in ~/Library/Logs/Dispatch.log). Check it with
+     `curl -s http://127.0.0.1:4317/api/health`, then open http://127.0.0.1:4317 for me.
+   - If I'd rather hack on it: `npm run dev` instead (API on 4317, web app on http://localhost:5317).
+
+3. Connect Claude Code to it (MCP), so you can change settings for me
+   - Get the paths from `curl -s http://127.0.0.1:4317/api/setup/mcp` (`node`, `entry`, and the
+     `tsxCandidates` path that exists) and run
+     `claude mcp add dispatch --scope user -- <node> <tsx> <entry>` (Settings → MCP shows the same). After I restart
+     Claude Code, its tools include setup_status, update_settings and connect_github_gh_cli.
+
+4. Set it up
+   - Fetch the setup brief: `curl -s 'http://127.0.0.1:4317/api/setup/prompt?text=1'`, and follow it.
+     It lists what's connected and what's missing, where each token comes from and which scopes it
+     needs (GitHub via the gh CLI login or a token, Jira, Slack with an app manifest, LaunchDarkly,
+     Claude drafting). Fetch it again after each step to see progress.
+   - Change non-secret settings yourself (tracked repos, org limits, Jira projects and JQL, Slack
+     reactions, sync): the update_settings MCP tool, or
+     `curl -s -X PATCH http://127.0.0.1:4317/api/settings -H 'Content-Type: application/json' -d '{...}'`.
+
+5. Finish
+   - Press Sync (or `curl -s -X POST http://127.0.0.1:4317/api/sync`), check it ends without errors,
+     and tell me what's set up and what I skipped.
+````
+
+### By hand
+
 ```bash
 git clone https://github.com/borovez/dispatch.git
-cd prdeck
+cd dispatch
 npm install
 npm run dev
 ```
@@ -64,7 +114,7 @@ Open <http://localhost:5317> and go to **Settings**:
    [API token](https://id.atlassian.com/manage-profile/security/api-tokens).
 3. **Slack** (optional): create a Slack app, add these **User Token Scopes**, install it to your
    workspace and paste the `xoxp-…` user token:
-   `search:read, im:history, mpim:history, im:read, mpim:read, channels:history, groups:history, users:read, channels:read, groups:read, stars:read, reactions:read, reactions:write, chat:write`
+   `search:read, im:history, mpim:history, im:read, mpim:read, channels:history, groups:history, users:read, users:read.email, channels:read, groups:read, stars:read, reactions:read, reactions:write, chat:write`
 4. **LaunchDarkly** (optional, read only): an access token with the Reader role
    ([Organization settings → Authorization](https://app.launchdarkly.com/settings/authorization)),
    the project key and the environments to show.
