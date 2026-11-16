@@ -48,13 +48,13 @@ useEventListener(window, 'mousedown', (e: MouseEvent) => canGo(e) && e.preventDe
 </script>
 
 <template>
-  <div v-if="back || forward" class="flex items-center">
+  <div class="flex items-center">
     <Tooltip>
       <TooltipTrigger as-child>
         <Button variant="ghost" size="icon-sm" aria-label="Back" :disabled="!back" @click="deck.panelGo(-1)"><PhArrowLeft /></Button>
       </TooltipTrigger>
       <TooltipContent class="max-w-80">
-        <span class="line-clamp-2">Back to {{ describe(back) }}</span>
+        <span class="line-clamp-2">{{ back ? `Back to ${describe(back)}` : 'Back' }}</span>
         <span class="opacity-70">Alt+←</span>
       </TooltipContent>
     </Tooltip>
@@ -63,7 +63,7 @@ useEventListener(window, 'mousedown', (e: MouseEvent) => canGo(e) && e.preventDe
         <Button variant="ghost" size="icon-sm" aria-label="Forward" :disabled="!forward" @click="deck.panelGo(1)"><PhArrowRight /></Button>
       </TooltipTrigger>
       <TooltipContent class="max-w-80">
-        <span class="line-clamp-2">Forward to {{ describe(forward) }}</span>
+        <span class="line-clamp-2">{{ forward ? `Forward to ${describe(forward)}` : 'Forward' }}</span>
         <span class="opacity-70">Alt+→</span>
       </TooltipContent>
     </Tooltip>

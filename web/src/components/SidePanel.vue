@@ -121,12 +121,12 @@ function startFooterResize(ev: PointerEvent) {
         @mousedown="startResize"
         @dblclick="toggleWidth"
       />
-      <!-- Narrow screens: the buttons get their own row above the title -->
-      <header class="flex flex-wrap items-start gap-x-2 gap-y-1 border-b p-3 sm:flex-nowrap sm:p-4">
-        <div class="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto"><slot name="header" /></div>
-        <span class="flex-1 sm:hidden" />
+      <!-- Top bar: back / forward on the left, the panel's actions, keep open and close on the right -->
+      <div class="flex h-11 shrink-0 items-center gap-1 border-b bg-muted/30 px-2">
         <PanelHistoryNav />
+        <span class="flex-1" />
         <slot name="actions" />
+        <span v-if="$slots.actions" class="mx-1 h-4 w-px bg-border" aria-hidden="true" />
         <Tooltip>
           <TooltipTrigger as-child>
             <Button
@@ -141,8 +141,14 @@ function startFooterResize(ev: PointerEvent) {
           </TooltipTrigger>
           <TooltipContent>{{ layout.prefs.panelPinned ? 'Kept open: click to close on outside clicks again' : 'Keep open when clicking outside' }}</TooltipContent>
         </Tooltip>
-        <Button variant="ghost" size="icon-sm" aria-label="Close" @click="emit('close')"><PhX /></Button>
-      </header>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon-sm" aria-label="Close" @click="emit('close')"><PhX /></Button>
+          </TooltipTrigger>
+          <TooltipContent>Close <span class="opacity-70">Esc</span></TooltipContent>
+        </Tooltip>
+      </div>
+      <header v-if="$slots.header" class="shrink-0 border-b p-3 sm:p-4"><slot name="header" /></header>
       <slot />
       <footer
         v-if="$slots.footer"
