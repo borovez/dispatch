@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StickyToolbar from '@/components/StickyToolbar.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -157,26 +158,28 @@ async function refresh(id: string) {
   <!-- Width cap on the children, not the page, so the scrollbar sits at the far right -->
   <!-- The graph fills the window; the other tabs scroll the page (native scrollbar, like Settings) -->
   <div class="flex flex-col gap-4" :class="graph && 'h-page'">
-    <!-- @container: buttons go icon-only when this row is narrow -->
-    <div class="@container flex flex-wrap items-center gap-2">
-      <Tabs v-model="v.tab">
-        <TabsList>
-          <TabsTrigger value="releases" :count="openReleases.length">Releases</TabsTrigger>
-          <TabsTrigger value="hotfixes" :count="needsBackmerge.length + openHotfixes.length">Hotfixes</TabsTrigger>
-          <TabsTrigger value="trains" :count="trains.length">Trains</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <!-- One repo or all, for the list and the graph (the graph also shows what links to it) -->
-      <RepoSelect v-if="repoOptions.length > 1" :model-value="repoKey || 'all'" :tabs="repoOptions" @update:model-value="(r) => (repoState.repo = r === 'all' ? '' : r)" />
-      <span class="flex-1" />
-      <ExpandingSearch v-if="!graph" v-model="v.query" placeholder="Search PRs, branches, Jira keys…" />
-      <div id="releases-toolbar" class="flex items-center gap-2 empty:hidden" />
-      <!-- List or graph, for whichever tab is picked -->
-      <ToggleGroup :model-value="v.mode" type="single" variant="outline" size="sm" aria-label="List or graph" @update:model-value="(m) => m && (v.mode = m as 'list' | 'graph')">
-        <ToggleGroupItem value="list" aria-label="List" title="List"><PhListBullets /></ToggleGroupItem>
-        <ToggleGroupItem value="graph" aria-label="Graph" title="Graph"><PhGraph /></ToggleGroupItem>
-      </ToggleGroup>
-    </div>
+    <StickyToolbar>
+      <!-- @container: buttons go icon-only when this row is narrow -->
+      <div class="@container flex flex-wrap items-center gap-2">
+        <Tabs v-model="v.tab">
+          <TabsList>
+            <TabsTrigger value="releases" :count="openReleases.length">Releases</TabsTrigger>
+            <TabsTrigger value="hotfixes" :count="needsBackmerge.length + openHotfixes.length">Hotfixes</TabsTrigger>
+            <TabsTrigger value="trains" :count="trains.length">Trains</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <!-- One repo or all, for the list and the graph (the graph also shows what links to it) -->
+        <RepoSelect v-if="repoOptions.length > 1" :model-value="repoKey || 'all'" :tabs="repoOptions" @update:model-value="(r) => (repoState.repo = r === 'all' ? '' : r)" />
+        <span class="flex-1" />
+        <ExpandingSearch v-if="!graph" v-model="v.query" placeholder="Search PRs, branches, Jira keys…" />
+        <div id="releases-toolbar" class="flex items-center gap-2 empty:hidden" />
+        <!-- List or graph, for whichever tab is picked -->
+        <ToggleGroup :model-value="v.mode" type="single" variant="outline" size="sm" aria-label="List or graph" @update:model-value="(m) => m && (v.mode = m as 'list' | 'graph')">
+          <ToggleGroupItem value="list" aria-label="List" title="List"><PhListBullets /></ToggleGroupItem>
+          <ToggleGroupItem value="graph" aria-label="Graph" title="Graph"><PhGraph /></ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+    </StickyToolbar>
 
     <ReleaseGraph v-if="graph" :scope="v.tab" />
     <div v-else class="space-y-4">

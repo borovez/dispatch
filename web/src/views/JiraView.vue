@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StickyToolbar from '@/components/StickyToolbar.vue'
 import { computed } from 'vue'
 import { PhCircleHalf, PhKanban, PhMagnifyingGlass, PhNotePencil } from '@phosphor-icons/vue'
 import type { JiraIssueView, PrView } from '@shared/types'
@@ -181,23 +182,25 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
       </AlertAction>
     </Alert>
 
-    <!-- @container: buttons go icon-only when this row is narrow -->
-    <div class="@container flex flex-wrap items-center gap-2">
-      <div class="relative min-w-24 flex-1 sm:max-w-64">
-        <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
-        <Input v-model="v.query" type="search" placeholder="Search key, summary, assignee, PR…" class="h-8 pl-8" />
+    <StickyToolbar content-class="max-w-6xl">
+      <!-- @container: buttons go icon-only when this row is narrow -->
+      <div class="@container flex flex-wrap items-center gap-2">
+        <div class="relative min-w-24 flex-1 sm:max-w-64">
+          <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
+          <Input v-model="v.query" type="search" placeholder="Search key, summary, assignee, PR…" class="h-8 pl-8" />
+        </div>
+        <Tabs v-model="v.scope">
+          <TabsList>
+            <TabsTrigger v-for="s in SCOPES" :key="s.value" :value="s.value" :count="scopeCount(s)">{{ s.label }}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <FilterChips :chips="chips" />
+        <span class="flex-1" />
+        <CollapseAllButton v-if="groups.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
+        <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
+        <Button v-if="deck.overview?.configured.jira" size="sm" @click="deck.composer = { mode: 'create' }"><PhNotePencil /> <span class="@max-3xl:sr-only">New issue</span></Button>
       </div>
-      <Tabs v-model="v.scope">
-        <TabsList>
-          <TabsTrigger v-for="s in SCOPES" :key="s.value" :value="s.value" :count="scopeCount(s)">{{ s.label }}</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <FilterChips :chips="chips" />
-      <span class="flex-1" />
-      <CollapseAllButton v-if="groups.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
-      <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
-      <Button v-if="deck.overview?.configured.jira" size="sm" @click="deck.composer = { mode: 'create' }"><PhNotePencil /> <span class="@max-3xl:sr-only">New issue</span></Button>
-    </div>
+    </StickyToolbar>
 
     <!-- The page scrolls (native scrollbar at the window edge, like Settings) -->
     <div class="space-y-4">

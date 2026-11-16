@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StickyToolbar from '@/components/StickyToolbar.vue'
 import { computed } from 'vue'
 import { PhFunnel, PhMagnifyingGlass, PhSlackLogo } from '@phosphor-icons/vue'
 import type { SlackItem, SlackKind, SlackStatus } from '@shared/types'
@@ -61,21 +62,23 @@ const chips = computed(() =>
         <Button size="sm" as-child><RouterLink to="/settings">Connect Slack</RouterLink></Button>
       </AlertAction>
     </Alert>
-    <!-- @container: buttons go icon-only when this row is narrow -->
-    <div class="@container flex flex-wrap items-center gap-2">
-      <Tabs v-model="v.status">
-        <TabsList>
-          <TabsTrigger v-for="t in STATUS_TABS" :key="t.value" :value="t.value" :count="count(t.value)">{{ t.label }}</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <div class="relative min-w-24 flex-1 sm:max-w-64">
-        <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
-        <Input v-model="v.query" type="search" placeholder="Search messages, people, channels…" class="h-8 pl-8" />
+    <StickyToolbar content-class="max-w-6xl">
+      <!-- @container: buttons go icon-only when this row is narrow -->
+      <div class="@container flex flex-wrap items-center gap-2">
+        <Tabs v-model="v.status">
+          <TabsList>
+            <TabsTrigger v-for="t in STATUS_TABS" :key="t.value" :value="t.value" :count="count(t.value)">{{ t.label }}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div class="relative min-w-24 flex-1 sm:max-w-64">
+          <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
+          <Input v-model="v.query" type="search" placeholder="Search messages, people, channels…" class="h-8 pl-8" />
+        </div>
+        <FilterChips :chips="chips" />
+        <span class="flex-1" />
+        <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
       </div>
-      <FilterChips :chips="chips" />
-      <span class="flex-1" />
-      <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
-    </div>
+    </StickyToolbar>
     <!-- The page scrolls (native scrollbar at the window edge, like Settings) -->
     <div>
         <!-- overflow-visible: Card clips by default, which would make it the sticky container for the headings -->

@@ -29,7 +29,7 @@ const groups = computed(() => {
       <h3
         :class="cn(
           'border-b bg-muted/90 px-4 py-1.5 text-xs font-semibold text-muted-foreground',
-          sticky && 'sticky top-14 z-10 backdrop-blur',
+          sticky && 'sticky top-(--sticky-top,--spacing(14)) z-10 backdrop-blur',
           gi > 0 && 'border-t',
         )"
       >
