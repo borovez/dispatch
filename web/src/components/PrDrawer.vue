@@ -570,7 +570,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             :max="footerHeight ? Math.max(48, footerHeight - NOTE_MIN) : undefined"
             :reset="0"
             :target="depsViewport"
-            class="-mb-3"
+            class="relative z-10 -mt-1 -mb-3"
             @update:model-value="(h) => (dv.depsHeight = h)"
           />
         </section>

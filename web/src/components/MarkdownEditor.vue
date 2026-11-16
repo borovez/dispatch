@@ -129,6 +129,6 @@ defineExpose({ focus, el })
       />
     </div>
     <!-- Fixed height: a grab bar sizes the text (and preview) -->
-    <ResizeHandle v-if="!fill && !grow" v-model="height" :min="64" :reset="startHeight" class="-mt-1 -mb-1.5" />
+    <ResizeHandle v-if="!fill && !grow" v-model="height" :min="64" :reset="startHeight" class="relative z-10 -mt-1 -mb-1.5" />
   </div>
 </template>

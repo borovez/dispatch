@@ -55,7 +55,7 @@ defineExpose({ focus })
 <template>
   <div
     ref="root"
-    :class="['relative flex shrink-0 flex-col gap-2 border-t p-3', height && 'min-h-0']"
+    :class="['relative flex shrink-0 flex-col gap-2 p-3', height && 'min-h-0']"
     :style="height ? { height: `${height}px` } : undefined"
   >
     <ResizeHandle
@@ -65,7 +65,7 @@ defineExpose({ focus })
       :min="160"
       :reset="0"
       :target="() => root"
-      class="absolute inset-x-0 -top-2.5 my-0"
+      class="absolute inset-x-0 -top-2.5 z-10"
       @update:model-value="(h) => (height = h)"
     />
     <div class="flex items-center gap-2 text-xs text-muted-foreground">

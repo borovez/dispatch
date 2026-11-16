@@ -2,7 +2,8 @@
 /**
  * Full-width grab bar under a section: drag up/down to change the section's height (v-model, px),
  * double-click to go back to `reset`. `target` is the element being sized, measured when a drag starts
- * so the drag begins from what's on screen. `line` draws it as a divider line instead of a pill;
+ * so the drag begins from what's on screen. It doesn't position itself: the caller places it
+ * (e.g. `relative z-10 -my-1` in a column, or `absolute inset-x-0 -top-2.5` on an edge). `line` draws it as a divider line instead of a pill;
  * `invert` is for a bar above the section (dragging up makes it taller).
  */
 const props = withDefaults(defineProps<{ target?: () => HTMLElement | null | undefined; min?: number; max?: number; reset?: number; line?: boolean; invert?: boolean }>(), {
@@ -48,7 +49,7 @@ function onKey(e: KeyboardEvent) {
     aria-label="Drag to resize"
     tabindex="0"
     title="Drag to resize · double-click to reset"
-    class="group relative z-10 -my-1 flex h-5 shrink-0 cursor-row-resize touch-none items-center justify-center outline-none"
+    class="group flex h-5 shrink-0 cursor-row-resize touch-none items-center justify-center outline-none"
     @pointerdown="start"
     @dblclick="reset !== undefined && (height = reset)"
     @keydown="onKey"
