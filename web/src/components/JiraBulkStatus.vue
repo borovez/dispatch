@@ -115,9 +115,12 @@ async function run() {
 <template>
   <Dialog :open="open" @update:open="onOpen">
     <DialogTrigger as-child>
-      <Button variant="ghost" size="xs" class="text-muted-foreground" :title="`Change the status of all ${keys.length} issues`" @click.stop>
-        <PhListChecks /> Change status…
-      </Button>
+      <!-- #trigger: one button element to use instead -->
+      <slot name="trigger">
+        <Button variant="ghost" size="xs" class="text-muted-foreground" :title="`Change the status of all ${keys.length} issues`" @click.stop>
+          <PhListChecks /> Change status…
+        </Button>
+      </slot>
     </DialogTrigger>
     <DialogContent class="sm:max-w-xl">
       <DialogHeader>

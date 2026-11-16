@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import JiraBulkStatus from '@/components/JiraBulkStatus.vue'
 import StickyToolbar from '@/components/StickyToolbar.vue'
 import { computed } from 'vue'
-import { PhCircleHalf, PhKanban, PhMagnifyingGlass, PhNotePencil } from '@phosphor-icons/vue'
+import { PhListChecks, PhCircleHalf, PhKanban, PhMagnifyingGlass, PhNotePencil } from '@phosphor-icons/vue'
 import type { JiraIssueView, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useLayout, type SortDir } from '@/stores/layout'
@@ -139,6 +140,8 @@ const filtered = computed(() => {
   return base.value.filter(scope.match).sort((a, b) => cmp(a, b) * sign)
 })
 
+/** Issues loaded from Jira (keys only seen in PRs have no workflow to move) */
+const bulkKeys = (list: Item[]) => list.filter((i) => i.issue).map((i) => i.key)
 const groups = computed(() => {
   if (v.group === 'none') return [{ key: 'all', label: 'Jira issues', items: filtered.value, category: '' }]
   const map = new Map<string, { label: string; rank: string; items: Item[]; category: string }>()
@@ -198,6 +201,11 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
         <span class="flex-1" />
         <CollapseAllButton v-if="groups.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
         <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
+        <JiraBulkStatus v-if="deck.overview?.configured.jira && bulkKeys(filtered).length > 1" :keys="bulkKeys(filtered)" context="Every issue on this page with the current tab, search and filters.">
+          <template #trigger>
+            <Button variant="outline" size="sm" :title="`Change the status of the ${bulkKeys(filtered).length} issues shown`"><PhListChecks /> <span class="@max-3xl:sr-only">Change status…</span></Button>
+          </template>
+        </JiraBulkStatus>
         <Button v-if="deck.overview?.configured.jira" size="sm" @click="deck.composer = { mode: 'create' }"><PhNotePencil /> <span class="@max-3xl:sr-only">New issue</span></Button>
       </div>
     </StickyToolbar>
@@ -212,6 +220,9 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
           :count="g.items.length"
           @update:collapsed="(c: boolean) => (collapsed[g.key] = c)"
         >
+          <template v-if="deck.overview?.configured.jira && bulkKeys(g.items).length > 1" #actions>
+            <JiraBulkStatus :keys="bulkKeys(g.items)" :context="`The issues in “${g.label}”.`" />
+          </template>
           <template v-if="g.category" #label>
             <span class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-full" :class="DOT[g.category] ?? 'bg-muted-foreground'" />{{ g.label }}</span>
           </template>
