@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { modClickHint, wantsExternal } from '@/lib/external'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { PhCaretRight, PhCheckCircle, PhCircle, PhCircleDashed, PhEye, PhPlus, PhRocketLaunch, PhSlidersHorizontal, PhWarning } from '@phosphor-icons/vue'
 import { isUnreleased } from '@/utils/releaseFlow'
@@ -73,7 +73,106 @@ function itemsFor(p: PanelConfig): number {
   return openChains.value.length
 }
 
-const visible = computed(() => layout.orderedPanels.filter((p) => p.visible))
+
+/*
+ * Panel drag & drop. The grid is zones (layout.zones): a full-width panel, or a row of two column
+ * stacks. While dragging, the point picks the nearest zone (so empty space under a short column or
+ * below the grid counts), then the spot in it; a primary line shows where the panel will land.
+ */
+const pageEl = ref<HTMLElement>()
+const gridEl = ref<HTMLElement>()
+const draggingId = ref<string | null>(null)
+interface DropSpot {
+  ref: string
+  where: 'before' | 'after'
+  column?: 'left' | 'right'
+  line: { top: number; left: number; width: number }
+}
+const spot = ref<DropSpot | null>(null)
+const GAP = 16
+
+function onDragStart(e: DragEvent) {
+  draggingId.value = (e.target as HTMLElement).closest<HTMLElement>('[data-panel-id]')?.dataset.panelId ?? null
+}
+function endDrag() {
+  draggingId.value = null
+  spot.value = null
+}
+/** Distance from a point to a rect (0 inside) */
+const dist = (r: DOMRect, x: number, y: number) => Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom))
+const panelRect = (id: string) => gridEl.value?.querySelector<HTMLElement>(`[data-panel-id="${id}"]`)?.getBoundingClientRect()
+const orderOf = (id: string) => layout.orderedPanels.findIndex((p) => p.id === id)
+
+function onDragOver(e: DragEvent) {
+  const id = draggingId.value
+  const grid = gridEl.value
+  const dragged = layout.prefs.panels.find((p) => p.id === id)
+  if (!id || !grid || !dragged) return
+  e.preventDefault()
+  e.dataTransfer!.dropEffect = 'move'
+  const x = e.clientX
+  const y = e.clientY
+  const g = grid.getBoundingClientRect()
+  const zones = layout.zones
+  const els = [...grid.querySelectorAll<HTMLElement>('[data-zone]')]
+  if (!els.length) return
+  const el = els.reduce((a, b) => (dist(b.getBoundingClientRect(), x, y) < dist(a.getBoundingClientRect(), x, y) ? b : a))
+  const zone = zones[Number(el.dataset.zone)]
+  const z = el.getBoundingClientRect()
+  const at = (top: number, left: number, right: number) => ({ top: top - g.top, left: left - g.left, width: right - left })
+  // Two columns from lg (matches the grid's lg:grid-cols-2)
+  const wide = window.matchMedia('(min-width: 1024px)').matches
+  const mid = g.left + g.width / 2
+
+  // Full-width panels go between rows
+  if (dragged.width === 'full') {
+    const row = els.filter((o) => zones[Number(o.dataset.zone)].seg === zone.seg).map((o) => o.getBoundingClientRect())
+    const top = Math.min(...row.map((r) => r.top))
+    const bottom = Math.max(...row.map((r) => r.bottom))
+    const ids = zones.filter((o) => o.seg === zone.seg).flatMap((o) => o.panels.map((p) => p.id)).sort((a, b) => orderOf(a) - orderOf(b))
+    const before = y < (top + bottom) / 2
+    spot.value = { ref: before ? ids[0] : ids[ids.length - 1], where: before ? 'before' : 'after', line: at(before ? top - GAP / 2 : bottom + GAP / 2, g.left, g.right) }
+    return
+  }
+
+  // Half width beside a full-width panel: above or below it, on the side the pointer is
+  if (zone.col === 'full') {
+    const column = wide && x >= mid ? 'right' : 'left'
+    const [left, right] = !wide ? [g.left, g.right] : column === 'left' ? [g.left, mid - GAP / 2] : [mid + GAP / 2, g.right]
+    const before = y < (z.top + z.bottom) / 2
+    spot.value = { ref: zone.panels[0].id, where: before ? 'before' : 'after', column, line: at(before ? z.top - GAP / 2 : z.bottom + GAP / 2, left, right) }
+    return
+  }
+
+  // In a column: before the first panel whose middle is below the pointer, else at the end
+  const column = zone.col
+  const others = zone.panels.filter((p) => p.id !== id)
+  for (const p of others) {
+    const r = panelRect(p.id)
+    if (r && y < (r.top + r.bottom) / 2) {
+      spot.value = { ref: p.id, where: 'before', column, line: at(r.top - GAP / 2, z.left, z.right) }
+      return
+    }
+  }
+  const last = others[others.length - 1]
+  if (last) {
+    const r = panelRect(last.id)!
+    spot.value = { ref: last.id, where: 'after', column, line: at(r.bottom + GAP / 2, z.left, z.right) }
+    return
+  }
+  // Empty column: next to any panel of the row (the column decides where it shows)
+  const rowIds = zones.filter((o) => o.seg === zone.seg).flatMap((o) => o.panels.map((p) => p.id)).filter((p) => p !== id)
+  spot.value = { ref: rowIds[rowIds.length - 1] ?? id, where: 'after', column, line: at(z.top, z.left, z.right) }
+}
+function onDragLeave(e: DragEvent) {
+  if (!pageEl.value?.contains(e.relatedTarget as Node | null)) spot.value = null
+}
+function onDrop(e: DragEvent) {
+  e.preventDefault()
+  const id = draggingId.value
+  if (id && spot.value) layout.place(id, spot.value.ref, spot.value.where, spot.value.column)
+  endDrag()
+}
 const hidden = computed(() => layout.prefs.panels.filter((p) => !p.visible))
 
 const stats = computed(() => deck.overview?.stats)
@@ -145,7 +244,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div ref="pageEl" class="space-y-4" :class="draggingId && 'pb-24'" @dragstart="onDragStart" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop" @dragend="endDrag">
     <div class="flex min-h-8 flex-wrap items-center gap-1 text-xs text-muted-foreground">
       <template v-if="hidden.length">
         Hidden:
@@ -206,11 +305,18 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
       </button>
     </div>
 
-    <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+    <div ref="gridEl" class="relative grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div
+        v-for="(z, zi) in layout.zones"
+        :key="z.key"
+        :data-zone="zi"
+        :class="['flex min-w-0 flex-col gap-4', z.col === 'full' && 'lg:col-span-2', !z.panels.length && 'max-lg:hidden']"
+      >
       <DashPanel
-        v-for="p in visible"
+        v-for="p in z.panels"
         :key="p.id"
         :panel="p"
+        :dragging="draggingId === p.id"
         :count="itemsFor(p)"
         :sort-options="p.type === 'prs' ? PR_SORTS : p.type === 'slack' ? TIME_SORTS : undefined"
       >
@@ -325,6 +431,13 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
           </template>
         </template>
       </DashPanel>
+      </div>
+      <!-- Where the dragged panel will land -->
+      <div
+        v-if="spot"
+        class="pointer-events-none absolute z-20 h-0.5 -translate-y-1/2 rounded-full bg-primary ring-2 ring-primary/25 before:absolute before:top-1/2 before:-left-1 before:size-2 before:-translate-y-1/2 before:rounded-full before:bg-primary"
+        :style="{ top: `${spot.line.top}px`, left: `${spot.line.left}px`, width: `${spot.line.width}px` }"
+      />
     </div>
 
   </div>

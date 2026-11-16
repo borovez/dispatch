@@ -14,6 +14,15 @@ export interface PrFilter {
   query?: string
 }
 
+/** One drop zone of the Overview grid (see `zones`) */
+export interface DashZone {
+  key: string
+  /** Row it belongs to; a full-width panel is a row of its own */
+  seg: number
+  col: 'left' | 'right' | 'full'
+  panels: PanelConfig[]
+}
+
 export interface PanelConfig {
   id: string
   type: PanelType
@@ -22,6 +31,8 @@ export interface PanelConfig {
   collapsed: boolean
   pinned: boolean
   width: 'half' | 'full'
+  /** Half-width panels: which Overview column. Unset: they alternate left/right as they come */
+  column?: 'left' | 'right'
   sort: PrSort | 'newest' | 'oldest'
   dir: SortDir
   limit: number
@@ -169,15 +180,53 @@ export const useLayout = defineStore('layout', () => {
     if (p) Object.assign(p, patch)
   }
 
-  function move(fromId: string, toId: string) {
-    const ps = prefs.value.panels
+  /**
+   * The Overview as zones: a full-width panel is a zone of its own; a run of half-width panels between
+   * them is a row of two column zones (left, right), each a stack of panels.
+   */
+  const zones = computed(() => {
+    const out: DashZone[] = []
+    let row: { left: DashZone; right: DashZone; n: number } | null = null
+    let seg = 0
+    for (const p of orderedPanels.value) {
+      if (!p.visible) continue
+      if (p.width === 'full') {
+        row = null
+        out.push({ key: p.id, seg: seg++, col: 'full', panels: [p] })
+        continue
+      }
+      if (!row) {
+        row = { left: { key: `${p.id}-l`, seg, col: 'left', panels: [] }, right: { key: `${p.id}-r`, seg, col: 'right', panels: [] }, n: 0 }
+        seg++
+        out.push(row.left, row.right)
+      }
+      row[p.column ?? (row.n % 2 ? 'right' : 'left')].panels.push(p)
+      row.n++
+    }
+    return out
+  })
+
+  /**
+   * Moves a panel next to another one (`where` it), into `column` when it's half width. It takes the
+   * pinned state of the panel it lands next to. Columns worked out so far are saved first so the
+   * other panels stay where they are.
+   */
+  function place(fromId: string, refId: string, where: 'before' | 'after', column?: 'left' | 'right') {
+    if (fromId === refId) {
+      if (column) update(fromId, { column })
+      return
+    }
+    for (const z of zones.value) if (z.col !== 'full') for (const p of z.panels) p.column ??= z.col
+    const ps = [...orderedPanels.value]
     const from = ps.findIndex((p) => p.id === fromId)
-    const to = ps.findIndex((p) => p.id === toId)
-    if (from < 0 || to < 0 || from === to) return
+    if (from < 0) return
     const [p] = ps.splice(from, 1)
-    ps.splice(to, 0, p)
-    // dropping onto a pinned panel pins it, onto an unpinned one unpins
-    p.pinned = ps[to === 0 ? 1 : to - 1]?.pinned && ps[to + 1]?.pinned ? true : ps.find((x) => x.id === toId)!.pinned
+    const to = ps.findIndex((x) => x.id === refId)
+    if (to < 0) return
+    p.pinned = ps[to].pinned
+    ps.splice(where === 'before' ? to : to + 1, 0, p)
+    if (column && p.width === 'half') p.column = column
+    prefs.value.panels = ps
   }
 
   function addPanel(type: PanelType, title: string, filter: PrFilter = {}) {
@@ -211,5 +260,5 @@ export const useLayout = defineStore('layout', () => {
     })
   }
 
-  return { prefs, loaded, orderedPanels, load, update, move, addPanel, removePanel, reset, view }
+  return { prefs, loaded, orderedPanels, zones, load, update, place, addPanel, removePanel, reset, view }
 })

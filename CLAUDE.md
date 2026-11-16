@@ -30,7 +30,7 @@ Node lives in nvm and isn't on the default PATH: `export PATH=~/.nvm/versions/no
 - `web/src/`: Vue 3 + TS, Pinia, vue-router, **shadcn-vue** (`components/ui/*`, generated, reka-ui based), Tailwind v4, Phosphor icons.
   - `stores/deck.ts`: overview data, selected PR (drawer), slackToJira (dialog).
   - `stores/layout.ts`: customizable dashboard panels (order, pin, collapse, width, sort, filter, limit), per-view state via `layout.view(name, defaults)`. Persisted to `/api/prefs`.
-  - Overview panels (`stores/layout.ts` DEFAULT_PANELS): PR lists, Slack, Jira, chains, releases (open releases with ship-next, hotfixes not back in dev, my unreleased work). New default panels are appended to saved layouts on load.
+  - Overview panels (`stores/layout.ts` DEFAULT_PANELS): PR lists, Slack, Jira, chains, releases (open releases with ship-next, hotfixes not back in dev, my unreleased work). New default panels are appended to saved layouts on load. The grid is `layout.zones`: a full-width panel spans both columns, runs of half-width panels are two column stacks (`column`, alternating when unset). Dragging a panel (handle) picks the nearest zone, so empty space under a short column or below the grid works, and a primary line shows the spot; `layout.place(id, ref, before|after, column)` applies it.
   - `components/`: PrRow, PrCard (compact card for graph nodes and the PR board), PrDrawer (resizable detail panel, add/remove dependencies), DashPanel (panel chrome), GroupCard (collapsible list section), SortDirButton, ActionBar (sticky bottom toolbar), SlackRow, SlackToJiraModal, JiraRow, JiraPill, JiraTransition, GraphNode.
   - `views/`: Dashboard, PullRequests, Slack, Graph, Jira, Settings.
 

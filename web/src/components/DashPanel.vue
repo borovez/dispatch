@@ -33,34 +33,26 @@ import {
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-const props = defineProps<{ panel: PanelConfig; count: number; sortOptions?: { value: string; label: string }[] }>()
+const props = defineProps<{ panel: PanelConfig; count: number; sortOptions?: { value: string; label: string }[]; /** Being dragged: faded */ dragging?: boolean }>()
 const layout = useLayout()
 const set = (patch: Partial<PanelConfig>) => layout.update(props.panel.id, patch)
 
-// HTML5 drag & drop reorder, started from the handle only
-const dragOver = ref(false)
+// HTML5 drag, started from the handle only; the Overview grid finds the drop spot and draws the line
 const draggable = ref(false)
 function onDragStart(e: DragEvent) {
   e.dataTransfer!.setData('text/panel', props.panel.id)
   e.dataTransfer!.effectAllowed = 'move'
-}
-function onDrop(e: DragEvent) {
-  dragOver.value = false
-  const from = e.dataTransfer?.getData('text/panel')
-  if (from) layout.move(from, props.panel.id)
 }
 const LIMITS = [5, 8, 12, 20, 50, 999]
 </script>
 
 <template>
   <Card
-    :class="cn('gap-0 overflow-visible py-0 transition-shadow', panel.width === 'full' && 'lg:col-span-2', dragOver && 'ring-2 ring-primary')"
+    :class="cn('gap-0 overflow-visible py-0 transition-opacity', dragging && 'opacity-40')"
+    :data-panel-id="panel.id"
     :draggable="draggable"
     @dragstart="onDragStart"
     @dragend="draggable = false"
-    @dragover.prevent="dragOver = true"
-    @dragleave="dragOver = false"
-    @drop.prevent="onDrop"
   >
     <header :class="cn('flex min-w-0 items-center gap-1 px-2 py-1.5', !panel.collapsed && 'border-b')">
       <span
