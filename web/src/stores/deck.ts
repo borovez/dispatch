@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { JiraFieldValue, Overview, PrView, SyncState } from '@shared/types'
+
+/** An item shown in the side panel */
+export interface PanelRef {
+  kind: 'pr' | 'slack' | 'jira'
+  id: string
+}
 
 /** What the Jira composer opens on */
 export type ComposerTarget =
@@ -32,6 +38,51 @@ export const useDeck = defineStore('deck', () => {
   // One side panel at a time: opening one closes the others
   const panels = [selectedId, selectedSlackId, selectedJiraKey]
   for (const p of panels) watch(p, (v) => v && panels.forEach((o) => o !== p && (o.value = null)))
+
+  // ---- Side panel history: back / forward through the PRs, Jira issues and Slack messages opened
+  // since the panel opened. Closing the panel clears it.
+  const panelKinds = ['pr', 'slack', 'jira'] as const
+  const currentPanel = computed<PanelRef | null>(() => {
+    const i = panels.findIndex((p) => p.value)
+    return i < 0 ? null : { kind: panelKinds[i], id: panels[i].value! }
+  })
+  const panelBack = ref<PanelRef[]>([])
+  const panelForward = ref<PanelRef[]>([])
+  /** Set while a change shouldn't add a history entry (back/forward themselves, arrow keys) */
+  let historyMode: 'push' | 'replace' | 'travel' = 'push'
+  const showPanel = (r: PanelRef) => (panels[panelKinds.indexOf(r.kind)].value = r.id)
+  const same = (a: PanelRef | null, b: PanelRef | null) => !!a && !!b && a.kind === b.kind && a.id === b.id
+  watch(currentPanel, (now, before) => {
+    const mode = historyMode
+    historyMode = 'push'
+    if (!now) {
+      panelBack.value = []
+      panelForward.value = []
+      return
+    }
+    if (mode !== 'push' || !before || same(now, before)) return
+    panelBack.value = [...panelBack.value, before].slice(-50)
+    panelForward.value = []
+  })
+  function panelGo(dir: -1 | 1) {
+    const from = dir < 0 ? panelBack : panelForward
+    const to = dir < 0 ? panelForward : panelBack
+    const target = from.value.at(-1)
+    const now = currentPanel.value
+    if (!target || !now) return
+    from.value = from.value.slice(0, -1)
+    to.value = [...to.value, now]
+    historyMode = 'travel'
+    showPanel(target)
+    void nextTick(() => (historyMode = 'push'))
+  }
+  /** Open something in the panel without a history entry (moving through a list) */
+  function replacePanel(fn: () => void) {
+    historyMode = 'replace'
+    fn()
+    // Nothing changed (same item): don't let the flag leak into the next change
+    void nextTick(() => (historyMode = 'push'))
+  }
   /** Jira issue composer: a new issue (optionally pre-filled) or an existing one to edit */
   const composer = ref<ComposerTarget | null>(null)
   /** PR whose title and description are open in the PR writer */
@@ -130,6 +181,6 @@ export const useDeck = defineStore('deck', () => {
     timer = window.setInterval(() => !syncRunning.value && load(), 60_000)
   }
 
-  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, composer, prWriter, agentPromptKey, prs, byId,
+  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, replacePanel, composer, prWriter, agentPromptKey, prs, byId,
     releaseById, selected, jiraByKey, flagByKey, repos, load, sync, mutate, startPolling }
 })

@@ -1,5 +1,6 @@
 import { useEventListener } from '@vueuse/core'
 import { LAYER_OPEN } from './escape'
+import { useDeck } from '@/stores/deck'
 
 /**
  * Arrow up/down moves an open side panel to the previous/next item on the page, in on-screen order.
@@ -20,6 +21,7 @@ export function neighbourId(kind: 'pr' | 'slack' | 'jira', id: string): string |
 }
 
 export function useArrowNav(kind: 'pr' | 'slack' | 'jira', selected: () => string | null, select: (id: string) => void) {
+  const deck = useDeck()
   const attr = `data-${kind}-id`
   const idOf = (el: HTMLElement) => el.getAttribute(attr)
   let cursor: HTMLElement | null = null
@@ -46,7 +48,8 @@ export function useArrowNav(kind: 'pr' | 'slack' | 'jira', selected: () => strin
     if (!next) return
     e.preventDefault()
     cursor = next
-    select(idOf(next)!)
+    // Moving through a list replaces the panel's history entry instead of adding one
+    deck.replacePanel(() => select(idOf(next)!))
     next.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   })
 }

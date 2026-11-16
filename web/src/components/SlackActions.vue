@@ -23,7 +23,7 @@ async function status(s: SlackItem['status']) {
   // In the panel, Done/Dismiss moves on to the next message in the list
   const next = props.labelled && s !== 'new' ? neighbourId('slack', props.item.id) : null
   if (!(await setSlackStatus(deck, props.item, s))) return
-  if (props.labelled && s !== 'new') deck.selectedSlackId = next
+  if (props.labelled && s !== 'new') deck.replacePanel(() => (deck.selectedSlackId = next))
 }
 const jira = () => slackToJira(deck, props.item)
 

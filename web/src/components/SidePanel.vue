@@ -5,6 +5,7 @@ import { PhLockSimple, PhLockSimpleOpen, PhX } from '@phosphor-icons/vue'
 import { useLayout } from '@/stores/layout'
 import { LAYER_OPEN, onEscape } from '@/composables/escape'
 import { Button } from '@/components/ui/button'
+import PanelHistoryNav from './PanelHistoryNav.vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 /**
@@ -124,6 +125,7 @@ function startFooterResize(ev: PointerEvent) {
       <header class="flex flex-wrap items-start gap-x-2 gap-y-1 border-b p-3 sm:flex-nowrap sm:p-4">
         <div class="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto"><slot name="header" /></div>
         <span class="flex-1 sm:hidden" />
+        <PanelHistoryNav />
         <slot name="actions" />
         <Tooltip>
           <TooltipTrigger as-child>
