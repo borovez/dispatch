@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { useArrowNav } from '@/composables/prNav'
 import { useDependencies } from '@/composables/dependencies'
@@ -239,7 +240,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             <Badge v-if="pr.flow" :variant="pr.flow === 'hotfix' ? 'warning' : pr.flow === 'release' ? 'merged' : 'muted'">{{ FLOW_LABEL[pr.flow] }}</Badge>
             <Badge v-for="r in pr.relations" :key="r" variant="muted">{{ r.replace('_', ' ') }}</Badge>
           </div>
-          <h2 class="leading-snug font-semibold">{{ pr.title }}</h2>
+          <h2 class="flex items-start gap-2 leading-snug font-semibold"><KindIcon kind="pr" /><span class="min-w-0 pt-0.5">{{ pr.title }}</span></h2>
           <ExternalLink :href="pr.url" icon="always" :label="pr.id" class="mt-1 flex font-mono text-sm text-primary">
             <RepoName :id="pr.id" no-title />
           </ExternalLink>

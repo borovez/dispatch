@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
 import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhArrowsClockwise, PhSquareSplitHorizontal, PhRobot } from '@phosphor-icons/vue'
@@ -107,7 +108,7 @@ const details = computed(() => {
           <PhPencilSimple /> Edit
         </Button>
       </div>
-      <h2 class="mt-1.5 leading-snug font-semibold">{{ issue?.summary ?? 'Not loaded from Jira' }}</h2>
+      <h2 class="mt-1.5 flex items-start gap-2 leading-snug font-semibold"><KindIcon kind="jira" /><span class="min-w-0 pt-0.5">{{ issue?.summary ?? 'Not loaded from Jira' }}</span></h2>
     </template>
 
     <ScrollArea v-if="key" class="min-h-0 flex-1">

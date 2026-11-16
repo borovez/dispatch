@@ -6,6 +6,7 @@ import { useDeck, type PanelRef } from '@/stores/deck'
 import { LAYER_OPEN } from '@/composables/escape'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { ITEM_KIND } from '@/utils/itemKinds'
 
 /**
  * Back / forward through what the side panel showed since it opened (PRs, Jira issues, Slack
@@ -54,6 +55,7 @@ useEventListener(window, 'mousedown', (e: MouseEvent) => canGo(e) && e.preventDe
         <Button variant="ghost" size="icon-sm" aria-label="Back" :disabled="!back" @click="deck.panelGo(-1)"><PhArrowLeft /></Button>
       </TooltipTrigger>
       <TooltipContent class="max-w-80">
+        <component :is="ITEM_KIND[back.kind].icon" v-if="back" :size="14" class="shrink-0" />
         <span class="line-clamp-2">{{ back ? `Back to ${describe(back)}` : 'Back' }}</span>
         <span class="opacity-70">Alt+←</span>
       </TooltipContent>
@@ -63,6 +65,7 @@ useEventListener(window, 'mousedown', (e: MouseEvent) => canGo(e) && e.preventDe
         <Button variant="ghost" size="icon-sm" aria-label="Forward" :disabled="!forward" @click="deck.panelGo(1)"><PhArrowRight /></Button>
       </TooltipTrigger>
       <TooltipContent class="max-w-80">
+        <component :is="ITEM_KIND[forward.kind].icon" v-if="forward" :size="14" class="shrink-0" />
         <span class="line-clamp-2">{{ forward ? `Forward to ${describe(forward)}` : 'Forward' }}</span>
         <span class="opacity-70">Alt+→</span>
       </TooltipContent>

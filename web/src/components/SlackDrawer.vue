@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { externalHint } from '@/lib/external'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -237,7 +238,7 @@ async function copyPrompt() {
         <span>{{ item.channelName }}</span>
         <Badge v-if="item.threadTs" variant="muted">in thread</Badge>
       </div>
-      <h2 class="mt-1.5 font-semibold">{{ item.userName }}</h2>
+      <h2 class="mt-1.5 flex items-start gap-2 font-semibold"><KindIcon kind="slack" /><span class="min-w-0 pt-0.5">{{ item.userName }}</span></h2>
       <ExternalLink v-if="item.permalink" :href="item.permalink" icon="always" class="mt-1 text-sm text-primary">Open in Slack</ExternalLink>
     </template>
 
