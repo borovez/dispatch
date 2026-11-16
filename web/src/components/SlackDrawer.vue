@@ -150,6 +150,15 @@ async function send(text: string) {
     sending.value = false
   }
 }
+/** A message's Slack link: the workspace from the item's permalink; thread replies open in their thread */
+function messageLink(m: SlackMessage): string | null {
+  const i = item.value
+  const origin = i?.permalink ? new URL(i.permalink).origin : null
+  if (!i || !origin) return null
+  const url = `${origin}/archives/${i.channelId}/p${m.ts.replace('.', '')}`
+  return i.threadTs && m.ts !== i.threadTs ? `${url}?thread_ts=${i.threadTs}&cid=${i.channelId}` : url
+}
+
 /** Copies at least what's loaded (and 20 messages either side) as a Markdown brief */
 const copying = ref(false)
 async function copyPrompt() {
@@ -238,20 +247,25 @@ async function copyPrompt() {
                 <AvatarFallback class="text-[10px]">{{ m.userName.slice(0, 2).toUpperCase() }}</AvatarFallback>
               </Avatar>
             </SlackUserCard>
-            <Tooltip>
-              <TooltipTrigger as-child>
-                <Button
-                  variant="outline"
-                  size="icon-xs"
-                  class="absolute top-2 right-2 bg-background opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                  aria-label="Reply to this message"
-                  @click="startReply(m)"
-                >
-                  <PhArrowBendUpLeft />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{{ item.threadTs ? 'Reply in the thread' : 'Reply in its thread' }}</TooltipContent>
-            </Tooltip>
+            <!-- Message actions, on hover / focus -->
+            <div class="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button variant="outline" size="icon-xs" class="bg-background" aria-label="Reply to this message" @click="startReply(m)">
+                    <PhArrowBendUpLeft />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{{ item.threadTs ? 'Reply in the thread' : 'Reply in its thread' }}</TooltipContent>
+              </Tooltip>
+              <Tooltip v-if="messageLink(m)">
+                <TooltipTrigger as-child>
+                  <Button variant="outline" size="icon-xs" class="bg-background" as="a" :href="messageLink(m)!" target="_blank" rel="noopener" aria-label="Open in Slack">
+                    <PhArrowSquareOut />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open in Slack</TooltipContent>
+              </Tooltip>
+            </div>
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 text-xs">
                 <SlackUserCard :user-id="m.user" :name="m.userName" :avatar="m.userAvatar">
