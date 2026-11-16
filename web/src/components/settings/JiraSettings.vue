@@ -12,6 +12,7 @@ import MultiPicker from '@/components/MultiPicker.vue'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import MarkdownEditor from '../MarkdownEditor.vue'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -206,10 +207,10 @@ async function submit() {
               <TabsTrigger v-for="k in guideProjects" :key="k" :value="k" class="px-2.5 text-xs">{{ k }}</TabsTrigger>
             </TabsList>
             <TabsContent v-for="k in guideProjects" :key="k" :value="k">
-              <Textarea
+              <MarkdownEditor
                 :model-value="guideModel(k).get()"
-                rows="5"
-                class="min-h-0 resize-y text-sm"
+                :height="140"
+               
                 :placeholder="`e.g. Start with a one-line user story. Sections: Context, Acceptance criteria (checklist), Out of scope. Bugs: steps to reproduce, expected vs actual.`"
                 @update:model-value="(v) => guideModel(k).set(String(v))"
               />

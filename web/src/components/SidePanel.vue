@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { PhLockSimple, PhLockSimpleOpen, PhX } from '@phosphor-icons/vue'
 import { useLayout } from '@/stores/layout'
@@ -8,9 +9,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 /**
  * Right-hand detail panel (PR, Slack message): resizable, closes on Escape and on a click outside
- * it unless "keep open" is on. Header, actions, body and footer are slots.
+ * it unless "keep open" is on. Header, actions, body and footer are slots. With v-model:footer-height
+ * (px, 0 = fit the content) the line above the footer can be dragged to size the footer against the
+ * body; double-click sets it to 0 (the parent's default). A sized footer is a column: give its content `flex-1`.
  */
 const props = defineProps<{ open: boolean }>()
+const footerHeight = defineModel<number>('footerHeight')
 const emit = defineEmits<{ close: [] }>()
 const layout = useLayout()
 onEscape(() => props.open && (emit('close'), true))
@@ -46,6 +50,58 @@ function startResize(ev: MouseEvent) {
   window.addEventListener('mouseup', onUp)
   ev.preventDefault()
 }
+
+// ---- No page scrollbar beside an open panel (see html.side-panel-open in style.css)
+let mine = false
+function hidePageScrollbar(on: boolean) {
+  if (on === mine) return
+  mine = on
+  openPanels += on ? 1 : -1
+  const root = document.documentElement
+  if (openPanels > 0 && !root.classList.contains('side-panel-open')) {
+    root.style.setProperty('--page-sbw', `${window.innerWidth - root.clientWidth}px`)
+    root.classList.add('side-panel-open')
+  } else if (openPanels === 0) root.classList.remove('side-panel-open')
+}
+watch(() => props.open, hidePageScrollbar, { immediate: true })
+onBeforeUnmount(() => hidePageScrollbar(false))
+
+// ---- Scrolling inside the panel never scrolls the page behind it
+/** Can this element scroll further in the wheel's direction? */
+function canScroll(el: HTMLElement, dx: number, dy: number) {
+  const st = getComputedStyle(el)
+  const y = dy !== 0 && /(auto|scroll)/.test(st.overflowY) && (dy < 0 ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1)
+  const x = dx !== 0 && /(auto|scroll)/.test(st.overflowX) && (dx < 0 ? el.scrollLeft > 0 : el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+  return x || y
+}
+function onWheel(e: WheelEvent) {
+  if (e.ctrlKey) return // pinch zoom
+  const panel = e.currentTarget as HTMLElement
+  for (let el = e.target as HTMLElement | null; el && el !== panel; el = el.parentElement) if (canScroll(el, e.deltaX, e.deltaY)) return
+  e.preventDefault()
+}
+
+// ---- Footer height
+const footerEl = ref<HTMLElement | null>(null)
+function startFooterResize(ev: PointerEvent) {
+  ev.preventDefault()
+  const bar = ev.currentTarget as HTMLElement
+  bar.setPointerCapture(ev.pointerId)
+  const startY = ev.clientY
+  const startH = footerEl.value?.offsetHeight ?? 0
+  const max = () => Math.round(window.innerHeight * 0.8)
+  const move = (e: PointerEvent) => (footerHeight.value = Math.round(Math.min(max(), Math.max(80, startH + startY - e.clientY))))
+  const end = () => {
+    bar.removeEventListener('pointermove', move)
+    bar.removeEventListener('pointerup', end)
+    bar.removeEventListener('pointercancel', end)
+    document.body.style.cursor = ''
+  }
+  document.body.style.cursor = 'row-resize'
+  bar.addEventListener('pointermove', move)
+  bar.addEventListener('pointerup', end)
+  bar.addEventListener('pointercancel', end)
+}
 </script>
 
 <template>
@@ -53,8 +109,9 @@ function startResize(ev: MouseEvent) {
     <aside
       v-if="open"
       data-side-panel
-      class="fixed inset-y-0 right-0 z-40 flex w-full max-w-full flex-col border-l bg-background shadow-2xl sm:w-(--panel-w)"
+      class="fixed inset-y-0 overscroll-contain right-0 z-40 flex w-full max-w-full flex-col border-l bg-background shadow-2xl sm:w-(--panel-w)"
       :style="{ '--panel-w': layout.prefs.drawerWidth + 'px' }"
+      @wheel="onWheel"
     >
       <!-- z-30: the body's scroll area is positioned and would otherwise cover the handle below the header -->
       <div
@@ -85,12 +142,36 @@ function startResize(ev: MouseEvent) {
         <Button variant="ghost" size="icon-sm" aria-label="Close" @click="emit('close')"><PhX /></Button>
       </header>
       <slot />
-      <footer v-if="$slots.footer" class="flex flex-wrap items-center gap-2 border-t bg-background p-3">
+      <footer
+        v-if="$slots.footer"
+        ref="footerEl"
+        :class="
+          footerHeight
+            ? 'relative flex shrink-0 flex-col items-stretch justify-start gap-2 border-t bg-background p-3'
+            : 'relative flex shrink-0 flex-wrap items-center gap-2 border-t bg-background p-3'
+        "
+        :style="footerHeight ? { height: `${footerHeight}px` } : undefined"
+      >
+        <!-- The line above the footer: drag to size the footer against the body -->
+        <div
+          v-if="footerHeight !== undefined"
+          class="group absolute inset-x-0 -top-2.5 z-30 flex h-5 cursor-row-resize items-center"
+          title="Drag to resize · double-click to reset"
+          @pointerdown="startFooterResize"
+          @dblclick="footerHeight = 0"
+        >
+          <span class="h-0.5 w-full transition-colors group-hover:bg-primary/60" />
+        </div>
         <slot name="footer" />
       </footer>
     </aside>
   </Transition>
 </template>
+
+<script lang="ts">
+/** Side panels open right now (the PR, Slack and Jira panels can hand over to each other) */
+let openPanels = 0
+</script>
 
 <style scoped>
 .slide-enter-active,

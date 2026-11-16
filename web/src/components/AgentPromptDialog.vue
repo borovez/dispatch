@@ -7,7 +7,7 @@ import { useDeck } from '@/stores/deck'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Textarea } from '@/components/ui/textarea'
+import MarkdownEditor from './MarkdownEditor.vue'
 
 /**
  * The implementation prompt for a Jira issue, to paste into any AI agent: links to the issue, its parent
@@ -56,7 +56,7 @@ async function copy() {
         </DialogDescription>
       </DialogHeader>
       <Skeleton v-if="loading" class="min-h-0 flex-1" />
-      <Textarea v-else v-model="prompt" spellcheck="false" class="field-sizing-fixed min-h-0 flex-1 resize-none font-mono text-xs leading-relaxed" />
+      <MarkdownEditor v-else v-model="prompt" fill mono />
       <div class="flex items-center gap-2">
         <span class="text-xs text-muted-foreground">{{ prompt.split('\n').length }} lines · {{ prompt.length.toLocaleString() }} characters</span>
         <span class="flex-1" />

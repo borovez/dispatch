@@ -378,6 +378,21 @@ export interface SlackItem {
 }
 
 /** A field Jira requires when creating an issue of a given project + type (beyond summary, description etc.) */
+/** A Slack user's profile card (side panel avatars) */
+export interface SlackUserProfile {
+  id: string
+  name: string
+  realName: string | null
+  title: string | null
+  /** Needs the users:read.email scope */
+  email: string | null
+  avatar: string | null
+  /** Opens the profile in Slack (team URL + /team/<id>) */
+  profileUrl: string | null
+  /** Opens a DM with them in the Slack app */
+  dmUrl: string | null
+}
+
 /** A message shown around a Slack inbox item (side panel) */
 export interface SlackMessage {
   ts: string

@@ -160,6 +160,17 @@
   *:hover {
     scrollbar-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent) transparent;
   }
+  /*
+   * A side panel is open: no page scrollbar beside it (the page still scrolls with the wheel). The
+   * padding stands in for the scrollbar's width (--page-sbw, measured by SidePanel) so nothing shifts.
+   */
+  html.side-panel-open {
+    scrollbar-width: none;
+    padding-right: var(--page-sbw, 0px);
+  }
+  html.side-panel-open::-webkit-scrollbar {
+    display: none;
+  }
   /* Icons keep their size in tight flex rows (a shrinking row shouldn't squash them) */
   svg {
     flex-shrink: 0;

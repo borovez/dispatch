@@ -61,6 +61,8 @@ import JiraLinks from './JiraLinks.vue'
 import RepoName from './RepoName.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
 import SectionToggle from './SectionToggle.vue'
+import ResizeHandle from './ResizeHandle.vue'
+import { cn } from '@/lib/utils'
 import ReleaseItems from './ReleaseItems.vue'
 import FlagList from './FlagList.vue'
 import TrainOrder from './TrainOrder.vue'
@@ -82,7 +84,24 @@ const dv = useLayout().view('drawer', {
   // Collapsible footer sections
   depsOpen: true,
   noteOpen: true,
+  // Footer section heights (px), set with their grab bars
+  depsHeight: 0, // 0: fit the list, up to 35% of the window
+  // Whole footer (px, 0 = default), set by dragging the line above it; the note fills what's left
+  footerHeight: 0,
 })
+/**
+ * While the note is open the footer has a set height and the note fills it, so dragging the line
+ * between the sections moves both ways under the pointer. Collapsed, the footer fits its content.
+ */
+const FOOTER_DEFAULT = 360
+const footerHeight = computed({
+  get: () => (dv.noteOpen ? dv.footerHeight || FOOTER_DEFAULT : undefined) as number,
+  set: (h: number) => (dv.footerHeight = h),
+})
+/** The note keeps at least this much room when the Dependencies list grows */
+const NOTE_MIN = 150
+const depsArea = ref<{ $el: HTMLElement } | null>(null)
+const depsViewport = () => depsArea.value?.$el.querySelector<HTMLElement>('[data-slot=scroll-area-viewport]')
 useArrowNav('pr', () => deck.selectedId, (id) => (deck.selectedId = id))
 const pr = computed(() => deck.selected)
 const refreshing = ref(false)
@@ -203,7 +222,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
 </script>
 
 <template>
-  <SidePanel :open="!!pr" @close="deck.selectedId = null">
+  <SidePanel v-model:footer-height="footerHeight" :open="!!pr" @close="deck.selectedId = null">
     <template v-if="pr" #header>
           <div class="mb-1.5 flex flex-wrap items-center gap-1.5">
             <Badge :variant="ACTION_TONE[pr.action.kind]">{{ pr.action.label }}</Badge>
@@ -458,13 +477,18 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
       </Tabs>
     <!-- Always visible at the bottom, whichever tab is open -->
     <template v-if="pr" #footer>
-      <div class="w-full space-y-3">
-        <section>
+      <div :class="cn('flex w-full flex-col gap-3', footerHeight && 'min-h-0 flex-1')">
+        <section class="shrink-0">
           <SectionToggle v-model:open="dv.depsOpen" label="Dependencies">
             <Badge variant="count">{{ pr.dependsOn.length + pr.dependents.length }}</Badge>
             <Badge v-if="waiting" variant="warning" class="h-4 px-1.5 text-[10px]">{{ waiting }} waiting</Badge>
           </SectionToggle>
-          <ScrollArea v-show="dv.depsOpen" class="mt-2 [&>[data-slot=scroll-area-viewport]]:max-h-[35vh]">
+          <ScrollArea
+            v-show="dv.depsOpen"
+            ref="depsArea"
+            :class="cn('mt-2', dv.depsHeight ? '[&>[data-slot=scroll-area-viewport]]:h-(--deps-h)' : '[&>[data-slot=scroll-area-viewport]]:max-h-[35vh]')"
+            :style="{ '--deps-h': `${dv.depsHeight}px` }"
+          >
           <div class="pr-3">
             <h4 class="mb-1 text-xs text-muted-foreground">Depends on: merge these first</h4>
             <ul class="space-y-1">
@@ -538,11 +562,29 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             </form>
           </div>
           </ScrollArea>
+          <ResizeHandle
+            v-if="dv.depsOpen"
+            line
+            :model-value="dv.depsHeight || 240"
+            :min="48"
+            :max="footerHeight ? Math.max(48, footerHeight - NOTE_MIN) : undefined"
+            :reset="0"
+            :target="depsViewport"
+            class="-mb-3"
+            @update:model-value="(h) => (dv.depsHeight = h)"
+          />
         </section>
         <SectionToggle v-if="!dv.noteOpen" v-model:open="dv.noteOpen" label="My note">
           <span v-if="note.trim()" class="truncate text-xs text-muted-foreground normal-case">{{ note.trim().split('\n')[0] }}</span>
         </SectionToggle>
-        <MarkdownEditor v-else v-model="note" placeholder="Private note… (Markdown)" :height="96" state-key="pr-note" class="w-full" @blur="saveMeta()">
+        <MarkdownEditor
+          v-else
+          v-model="note"
+          fill
+          placeholder="Private note… (Markdown)"
+          class="w-full"
+          @blur="saveMeta()"
+        >
           <template #label>
             <SectionToggle v-model:open="dv.noteOpen" label="My note" />
           </template>

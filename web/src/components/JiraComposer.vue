@@ -628,7 +628,7 @@ async function submit() {
           @keydown.enter.exact.prevent
         />
         <div data-inline-images class="flex min-h-0 flex-1 flex-col">
-          <MarkdownEditor v-model="description" placeholder="Add description… (paste or drop images)" state-key="jira-composer" fill :images="imagePreviews" />
+          <MarkdownEditor v-model="description" placeholder="Add description… (paste or drop images)" fill :images="imagePreviews" />
         </div>
       </div>
       <ScrollArea v-else class="min-h-0 flex-1">
@@ -643,7 +643,7 @@ async function submit() {
             @keydown.enter.exact.prevent
           />
           <div data-inline-images>
-            <MarkdownEditor v-model="description" placeholder="Add description… (paste or drop images)" state-key="jira-composer" :height="200" :images="imagePreviews" />
+            <MarkdownEditor v-model="description" placeholder="Add description… (paste or drop images)" :height="200" :images="imagePreviews" />
           </div>
         </div>
       </ScrollArea>

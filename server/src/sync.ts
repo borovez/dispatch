@@ -12,6 +12,7 @@ import {
   replaceJira,
   saveMyJiraKeys,
   upsertSlackItem,
+  supersedeSlackDms,
   saveMyLogins,
   saveSettings,
   saveSyncState,
@@ -132,6 +133,7 @@ async function doSync(): Promise<SyncState> {
       try {
         const r = await fetchSlackInbox(slack)
         for (const { item, autoDone } of r.items) upsertSlackItem(item, autoDone)
+        supersedeSlackDms(r.awaiting)
         closeStaleSlack(r.completeKinds, new Set(r.items.filter((i) => r.completeKinds.includes(i.item.kind)).map((i) => i.item.id)))
         pruneSlack(new Date(started - slack.lookbackDays * 2 * 86400_000).toISOString())
         slackCount = r.items.length

@@ -1,9 +1,9 @@
-import type { SlackConfig, SlackContext, SlackItem, SlackKind } from '../../shared/types.ts'
+import type { SlackConfig, SlackContext, SlackItem, SlackKind, SlackUserProfile } from '../../shared/types.ts'
 import { getSlackUsers, saveSlackUsers } from './db.ts'
 
 // Slack Web API with a *user* token (xoxp-). Required user scopes:
 //   search:read, im:history, mpim:history, im:read, mpim:read, channels:history,
-//   groups:history, users:read, chat:write (only for replying with the Jira link)
+//   groups:history, users:read, chat:write (replies), users:read.email (emails on profile cards)
 
 export class SlackError extends Error {
   constructor(
@@ -107,6 +107,8 @@ export interface SlackFetchResult {
   errors: string[]
   /** Kinds whose source was read successfully – stale open items of these kinds can be closed */
   completeKinds: SlackKind[]
+  /** DMs / group DMs read this sync → ts of the one message awaiting my reply there ('' when none) */
+  awaiting: Map<string, string>
 }
 
 /**
@@ -149,6 +151,7 @@ export async function fetchSlackInbox(cfg: SlackConfig): Promise<SlackFetchResul
   }
 
   const completeKinds: SlackKind[] = []
+  const awaiting = new Map<string, string>()
   const channelLabel = (ch: string, isIm?: boolean, isMpim?: boolean, name?: string) =>
     isIm || ch.startsWith('D') ? 'DM' : isMpim || name?.startsWith('mpdm-') ? 'Group DM' : name ? `#${name}` : ch
 
@@ -230,8 +233,10 @@ export async function fetchSlackInbox(cfg: SlackConfig): Promise<SlackFetchResul
         const unanswered = lastMine === -1 ? msgs : msgs.slice(0, lastMine)
         const answered = lastMine === -1 ? [] : msgs.slice(lastMine + 1)
         const kind: SlackKind = c.is_im ? 'dm' : 'group'
-        for (const m of unanswered.slice(0, 5))
-          raw.push({ kind, channelId: c.id, channelName: kind === 'dm' ? 'DM' : 'Group DM', m, awaitingReply: true, autoDone: false, permalink: null })
+        // One item per conversation: the latest message since my last one (the panel shows the rest)
+        const latest = unanswered[0]
+        awaiting.set(c.id, latest?.ts ?? '')
+        if (latest) raw.push({ kind, channelId: c.id, channelName: kind === 'dm' ? 'DM' : 'Group DM', m: latest, awaitingReply: true, autoDone: false, permalink: null })
         // I replied after these – close them if they were still open
         for (const m of answered.filter((x) => x.user !== me).slice(0, 5))
           raw.push({ kind, channelId: c.id, channelName: kind === 'dm' ? 'DM' : 'Group DM', m, awaitingReply: false, autoDone: true, permalink: null })
@@ -281,7 +286,7 @@ export async function fetchSlackInbox(cfg: SlackConfig): Promise<SlackFetchResul
       },
     })
   }
-  return { items: [...items.values()], errors, completeKinds }
+  return { items: [...items.values()], errors, completeKinds, awaiting }
 }
 
 /** Full thread (or surrounding messages) as plain text, for drafting a ticket. */
@@ -362,6 +367,41 @@ export async function messagesAround(cfg: SlackConfig, item: SlackItem, before =
     isTarget: m.ts === item.ts,
   }))
   return { messages, hasBefore, hasAfter }
+}
+
+/**
+ * Post a message to the item's conversation as me: in a thread when `threadTs` is given (a message's own ts
+ * starts its thread), else straight into the channel or DM. Needs chat:write.
+ */
+export async function postMessage(cfg: SlackConfig, item: SlackItem, text: string, threadTs?: string | null) {
+  await call(cfg.token, 'chat.postMessage', { channel: item.channelId, text, ...(threadTs ? { thread_ts: threadTs } : {}) })
+}
+
+/** The workspace's URL (https://x.slack.com/) and id, for profile links; asked once per process */
+let team: Promise<{ url: string; id: string }> | null = null
+const teamInfo = (token: string) =>
+  (team ??= call<{ url: string; team_id: string }>(token, 'auth.test')
+    .then((r) => ({ url: r.url, id: r.team_id }))
+    .catch((e) => {
+      team = null
+      throw e
+    }))
+
+/** A user's profile card: names, title, email (users:read.email) and links to their profile and a DM */
+export async function userProfile(cfg: SlackConfig, id: string): Promise<SlackUserProfile> {
+  const [r, t] = await Promise.all([call(cfg.token, 'users.info', { user: id }), teamInfo(cfg.token).catch(() => null)])
+  const u = r.user
+  const p = u.profile ?? {}
+  return {
+    id,
+    name: p.display_name || u.real_name || u.name,
+    realName: p.real_name || u.real_name || null,
+    title: p.title || null,
+    email: p.email || null,
+    avatar: p.image_192 ?? p.image_72 ?? p.image_48 ?? null,
+    profileUrl: t ? `${t.url.replace(/\/?$/, '/')}team/${id}` : null,
+    dmUrl: t ? `slack://user?team=${t.id}&id=${id}` : null,
+  }
 }
 
 export async function replyInThread(cfg: SlackConfig, item: SlackItem, text: string) {

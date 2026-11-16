@@ -421,6 +421,19 @@ export const getUiPrefs = () => kvGet<Record<string, unknown>>('uiPrefs', {})
 export const saveUiPrefs = (p: Record<string, unknown>) => kvSet('uiPrefs', p)
 
 /** Close open saved/todo items that are no longer saved / reacted in Slack. */
+/**
+ * A DM / group DM is one inbox item: its latest message awaiting my reply. Older ones from that
+ * conversation that are still untouched (new, no Jira link) go away; the panel shows them in context.
+ */
+export function supersedeSlackDms(awaiting: Map<string, string>) {
+  const del = db.prepare('DELETE FROM slack_items WHERE id = ?')
+  for (const it of listSlack()) {
+    if (it.status !== 'new' || it.jiraKey || !it.awaitingReply || (it.kind !== 'dm' && it.kind !== 'group')) continue
+    const latest = awaiting.get(it.channelId)
+    if (latest !== undefined && it.ts !== latest) del.run(it.id)
+  }
+}
+
 export function closeStaleSlack(kinds: string[], seen: Set<string>) {
   for (const it of listSlack())
     if (it.status === 'new' && kinds.includes(it.kind) && !seen.has(it.id)) setSlackStatus(it.id, 'done')

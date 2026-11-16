@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Textarea } from '@/components/ui/textarea'
+import MarkdownEditor from './MarkdownEditor.vue'
 
 /**
  * One property of the Jira composer as a chip: shows the value (or the field name when empty) and
@@ -225,7 +225,7 @@ function onKey(e: KeyboardEvent) {
       <!-- Number, text, date -->
       <form v-else class="flex flex-col gap-2 p-3" @submit.prevent="applyDraft">
         <label class="text-xs text-muted-foreground">{{ field.name }}</label>
-        <Textarea v-if="kind === 'text'" v-model="draft" rows="6" class="text-sm" @keydown.meta.enter.prevent="applyDraft" />
+        <MarkdownEditor v-if="kind === 'text'" v-model="draft" :height="160" @keydown="(e) => (e.metaKey || e.ctrlKey) && e.key === 'Enter' && (e.preventDefault(), applyDraft())" />
         <Input v-else ref="input" v-model="draft" :type="kind === 'number' ? 'number' : kind === 'date' ? 'date' : 'text'" step="any" class="h-8" />
         <div class="flex justify-end gap-2">
           <button type="submit" class="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90">Set</button>

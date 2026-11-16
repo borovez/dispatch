@@ -251,7 +251,7 @@ async function save() {
         </template>
         <template v-else>
           <input v-model="title" placeholder="Title" class="bg-transparent text-lg font-semibold outline-none placeholder:text-muted-foreground/60" />
-          <MarkdownEditor v-model="body" placeholder="Description (Markdown)" state-key="pr-writer" fill />
+          <MarkdownEditor v-model="body" placeholder="Description (Markdown)" fill />
         </template>
       </div>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowCounterClockwise, PhArrowSquareOut, PhCheck, PhKanban, PhX } from '@phosphor-icons/vue'
+import { PhArrowBendUpLeft, PhArrowCounterClockwise, PhArrowSquareOut, PhCheck, PhKanban, PhX } from '@phosphor-icons/vue'
 import type { SlackItem } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useEventListener } from '@vueuse/core'
@@ -14,7 +14,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
  * Open in Slack, create a Jira task, done / dismiss / back to inbox. Shared by the row (compact icons)
  * and the side panel (labelled buttons with keyboard shortcuts, moving on to the next message).
  */
-const props = withDefaults(defineProps<{ item: SlackItem; showOpen?: boolean; labelled?: boolean }>(), { showOpen: true, labelled: false })
+const props = withDefaults(defineProps<{ item: SlackItem; showOpen?: boolean; labelled?: boolean; canReply?: boolean }>(), { showOpen: true, labelled: false, canReply: false })
+/** Panel only: open the reply box (R) */
+const emit = defineEmits<{ reply: [] }>()
 const deck = useDeck()
 
 async function status(s: SlackItem['status']) {
@@ -31,7 +33,7 @@ useEventListener(window, 'keydown', (e: KeyboardEvent) => {
   if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]') || document.querySelector(LAYER_OPEN)) return
   const k = e.key.toLowerCase()
   const open = props.item.status === 'new'
-  const act = k === 'j' && !props.item.jiraKey ? jira : k === 'd' && open ? () => status('done') : k === 'x' && open ? () => status('dismissed') : k === 'u' && !open ? () => status('new') : null
+  const act = k === 'r' && props.canReply ? () => emit('reply') : k === 'j' && !props.item.jiraKey ? jira : k === 'd' && open ? () => status('done') : k === 'x' && open ? () => status('dismissed') : k === 'u' && !open ? () => status('new') : null
   if (!act) return
   e.preventDefault()
   act()
@@ -40,6 +42,7 @@ useEventListener(window, 'keydown', (e: KeyboardEvent) => {
 
 <template>
   <div v-if="labelled" class="flex flex-1 flex-wrap items-center gap-2">
+    <Button v-if="canReply" size="sm" variant="outline" @click="emit('reply')"><PhArrowBendUpLeft /> Reply <Kbd>R</Kbd></Button>
     <Button v-if="!item.jiraKey" size="sm" @click="jira"><PhKanban /> Create Jira task <Kbd>J</Kbd></Button>
     <span class="flex-1" />
     <template v-if="item.status === 'new'">

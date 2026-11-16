@@ -32,10 +32,11 @@ import {
 import { draftJiraIssue, draftPrText, envCredentials, testAi } from './ai.ts'
 import { keepDeclarations } from './prWriter.ts'
 import { buildAgentPrompt } from './agentPrompt.ts'
+import { buildSlackPrompt } from './slackPrompt.ts'
 import { startUpdate, updateStatus, VERSION } from './updates.ts'
 import { claudeMdGuide } from './guides.ts'
 import { claudeBin } from './claudeCode.ts'
-import { messagesAround, replyInThread, slackAuthTest, threadContext } from './slack.ts'
+import { messagesAround, postMessage, replyInThread, userProfile, slackAuthTest, threadContext } from './slack.ts'
 import { fetchPrsByNodeId, getPrText, ghCliToken, listRepos, prCommits, prDetail, prFileNames, prTemplate, updatePrText, whoAmI } from './github.ts'
 import {
   addAttachments,
@@ -450,6 +451,30 @@ api.get('/slack/:id/around', async (c) => {
   if (!s.slack?.token || !item) throw bad('Unknown Slack item')
   const n = (q: string | undefined) => Math.min(50, Math.max(0, Number(q ?? 2) || 0))
   return c.json(await messagesAround(s.slack, item, n(c.req.query('before')), n(c.req.query('after'))))
+})
+
+/** Reply as me: into a message's thread (`threadTs`) or straight into the conversation */
+api.post('/slack/:id/reply', async (c) => {
+  const s = getSettings()
+  const item = getSlackItem(c.req.param('id'))
+  if (!s.slack?.token || !item) throw bad('Unknown Slack item')
+  const body = z.object({ text: z.string().trim().min(1), threadTs: z.string().nullish() }).parse(await c.req.json())
+  await postMessage(s.slack, item, body.text, body.threadTs)
+  return c.json({ ok: true })
+})
+
+api.get('/slack/users/:id', async (c) => {
+  const s = getSettings()
+  if (!s.slack?.token) throw bad('Slack is not connected')
+  return c.json(await userProfile(s.slack, c.req.param('id')))
+})
+
+/** A Markdown brief of the conversation around a Slack item, to paste into any AI chat */
+api.get('/slack/:id/prompt', async (c) => {
+  const item = getSlackItem(c.req.param('id'))
+  if (!item) throw bad('Unknown Slack item')
+  const n = (q: string | undefined) => (q === undefined ? undefined : Number(q) || 0)
+  return c.json({ prompt: await buildSlackPrompt(item, n(c.req.query('before')), n(c.req.query('after'))) })
 })
 
 // ---------- PR writer: Claude rewrites a PR's title and description ----------

@@ -27,7 +27,7 @@ const DEFAULTS: SlackConfig = {
   doneReactions: ['white_check_mark', 'heavy_check_mark', 'done'],
 }
 const SCOPES =
-  'search:read, im:history, mpim:history, im:read, mpim:read, channels:history, groups:history, users:read, channels:read, groups:read, stars:read, reactions:read, reactions:write, chat:write'
+  'search:read, im:history, mpim:history, im:read, mpim:read, channels:history, groups:history, users:read, users:read.email, channels:read, groups:read, stars:read, reactions:read, reactions:write, chat:write'
 
 const details = computed(() => {
   const s = slack.value
@@ -80,7 +80,10 @@ const submit = () => st.saveSection({ slack: draft.value }, slack.value ? 'Slack
         <Field label="Done reactions" hint="A todo you also react to with one of these moves to Done">
           <Input :model-value="draft.doneReactions.join(', ')" placeholder="white_check_mark, heavy_check_mark" @change="draft.doneReactions = splitList(($event.target as HTMLInputElement).value).map((r) => r.replace(/:/g, ''))" />
         </Field>
-        <Label class="cursor-pointer gap-2 self-center font-normal"><Switch v-model="draft.includeSaved" /> Include saved messages</Label>
+        <div class="space-y-1 self-center">
+          <Label class="cursor-pointer gap-2 font-normal"><Switch v-model="draft.includeSaved" /> Include saved messages</Label>
+          <p class="text-xs text-muted-foreground">Starred messages only. Slack's newer Later list isn't available to apps; use a todo reaction instead.</p>
+        </div>
       </div>
     </template>
   </ConnectionCard>

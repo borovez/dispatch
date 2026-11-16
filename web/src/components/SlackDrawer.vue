@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { PhArrowDown, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhRocketLaunch } from '@phosphor-icons/vue'
-import type { SlackContext } from '@shared/types'
+import { PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
+import type { SlackContext, SlackMessage } from '@shared/types'
+import { toast } from 'vue-sonner'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useArrowNav } from '@/composables/prNav'
 import { useReleaseNav } from '@/composables/releaseNav'
+import { copySlackPrompt } from '@/composables/itemMenus'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import SidePanel from './SidePanel.vue'
 import SlackText from './SlackText.vue'
 import SlackActions from './SlackActions.vue'
+import SlackUserCard from './SlackUserCard.vue'
+import SlackReplyBox from './SlackReplyBox.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -64,6 +68,7 @@ watch(
     ctx.value = null
     error.value = ''
     counts.value = { before: 2, after: 2 }
+    closeReply()
     if (id) load(id, { reveal: true })
   },
   { immediate: true },
@@ -83,24 +88,107 @@ async function more(side: 'before' | 'after') {
   }
   loading.value = ''
 }
+
+/** Fetches the loaded window again from Slack (new replies, edits) */
+const resyncing = ref(false)
+async function resync() {
+  const id = item.value?.id
+  if (!id || resyncing.value) return
+  resyncing.value = true
+  for (const k of [...cache.keys()]) if (k.startsWith(`${id}|`)) cache.delete(k)
+  error.value = ''
+  await load(id)
+  resyncing.value = false
+}
+
+/**
+ * Reply box. With a message picked, the reply goes into that message's thread (in a thread view: the
+ * thread); without one, into the thread being shown, else straight into the channel or DM.
+ */
+const replying = ref(false)
+const replyTo = ref<SlackMessage | null>(null)
+const draft = ref('')
+const sending = ref(false)
+const box = ref<InstanceType<typeof SlackReplyBox> | null>(null)
+/** People in the loaded conversation, for @mentions */
+const people = computed(() => [...new Map((ctx.value?.messages ?? []).filter((m) => m.user).map((m) => [m.user, { id: m.user, name: m.userName }])).values()])
+const replyThread = computed(() => item.value?.threadTs ?? replyTo.value?.ts ?? null)
+const replyLabel = computed(() => {
+  const i = item.value
+  if (!i) return ''
+  if (replyTo.value) return i.threadTs ? `Reply in the thread to ${replyTo.value.userName}` : `Reply in the thread of ${replyTo.value.userName}'s message`
+  return i.threadTs ? 'Reply in the thread' : `Message ${i.channelName === 'DM' ? i.userName : i.channelName}`
+})
+async function startReply(m: SlackMessage | null = null) {
+  replyTo.value = m
+  replying.value = true
+  await nextTick()
+  await box.value?.focus()
+}
+function closeReply() {
+  replying.value = false
+  replyTo.value = null
+  draft.value = ''
+}
+async function send(text: string) {
+  const i = item.value
+  if (!i || !text || sending.value) return
+  sending.value = true
+  try {
+    await api.slackReply(i.id, text, replyThread.value)
+    toast.success(replyThread.value ? 'Replied in the thread' : `Sent to ${i.channelName}`)
+    closeReply()
+    // Show the new message when it lands in the conversation being shown
+    if (i.threadTs || !replyThread.value) counts.value = { ...counts.value, after: counts.value.after + 1 }
+    await resync()
+  } catch (e) {
+    toast.error(`Couldn't send: ${(e as Error).message}`)
+  } finally {
+    sending.value = false
+  }
+}
+/** Copies at least what's loaded (and 20 messages either side) as a Markdown brief */
+const copying = ref(false)
+async function copyPrompt() {
+  if (!item.value || copying.value) return
+  copying.value = true
+  await copySlackPrompt(item.value, counts.value.before, counts.value.after)
+  copying.value = false
+}
 </script>
 
 <template>
   <SidePanel :open="!!item" @close="deck.selectedSlackId = null">
-    <!-- To the release this message is about -->
-    <template v-if="item && releaseId" #actions>
+    <template v-if="item" #actions>
       <Tooltip>
         <TooltipTrigger as-child>
-          <Button variant="ghost" size="icon-sm" aria-label="Open on the Releases page" @click="nav.openReleases(releaseId!, isHotfix ? 'hotfixes' : 'releases')"><PhRocketLaunch /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Copy the conversation as an AI prompt" :disabled="copying" @click="copyPrompt"><PhCircleNotch v-if="copying" class="animate-spin" /><PhRobot v-else /></Button>
         </TooltipTrigger>
-        <TooltipContent>Open the release this message is about</TooltipContent>
+        <TooltipContent>Copy the conversation as an AI prompt</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger as-child>
-          <Button variant="ghost" size="icon-sm" aria-label="Show in the release graph" @click="nav.openGraph(releaseId!, releaseId!.split('#')[0])"><PhGraph /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Reload from Slack" :disabled="resyncing" @click="resync">
+            <PhArrowsClockwise :class="{ 'animate-spin': resyncing }" />
+          </Button>
         </TooltipTrigger>
-        <TooltipContent>Show in the release graph</TooltipContent>
+        <TooltipContent>Reload the conversation from Slack</TooltipContent>
       </Tooltip>
+      <!-- To the release this message is about -->
+      <template v-if="releaseId">
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon-sm" aria-label="Open on the Releases page" @click="nav.openReleases(releaseId!, isHotfix ? 'hotfixes' : 'releases')"><PhRocketLaunch /></Button>
+          </TooltipTrigger>
+          <TooltipContent>Open the release this message is about</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon-sm" aria-label="Show in the release graph" @click="nav.openGraph(releaseId!, releaseId!.split('#')[0])"><PhGraph /></Button>
+          </TooltipTrigger>
+          <TooltipContent>Show in the release graph</TooltipContent>
+        </Tooltip>
+      </template>
     </template>
     <template v-if="item" #header>
       <div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -134,15 +222,38 @@ async function more(side: 'before' | 'after') {
             v-for="m in ctx.messages"
             :key="m.ts"
             :data-target="m.isTarget || undefined"
-            :class="cn('flex gap-3 rounded-lg border p-3', m.isTarget ? 'border-primary bg-primary/10' : 'border-transparent')"
+            :class="
+              cn(
+                'group relative flex gap-3 rounded-lg border p-3',
+                m.isTarget ? 'border-primary bg-primary/10' : replyTo?.ts === m.ts ? 'border-border bg-accent' : 'border-transparent',
+              )
+            "
           >
-            <Avatar class="size-7 shrink-0">
-              <AvatarImage v-if="m.userAvatar" :src="m.userAvatar" :alt="m.userName" />
-              <AvatarFallback class="text-[10px]">{{ m.userName.slice(0, 2).toUpperCase() }}</AvatarFallback>
-            </Avatar>
+            <SlackUserCard :user-id="m.user" :name="m.userName" :avatar="m.userAvatar">
+              <Avatar class="size-7 shrink-0">
+                <AvatarImage v-if="m.userAvatar" :src="m.userAvatar" :alt="m.userName" />
+                <AvatarFallback class="text-[10px]">{{ m.userName.slice(0, 2).toUpperCase() }}</AvatarFallback>
+              </Avatar>
+            </SlackUserCard>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  variant="outline"
+                  size="icon-xs"
+                  class="absolute top-2 right-2 bg-background opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  aria-label="Reply to this message"
+                  @click="startReply(m)"
+                >
+                  <PhArrowBendUpLeft />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ item.threadTs ? 'Reply in the thread' : 'Reply in its thread' }}</TooltipContent>
+            </Tooltip>
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 text-xs">
-                <span class="font-semibold">{{ m.userName }}</span>
+                <SlackUserCard :user-id="m.user" :name="m.userName" :avatar="m.userAvatar">
+                  <span class="font-semibold hover:underline">{{ m.userName }}</span>
+                </SlackUserCard>
                 <span class="text-muted-foreground" :title="m.postedAt">{{ timeAgo(m.postedAt) }}</span>
                 <Badge v-if="m.isTarget" variant="primary" class="h-4 text-[10px]">{{ KIND[item.kind].label }}</Badge>
               </div>
@@ -171,8 +282,19 @@ async function more(side: 'before' | 'after') {
         </template>
       </div>
     </ScrollArea>
+    <SlackReplyBox
+      v-if="item && replying"
+      ref="box"
+      v-model="draft"
+      :label="replyLabel"
+      :quote="replyTo?.text"
+      :people="people"
+      :sending="sending"
+      @send="send"
+      @cancel="closeReply"
+    />
     <template v-if="item" #footer>
-      <SlackActions :item="item" labelled />
+      <SlackActions :item="item" labelled :can-reply="!replying" @reply="startReply()" />
     </template>
   </SidePanel>
 </template>

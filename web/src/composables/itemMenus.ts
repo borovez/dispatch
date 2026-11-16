@@ -57,6 +57,18 @@ export async function copyText(text: string, what: string) {
   }
 }
 
+/** The Slack conversation around an item as a Markdown brief for any AI chat (at least 20 messages either side) */
+export async function copySlackPrompt(item: SlackItem, before = 20, after = 20) {
+  const id = toast.loading('Collecting the conversation…')
+  try {
+    const { prompt } = await api.slackPrompt(item.id, Math.max(20, before), Math.max(20, after))
+    await navigator.clipboard.writeText(prompt)
+    toast.success('Copied the conversation as an AI prompt', { id })
+  } catch (e) {
+    toast.error(`Couldn't copy the conversation: ${(e as Error).message}`, { id })
+  }
+}
+
 /** A Jira issue pre-filled from a PR: its title without Jira keys or a conventional-commit prefix, and a link back */
 export function issueSeedFromPr(p: PrView) {
   const summary = p.title.replace(/\s*\[[A-Z][A-Z0-9_]+-\d+\]/g, '').replace(/^\w+(\([^)]*\))?!?:\s*/, '').trim()
@@ -274,6 +286,7 @@ export function useSlackMenu() {
           ...(item.permalink ? [{ label: 'Link', run: () => copyText(item.permalink!, 'link') }] : []),
           { label: 'Text', run: () => copyText(item.text, 'message') },
           { label: 'As a quote', hint: `${item.userName}`, run: () => copyText(`${quote}\n— ${item.userName}`, 'quote') },
+          { label: 'Conversation for AI', icon: PhRobot, hint: 'Markdown', run: () => copySlackPrompt(item) },
         ],
       },
     ]
