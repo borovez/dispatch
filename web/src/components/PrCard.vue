@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { useReleaseStatus } from '@/composables/trainStatus'
 import { computed, type HTMLAttributes } from 'vue'
-import { PhArrowRight, PhCheckCircle, PhCircleNotch, PhCloudSlash, PhGitMerge, PhLightning, PhRocketLaunch, PhXCircle } from '@phosphor-icons/vue'
+import { PhTrain, PhArrowRight, PhCheckCircle, PhCircleNotch, PhCloudSlash, PhGitMerge, PhLightning, PhRocketLaunch, PhXCircle } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { ACTION_TONE, CHECK_STYLE, jiraTone } from '@/utils/format'
@@ -18,6 +19,10 @@ import PrListPopover from './PrListPopover.vue'
  */
 const props = defineProps<{ id: string; pr: PrView | null; isNext?: boolean; accent?: string; selected?: boolean; class?: HTMLAttributes['class'] }>()
 const deck = useDeck()
+/** A release in a train: its train status (ready to merge, waits for an earlier release…) instead of the PR action */
+const releaseStatus = useReleaseStatus()
+const train = computed(() => (props.pr?.flow === 'release' ? ((deck.overview?.trains ?? []).find((t) => t.releases.includes(props.id)) ?? null) : null))
+const trainStatus = computed(() => (train.value && props.pr?.state === 'OPEN' ? releaseStatus(train.value, props.id) : null))
 /** Release PRs: what they ship */
 const contents = computed(() => deck.releaseById.get(props.id))
 const contentIds = computed(() => contents.value?.items.map((i) => i.id) ?? [])
@@ -80,7 +85,10 @@ const jira = computed(() => {
           {{ pr.changedFiles }} {{ pr.changedFiles === 1 ? 'file' : 'files' }} ·
           <span class="text-success">+{{ pr.additions }}</span> <span class="text-destructive">−{{ pr.deletions }}</span>
         </div>
-        <Badge :variant="ACTION_TONE[pr.action.kind]" class="h-5 max-w-full truncate text-[11px]">{{ pr.action.label }}</Badge>
+        <Badge v-if="trainStatus" :variant="trainStatus.tone" class="h-5 max-w-full gap-1 truncate text-[11px]" :title="[`In a release train: ${trainStatus.label}`, trainStatus.title].filter(Boolean).join('\n')">
+          <PhTrain />{{ trainStatus.label }}
+        </Badge>
+        <Badge v-else :variant="ACTION_TONE[pr.action.kind]" class="h-5 max-w-full truncate text-[11px]">{{ pr.action.label }}</Badge>
         <!-- Jira issue and its epic/parent, with their statuses -->
         <div v-if="jira" class="space-y-1 border-t pt-1.5 text-[11px]">
           <div class="flex min-w-0 items-center gap-1" :title="jira.issue ? `${jira.key}: ${jira.issue.summary}` : jira.key">

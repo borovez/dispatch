@@ -11,28 +11,7 @@ import { loadPrDetail } from '@/composables/prDetail'
 import { releaseStatus } from '@shared/release'
 import SidePanel from './SidePanel.vue'
 import { computed, ref, watch } from 'vue'
-import {
-  PhArrowSquareOut,
-  PhArrowsClockwise,
-  PhCircleNotch,
-  PhGraph,
-  PhTrain,
-  PhInfo,
-  PhWarning,
-  PhCheckCircle,
-  PhGitBranch,
-  PhCaretDown,
-  PhPlus,
-  PhPushPin,
-  PhSquareSplitHorizontal,
-  PhRocketLaunch,
-  PhTrash,
-  PhXCircle,
-  PhNotePencil,
-  PhPencilSimple,
-  PhMagicWand,
-  PhRobot,
-} from '@phosphor-icons/vue'
+import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhCaretDown, PhPlus, PhPushPin, PhSquareSplitHorizontal, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit } from '@phosphor-icons/vue'
 import type { DepEdge, PrDetail, PrView } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
@@ -192,13 +171,47 @@ watch(
   },
   { immediate: true },
 )
-/** Re-read this PR from GitHub now (checks, reviews, description; contents for a release) without a full sync */
+/**
+ * Reviews as badges, one per person: approved (green check), changes requested (red x), commented
+ * without a verdict (speech bubble), dismissed; requested and not given yet (dashed circle); asked
+ * again after reviewing (circular arrows, tooltip says the last verdict).
+ */
+const REVIEW_STATE: Record<string, { tone: 'success' | 'destructive' | 'muted'; icon: unknown; label: string }> = {
+  APPROVED: { tone: 'success', icon: PhCheckCircle, label: 'Approved' },
+  CHANGES_REQUESTED: { tone: 'destructive', icon: PhXCircle, label: 'Changes requested' },
+  COMMENTED: { tone: 'muted', icon: PhChatCircle, label: 'Commented, no approval yet' },
+  DISMISSED: { tone: 'muted', icon: PhProhibit, label: 'Review dismissed' },
+  PENDING: { tone: 'muted', icon: PhCircleDashed, label: 'Review in progress' },
+}
+const reviewBadges = computed(() => {
+  const p = pr.value
+  if (!p) return []
+  const requested = new Map(p.requestedReviewers.map((r) => [r.login.toLowerCase(), r]))
+  const out = p.reviews.map((r) => {
+    const st = REVIEW_STATE[r.state] ?? REVIEW_STATE.COMMENTED
+    const when = r.submittedAt ? ` ${timeAgo(r.submittedAt)}` : ''
+    if (requested.has(r.login.toLowerCase()))
+      return { key: r.login, login: r.login, tone: 'outline' as const, icon: PhArrowsClockwise, pending: true, title: `${r.login}: review requested again, not given yet (last: ${st.label.toLowerCase()}${when})` }
+    return { key: r.login, login: r.login, tone: st.tone, icon: st.icon, pending: false, title: `${r.login}: ${st.label}${when}` }
+  })
+  const reviewed = new Set(p.reviews.map((r) => r.login.toLowerCase()))
+  for (const r of p.requestedReviewers)
+    if (!reviewed.has(r.login.toLowerCase()))
+      out.push({ key: `rq${r.login}`, login: `${r.isTeam ? 'team/' : ''}${r.login}`, tone: 'outline' as const, icon: PhCircleDashed, pending: true, title: `Review requested from ${r.isTeam ? 'the team ' : ''}${r.login}, not given yet` })
+  return out
+})
+
+/**
+ * Re-read this PR from GitHub now (checks, reviews, description; contents for a release) and its Jira
+ * issues from Jira (status, assignee, summary for the Jira section), without a full sync
+ */
 const resyncing = ref(false)
 async function resync() {
   const id = pr.value?.id
   if (!id || resyncing.value) return
+  const keys = deck.overview?.configured.jira ? pr.value!.jiraKeys : []
   resyncing.value = true
-  await deck.mutate(() => api.resyncPr(id))
+  await deck.mutate(() => Promise.all([api.resyncPr(id), ...keys.map((k) => api.jiraRefresh(k))]))
   resyncing.value = false
 }
 // The beside window follows the PR shown here
@@ -266,7 +279,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
               <PhArrowsClockwise :class="{ 'animate-spin': resyncing }" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Resync this PR from GitHub</TooltipContent>
+          <TooltipContent>Resync this PR from GitHub{{ pr.jiraKeys.length && deck.overview?.configured.jira ? ' and its Jira issues' : '' }}</TooltipContent>
         </Tooltip>
         <Tooltip v-if="pr.state === 'OPEN'">
           <TooltipTrigger as-child>
@@ -422,10 +435,9 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
           <section>
             <h3 class="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Reviews</h3>
             <div class="flex flex-wrap gap-1.5">
-              <Badge v-for="r in pr.reviews" :key="r.login" :variant="r.state === 'APPROVED' ? 'success' : r.state === 'CHANGES_REQUESTED' ? 'warning' : 'muted'">
-                <PhCheckCircle v-if="r.state === 'APPROVED'" />{{ r.login }}
+              <Badge v-for="r in reviewBadges" :key="r.key" :variant="r.tone" :class="r.pending && 'text-muted-foreground'" :title="r.title">
+                <component :is="r.icon" />{{ r.login }}
               </Badge>
-              <Badge v-for="r in pr.requestedReviewers" :key="'rq' + r.login" variant="outline">{{ r.isTeam ? 'team/' : '' }}{{ r.login }} · requested</Badge>
               <span v-if="!pr.reviews.length && !pr.requestedReviewers.length" class="text-sm text-muted-foreground">No reviews yet</span>
             </div>
             <button v-if="pr.unresolvedThreads" class="mt-1 text-xs text-warning hover:underline" @click="dv.tab = 'conversations'">
