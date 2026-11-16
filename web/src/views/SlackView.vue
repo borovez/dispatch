@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import StickyToolbar from '@/components/StickyToolbar.vue'
-import { computed } from 'vue'
-import { PhFunnel, PhMagnifyingGlass, PhSlackLogo } from '@phosphor-icons/vue'
+import { computed, ref } from 'vue'
+import { toast } from 'vue-sonner'
+import { api } from '@/api'
+import { PhArrowsClockwise, PhFunnel, PhMagnifyingGlass, PhSlackLogo } from '@phosphor-icons/vue'
 import type { SlackItem, SlackKind, SlackStatus } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useLayout, type SortDir } from '@/stores/layout'
@@ -13,8 +15,23 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const deck = useDeck()
+
+/** Refresh: fetch the Slack inbox now (only Slack, not a full sync), then reload */
+const refreshing = ref(false)
+async function refresh() {
+  if (refreshing.value) return
+  refreshing.value = true
+  let warn = ''
+  await deck.mutate(async () => {
+    const r = await api.slackRefresh()
+    if (r.errors.length) warn = r.errors[0] + (r.errors.length > 1 ? ` (+${r.errors.length - 1} more)` : '')
+  })
+  if (warn) toast.warning(warn)
+  refreshing.value = false
+}
 /** View options in the View menu, and their defaults (Reset view) */
 const VIEW_DEFAULTS = { kind: '' as SlackKind | '', dir: 'desc' as SortDir }
 const v = useLayout().view('slack', { status: 'new' as SlackStatus, query: '', ...VIEW_DEFAULTS })
@@ -76,6 +93,14 @@ const chips = computed(() =>
         </div>
         <FilterChips :chips="chips" />
         <span class="flex-1" />
+        <Tooltip v-if="deck.overview?.configured.slack">
+          <TooltipTrigger as-child>
+            <Button variant="outline" size="icon-sm" aria-label="Refresh the Slack inbox" :disabled="refreshing" @click="refresh">
+              <PhArrowsClockwise :class="refreshing && 'animate-spin'" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Refresh the Slack inbox (only Slack, not a full sync)</TooltipContent>
+        </Tooltip>
         <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
       </div>
     </StickyToolbar>

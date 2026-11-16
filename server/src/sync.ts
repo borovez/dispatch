@@ -1,4 +1,4 @@
-import type { GithubAccount, JiraIssue, PrId, PrRecord, Relation, SyncState, SyncStep } from '../../shared/types.ts'
+import type { GithubAccount, JiraIssue, PrId, PrRecord, Relation, Settings, SyncState, SyncStep } from '../../shared/types.ts'
 import {
   replaceFeatureFlags,
   listFeatureFlags,
@@ -37,6 +37,20 @@ export function runSync(): Promise<SyncState> {
 }
 
 export const isSyncing = () => inFlight !== null
+
+/**
+ * The Slack inbox on its own (the sync's Slack step, and the Slack page's refresh button): fetch, store,
+ * close what's no longer pending, prune old items. Returns how many items Slack returned.
+ */
+export async function syncSlack(slack: NonNullable<Settings['slack']>, errors: string[]): Promise<number> {
+  const r = await fetchSlackInbox(slack)
+  for (const { item, autoDone } of r.items) upsertSlackItem(item, autoDone)
+  supersedeSlackDms(r.awaiting)
+  closeStaleSlack(r.completeKinds, new Set(r.items.filter((i) => r.completeKinds.includes(i.item.kind)).map((i) => i.item.id)))
+  pruneSlack(new Date(Date.now() - slack.lookbackDays * 2 * 86400_000).toISOString())
+  errors.push(...r.errors.map((e) => `[slack] ${e}`))
+  return r.items.length
+}
 
 const STEPS: [id: string, label: string][] = [
   ['github', 'GitHub pull requests'],
@@ -133,13 +147,7 @@ async function doSync(): Promise<SyncState> {
     if (!slack?.token) p.skip('slack', 'Not connected')
     else await p.run('slack', errors, async (errors) => {
       try {
-        const r = await fetchSlackInbox(slack)
-        for (const { item, autoDone } of r.items) upsertSlackItem(item, autoDone)
-        supersedeSlackDms(r.awaiting)
-        closeStaleSlack(r.completeKinds, new Set(r.items.filter((i) => r.completeKinds.includes(i.item.kind)).map((i) => i.item.id)))
-        pruneSlack(new Date(started - slack.lookbackDays * 2 * 86400_000).toISOString())
-        slackCount = r.items.length
-        errors.push(...r.errors.map((e) => `[slack] ${e}`))
+        slackCount = await syncSlack(slack, errors)
       } catch (e) {
         errors.push(`[slack] ${(e as Error).message}`)
       }

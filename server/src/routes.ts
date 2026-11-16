@@ -63,7 +63,7 @@ import {
 import { findLinkedPrs } from './linkedPrs.ts'
 import { buildOverview } from './model.ts'
 import { extractJiraKeys, normaliseRef, parseBodyDependencies, parsePrId } from './refs.ts'
-import { accountForOwner, runSync } from './sync.ts'
+import { accountForOwner, runSync, syncSlack } from './sync.ts'
 import { repoCatalog } from './repoCatalog.ts'
 
 export const api = new Hono()
@@ -546,6 +546,15 @@ api.get('/slack/:id/thread-replies', async (c) => {
 })
 
 /** Reply as me: into a message's thread (`threadTs`) or straight into the conversation */
+/** Slack page's refresh: just the Slack inbox, not a full sync */
+api.post('/slack/refresh', async (c) => {
+  const slack = getSettings().slack
+  if (!slack?.token) throw bad('Slack not connected')
+  const errors: string[] = []
+  const items = await syncSlack(slack, errors)
+  return c.json({ items, errors })
+})
+
 api.post('/slack/:id/reply', async (c) => {
   const s = getSettings()
   const item = getSlackItem(c.req.param('id'))
