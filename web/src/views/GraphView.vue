@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onEscape } from '@/composables/escape'
 import { computed, nextTick, ref, watch } from 'vue'
+import { unrefElement, useElementSize } from '@vueuse/core'
 import { MarkerType, Panel, Position, VueFlow, useVueFlow, type Connection, type Edge, type EdgeMouseEvent, type Node, type NodeMouseEvent } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { ControlButton, Controls } from '@vue-flow/controls'
@@ -9,16 +10,16 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@/components/flowTheme.css'
-import { PhArrowsCounterClockwise, PhCircleNotch, PhPlus, PhBuildings, PhGitBranch, PhGraph, PhHandGrabbing, PhTrash, PhX } from '@phosphor-icons/vue'
+import { PhArrowsCounterClockwise, PhArrowsDownUp, PhCheckCircle, PhClock, PhCircleNotch, PhPlus, PhBuildings, PhGitBranch, PhGraph, PhHandGrabbing, PhTrash, PhX } from '@phosphor-icons/vue'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { DepEdge, DependencyKind, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
+import { cn } from '@/lib/utils'
 import { useDependencies } from '@/composables/dependencies'
 import { useLayout } from '@/stores/layout'
 import GraphNode, { CARD_W, cardHeight, type GraphNodeData } from '@/components/GraphNode.vue'
 import FilterChips from '@/components/FilterChips.vue'
 import ViewMenu, { type ViewSection } from '@/components/ViewMenu.vue'
-import RepoName from '@/components/RepoName.vue'
 import PrPicker from '@/components/PrPicker.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -159,24 +160,30 @@ const path = computed(() => {
 const edgeKey = (e: DepEdge) => `${e.kind}:${e.to}->${e.from}`
 const hoveredEdge = ref<string | null>(null)
 const selectedEdge = ref<DepEdge | null>(null)
+/** Where the edge was clicked, relative to the graph: its card opens there */
+/** Where the edge was clicked, in graph coordinates: the card stays there while the graph pans and zooms */
+const edgeAt = ref<{ x: number; y: number } | null>(null)
 
 const edges = computed<Edge[]>(() =>
   visibleEdges.value.map((e) => {
     const key = edgeKey(e)
-    const color = e.satisfied ? 'var(--success)' : 'var(--warning)'
+    const picked = !!selectedEdge.value && edgeKey(selectedEdge.value) === key
+    // The picked edge is primary, thicker and glows (.is-picked); the others fade while it's open
+    const color = picked ? 'var(--primary)' : e.satisfied ? 'var(--success)' : 'var(--warning)'
     const onPath = path.value?.edges.has(key)
-    const active = hoveredEdge.value === key || (selectedEdge.value && edgeKey(selectedEdge.value) === key) || onPath
-    const dimmed = (path.value && !onPath) || (hoveredEdge.value && hoveredEdge.value !== key)
+    const active = hoveredEdge.value === key || picked || onPath
+    const dimmed = (path.value && !onPath) || (hoveredEdge.value && hoveredEdge.value !== key) || (selectedEdge.value && !picked && hoveredEdge.value !== key)
     return {
       id: key,
       source: e.to,
       target: e.from,
       type: 'smoothstep',
       animated: !!active || (!e.satisfied && nextSteps.value.has(e.to)),
-      zIndex: active ? 5 : 0,
+      zIndex: picked ? 6 : active ? 5 : 0,
+      class: picked ? 'is-picked' : undefined,
       style: {
         stroke: color,
-        strokeWidth: active ? 3 : 1.75,
+        strokeWidth: picked ? 4 : active ? 3 : 1.75,
         strokeDasharray: e.kind === 'release' ? '6 4' : undefined,
         opacity: dimmed ? 0.15 : active || !e.satisfied ? 1 : 0.55,
       },
@@ -186,7 +193,9 @@ const edges = computed<Edge[]>(() =>
   }),
 )
 
-const { fitView } = useVueFlow('dep-graph')
+const { fitView, viewport } = useVueFlow('dep-graph')
+const graphBox = ref<InstanceType<typeof Card> | null>(null)
+const { width: graphW, height: graphH } = useElementSize(graphBox)
 // Re-fit when the set of nodes changes (filters, new links), not on every poll
 watch(
   () => nodeIds.value.join('|'),
@@ -205,7 +214,34 @@ function onNodeClick({ node }: NodeMouseEvent) {
     window.open(`https://github.com/${repo}/pull/${n}`, '_blank', 'noopener')
   }
 }
-const onEdgeClick = ({ edge }: EdgeMouseEvent) => (selectedEdge.value = edge.data as DepEdge)
+function onEdgeClick({ edge, event }: EdgeMouseEvent) {
+  selectedEdge.value = edge.data as DepEdge
+  const box = (unrefElement(graphBox) as HTMLElement | undefined)?.getBoundingClientRect()
+  const ev = event as MouseEvent
+  const vp = viewport.value
+  edgeAt.value = box && 'clientX' in ev ? { x: (ev.clientX - box.left - vp.x) / vp.zoom, y: (ev.clientY - box.top - vp.y) / vp.zoom } : null
+}
+/**
+ * The edge card beside the clicked point, following it as the graph pans and zooms. It flips to the
+ * left of the point when there's no room on the right, and is always kept inside the graph area.
+ */
+const edgeCard = ref<HTMLElement | null>(null)
+const { width: edgeCardW, height: edgeCardH } = useElementSize(edgeCard)
+const edgeCardStyle = computed(() => {
+  const at = edgeAt.value
+  if (!at) return { top: '12px', right: '12px' }
+  const vp = viewport.value
+  const x = at.x * vp.zoom + vp.x
+  const y = at.y * vp.zoom + vp.y
+  const W = graphW.value || 1200
+  const H = graphH.value || 800
+  const w = edgeCardW.value || 320
+  const h = edgeCardH.value || 300
+  const clamp = (v: number, max: number) => Math.min(Math.max(8, v), Math.max(8, max))
+  const left = clamp(x + 16 + w > W - 8 ? x - 16 - w : x + 16, W - w - 8)
+  const top = clamp(y - 24, H - h - 8)
+  return { left: `${left}px`, top: `${top}px` }
+})
 /** Right-click on an edge: the same card as a click (see the dependency, remove it), not the browser menu */
 function onEdgeContextMenu(e: EdgeMouseEvent) {
   e.event.preventDefault()
@@ -250,6 +286,15 @@ const addTo = ref('')
 /** Reasons a prerequisite can't be picked for the chosen waiting PR */
 const prereqReason = (p: PrView) =>
   allEdges.value.some((e) => e.from === addFrom.value && e.to === p.id) ? 'already a prerequisite' : allEdges.value.some((e) => e.from === p.id && e.to === addFrom.value) ? 'waits on it (would loop)' : null
+/** Reasons a waiting PR can't be picked for the chosen prerequisite */
+const dependentReason = (p: PrView) =>
+  !addTo.value ? null : allEdges.value.some((e) => e.from === p.id && e.to === addTo.value) ? 'already waits on it' : allEdges.value.some((e) => e.from === addTo.value && e.to === p.id) ? 'it waits on this (would loop)' : null
+const swapAdd = () => ([addFrom.value, addTo.value] = [addTo.value, addFrom.value])
+/** "x#1 will wait until y#2 is merged", once both are picked (PR ids only; a typed URL shows as typed) */
+const addPreview = computed(() => {
+  const ok = (s: string) => /^[^/\s]+\/[^#\s]+#\d+$/.test(s)
+  return ok(addFrom.value) && ok(addTo.value) ? { from: shortRef(addFrom.value), to: shortRef(addTo.value) } : null
+})
 // One panel in the corner at a time
 watch(adding, (a) => a && (selectedEdge.value = null))
 watch(selectedEdge, (e) => e && (adding.value = false))
@@ -268,6 +313,18 @@ watch(edges, (es) => {
 
 const titleOf = (id: string) => deck.byId.get(id)?.title
 const prOf = (id: string): PrView | undefined => deck.byId.get(id)
+/** repo#123 without the org (the card is narrow; the full id is the tooltip) */
+const repoName = (id: string) => (deck.byId.get(id)?.repo ?? id.split('#')[0]).split('/')[1] ?? id
+const shortRef = (id: string) => `${repoName(id)}#${id.split('#')[1]}`
+const openOnGitHub = (id: string) => window.open(`https://github.com/${id.split('#')[0]}/pull/${id.split('#')[1]}`, '_blank', 'noopener')
+/** Where a PR in the edge card stands: open, merged, released */
+function stateLabel(id: string): { label: string; tone: 'success' | 'merged' | 'muted' | 'warning' } | null {
+  const p = deck.byId.get(id)
+  if (!p) return null
+  if (p.state === 'OPEN') return { label: p.isDraft ? 'Draft' : 'Open', tone: p.isDraft ? 'muted' : 'success' }
+  if (p.state === 'CLOSED') return { label: 'Closed', tone: 'muted' }
+  return p.release?.released ? { label: 'Released', tone: 'merged' } : { label: 'Merged', tone: 'merged' }
+}
 const legendOrgs = computed(() => [...new Set(nodeIds.value.map(ownerOf))].sort())
 const hasAnyEdges = computed(() => allEdges.value.length > 0)
 </script>
@@ -295,7 +352,7 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
       <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
     </div>
 
-    <Card class="relative min-h-0 flex-1 overflow-hidden py-0">
+    <Card ref="graphBox" class="relative min-h-0 flex-1 overflow-hidden py-0">
       <VueFlow
         id="dep-graph"
         class="dep-graph"
@@ -341,66 +398,109 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
           </span>
         </Panel>
 
-        <Panel v-if="adding" position="top-right" class="graph-panel w-96 space-y-2 p-3 text-sm">
-          <form class="space-y-2" @submit.prevent="addFromForm">
-            <div class="flex items-center gap-2">
-              <span class="font-medium">Add dependency</span>
+        <Panel v-if="adding" position="top-right" class="graph-panel nodrag nopan nowheel w-96 p-0 text-sm shadow-lg">
+          <!-- Same order as the dependency card: 1 goes first, 2 waits for it -->
+          <form @submit.prevent="addFromForm">
+            <div class="flex items-center gap-2 px-3 pt-2.5">
+              <span class="font-semibold">Add dependency</span>
               <span class="flex-1" />
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="Close" @click="adding = false"><PhX /></Button>
+              <Button type="button" variant="ghost" size="icon-xs" class="-mr-1" aria-label="Close" @click="adding = false"><PhX /></Button>
             </div>
-            <label class="block space-y-1">
-              <span class="text-xs text-muted-foreground">This PR…</span>
-              <PrPicker v-model="addFrom" placeholder="Search by title, repo, #number" class="h-8" :disabled="busy" required />
-            </label>
-            <label class="block space-y-1">
-              <span class="text-xs text-muted-foreground">…waits for the {{ v.newKind }} of</span>
-              <PrPicker v-model="addTo" :exclude="addFrom" :disabled-reason="prereqReason" placeholder="Search by title, repo, #number" class="h-8" :disabled="busy" required />
-            </label>
-            <div class="flex items-center gap-2">
-              <ToggleGroup :model-value="v.newKind" type="single" variant="outline" size="sm" @update:model-value="(k) => k && (v.newKind = k as DependencyKind)">
-                <ToggleGroupItem value="merge">merge</ToggleGroupItem>
-                <ToggleGroupItem value="release">release</ToggleGroupItem>
-              </ToggleGroup>
-              <span class="flex-1" />
+            <div class="space-y-3 p-3">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-muted-foreground">Waits for the other PR to be</span>
+                <span class="flex-1" />
+                <ToggleGroup :model-value="v.newKind" type="single" variant="outline" size="sm" @update:model-value="(k) => k && (v.newKind = k as DependencyKind)">
+                  <ToggleGroupItem value="merge">merged</ToggleGroupItem>
+                  <ToggleGroupItem value="release">released</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+              <label class="block space-y-1.5">
+                <span class="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  <span class="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] text-foreground tabular-nums">1</span>
+                  {{ v.newKind === 'release' ? 'Release first' : 'Merge first' }}
+                </span>
+                <PrPicker v-model="addTo" :exclude="addFrom" :disabled-reason="prereqReason" placeholder="The PR that goes first" class="h-8" :disabled="busy" required />
+              </label>
+              <div class="-my-1.5 flex justify-center">
+                <Button type="button" variant="ghost" size="xs" class="text-muted-foreground" :disabled="busy || (!addFrom && !addTo)" title="Swap the two PRs" @click="swapAdd">
+                  <PhArrowsDownUp /> Swap
+                </Button>
+              </div>
+              <label class="block space-y-1.5">
+                <span class="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  <span class="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] text-foreground tabular-nums">2</span>
+                  Then this one
+                </span>
+                <PrPicker v-model="addFrom" :exclude="addTo" :disabled-reason="dependentReason" placeholder="The PR that waits" class="h-8" :disabled="busy" required />
+              </label>
+              <p v-if="addPreview" class="flex items-start gap-2 rounded-md bg-muted/60 px-2.5 py-2 text-xs leading-snug text-muted-foreground">
+                <PhClock :size="14" weight="fill" class="mt-px shrink-0 text-warning" />
+                <span><span class="font-medium text-foreground">{{ addPreview.from }}</span> will wait until <span class="font-medium text-foreground">{{ addPreview.to }}</span> is {{ v.newKind === 'release' ? 'released' : 'merged' }}.</span>
+              </p>
+            </div>
+            <div class="flex items-center gap-2 border-t px-3 py-2">
+              <span class="min-w-0 flex-1 text-xs text-muted-foreground">
+                {{ deck.overview?.dependencyWrites.description ? `Written into ${addPreview ? addPreview.from : 'the waiting PR'}'s description${deck.overview?.dependencyWrites.bothSides ? ' (and Blocks: on the other)' : ''}` : 'Kept in Dispatch only' }}
+              </span>
               <Button type="submit" size="sm" :disabled="busy || !addFrom || !addTo">
                 <PhCircleNotch v-if="busy" class="animate-spin" /><PhPlus v-else /> Add
               </Button>
             </div>
-            <p class="text-xs text-muted-foreground">Written into the waiting PR's description, like dragging a link.</p>
           </form>
         </Panel>
 
-        <Panel v-if="selectedEdge" position="top-right" class="graph-panel w-80 space-y-2 p-3 text-sm">
-          <div class="flex items-center gap-2">
-            <Badge :variant="selectedEdge.satisfied ? 'success' : 'warning'">{{ selectedEdge.satisfied ? 'Satisfied' : 'Waiting' }}</Badge>
-            <Badge variant="muted">{{ selectedEdge.kind === 'release' ? 'Needs release' : 'Needs merge' }}</Badge>
+        <div v-if="selectedEdge" ref="edgeCard" class="graph-panel nodrag nopan nowheel absolute z-10 w-80 p-0 text-sm shadow-lg" :style="edgeCardStyle" @click.stop @pointerdown.stop>
+          <!-- One sentence says what the link means; then the two PRs top to bottom, prerequisite first -->
+          <div class="flex items-center gap-2 px-3 pt-2.5">
+            <span class="font-semibold">Dependency</span>
+            <Badge variant="muted" class="h-4 px-1.5 text-[10px]">{{ selectedEdge.kind === 'release' ? 'release' : 'merge' }}</Badge>
             <span class="flex-1" />
-            <Button variant="ghost" size="icon-sm" @click="selectedEdge = null"><PhX /></Button>
+            <Button variant="ghost" size="icon-xs" class="-mr-1" aria-label="Close" @click="selectedEdge = null"><PhX /></Button>
           </div>
-          <div class="space-y-1 text-xs">
-            <div>
-              <span class="text-muted-foreground">Prerequisite</span>
-              <button class="block w-full text-left hover:underline" @click="prOf(selectedEdge.to) && (deck.selectedId = selectedEdge.to)">
-                <RepoName :id="selectedEdge.to" class="font-mono text-primary" />
-                <span class="block truncate text-muted-foreground">{{ titleOf(selectedEdge.to) ?? (selectedEdge.missing ? '(not synced yet)' : '') }}</span>
-              </button>
-            </div>
-            <div>
-              <span class="text-muted-foreground">Dependent</span>
-              <button class="block w-full text-left hover:underline" @click="deck.selectedId = selectedEdge.from">
-                <RepoName :id="selectedEdge.from" class="font-mono text-primary" />
-                <span class="block truncate text-muted-foreground">{{ titleOf(selectedEdge.from) }}</span>
-              </button>
-            </div>
-            <div class="text-muted-foreground">{{ SOURCE_LABEL[selectedEdge.source] }}<template v-if="selectedEdge.note"> · {{ selectedEdge.note }}</template></div>
+          <div class="flex items-start gap-2 border-b px-3 pt-1.5 pb-2.5">
+            <component :is="selectedEdge.satisfied ? PhCheckCircle : PhClock" :size="16" weight="fill" :class="cn('mt-0.5 shrink-0', selectedEdge.satisfied ? 'text-success' : 'text-warning')" />
+            <p class="min-w-0 flex-1 leading-snug text-muted-foreground">
+              <template v-if="selectedEdge.satisfied">
+                <span class="font-medium text-foreground">{{ shortRef(selectedEdge.to) }}</span> is {{ selectedEdge.kind === 'release' ? 'released' : 'merged' }}, so
+                <span class="font-medium text-foreground">{{ shortRef(selectedEdge.from) }}</span> isn't waiting on it any more.
+              </template>
+              <template v-else>
+                <span class="font-medium text-foreground">{{ shortRef(selectedEdge.from) }}</span> waits until
+                <span class="font-medium text-foreground">{{ shortRef(selectedEdge.to) }}</span> is {{ selectedEdge.kind === 'release' ? 'released' : 'merged' }}.
+              </template>
+            </p>
           </div>
-          <Button v-if="deps.canRemove(selectedEdge)" variant="destructive" size="sm" class="w-full" :disabled="busy" @click="deleteSelected">
-            <PhCircleNotch v-if="busy" class="animate-spin" /><PhTrash v-else />{{ selectedEdge.source === 'body' ? 'Remove from the PR description' : 'Remove dependency' }}
-          </Button>
-          <p v-else class="text-xs text-muted-foreground">
-            Remove the link in Jira to drop this one.
-          </p>
-        </Panel>
+          <div class="space-y-1 p-2">
+            <button
+              v-for="(side, i) in [
+                { id: selectedEdge.to, role: selectedEdge.kind === 'release' ? 'Release first' : 'Merge first' },
+                { id: selectedEdge.from, role: 'Then this one' },
+              ]"
+              :key="side.id"
+              type="button"
+              class="relative block w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent"
+              :title="side.id"
+              @click="prOf(side.id) ? (deck.selectedId = side.id) : openOnGitHub(side.id)"
+            >
+              <span class="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                <span class="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] text-foreground tabular-nums">{{ i + 1 }}</span>
+                {{ side.role }}
+                <span class="flex-1" />
+                <Badge v-if="stateLabel(side.id)" :variant="stateLabel(side.id)!.tone" class="h-4 px-1.5 text-[10px] normal-case">{{ stateLabel(side.id)!.label }}</Badge>
+              </span>
+              <span class="mt-1 block font-mono text-xs"><span class="text-muted-foreground">{{ repoName(side.id) }}</span> <span class="text-primary">#{{ side.id.split('#')[1] }}</span></span>
+              <span class="block truncate">{{ titleOf(side.id) ?? (selectedEdge.missing && i === 0 ? 'Not synced yet' : '') }}</span>
+            </button>
+          </div>
+          <div class="flex items-center gap-2 border-t px-3 py-2">
+            <span class="min-w-0 flex-1 truncate text-xs text-muted-foreground" :title="selectedEdge.note ?? ''">{{ SOURCE_LABEL[selectedEdge.source] }}</span>
+            <Button v-if="deps.canRemove(selectedEdge)" variant="ghost" size="sm" class="h-7 text-destructive hover:bg-destructive/10 hover:text-destructive" :disabled="busy" @click="deleteSelected">
+              <PhCircleNotch v-if="busy" class="animate-spin" /><PhTrash v-else />Remove
+            </Button>
+            <span v-else class="text-xs text-muted-foreground">Remove it in Jira</span>
+          </div>
+        </div>
 
       </VueFlow>
 

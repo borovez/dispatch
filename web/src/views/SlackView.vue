@@ -52,7 +52,7 @@ const chips = computed(() =>
 
 <template>
   <!-- Width cap on the children, not the page, so the scrollbar sits at the far right -->
-  <div class="flex flex-col gap-4 *:max-w-5xl">
+  <div class="flex flex-col gap-4 *:max-w-6xl">
     <Alert v-if="!deck.overview?.configured.slack">
       <PhSlackLogo />
       <AlertTitle>Slack isn't connected yet</AlertTitle>
