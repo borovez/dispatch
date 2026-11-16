@@ -50,7 +50,7 @@ nothing is hosted.
 ## Getting started
 
 ```bash
-git clone https://github.com/borovez/prdeck.git
+git clone https://github.com/borovez/dispatch.git
 cd prdeck
 npm install
 npm run dev

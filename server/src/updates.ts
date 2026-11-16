@@ -16,7 +16,7 @@ const pkg: { version: string; repository?: string } = DESKTOP
   ? { version: process.env.DISPATCH_VERSION ?? '0.0.0' }
   : JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 export const VERSION = pkg.version
-const REPO = (pkg.repository ?? 'github:borovez/prdeck').replace(/^github:/, '')
+const REPO = (pkg.repository ?? 'github:borovez/dispatch').replace(/^github:/, '')
 const CHECK_EVERY_MS = 6 * 60 * 60_000
 export const UPDATE_LOG = join(homedir(), 'Library', 'Logs', 'Dispatch-update.log')
 

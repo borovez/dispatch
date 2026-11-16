@@ -2,7 +2,7 @@
   "name": "dispatch",
   "version": "0.2.0",
   "private": true,
-  "repository": "github:borovez/prdeck",
+  "repository": "github:borovez/dispatch",
   "license": "MIT",
   "type": "module",
   "workspaces": [
