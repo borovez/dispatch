@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhArrowsClockwise, PhCheckCircle, PhGitBranch, PhMagnifyingGlass, PhWarning } from '@phosphor-icons/vue'
+import { PhArrowsClockwise, PhCheckCircle, PhGitBranch, PhGraph, PhListBullets, PhWarning } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
 import { timeAgo } from '@/utils/format'
 import { isUnreleased } from '@/utils/releaseFlow'
-import CollapseAllButton from '@/components/CollapseAllButton.vue'
+import SectionHeading from '@/components/SectionHeading.vue'
 import GroupCard from '@/components/GroupCard.vue'
 import PrRow from '@/components/PrRow.vue'
 import RepoName from '@/components/RepoName.vue'
@@ -17,7 +17,9 @@ import ReleaseGraph from '@/components/ReleaseGraph.vue'
 import TrainCard from '@/components/TrainCard.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import RepoSelect from '@/components/RepoSelect.vue'
+import ExpandingSearch from '@/components/ExpandingSearch.vue'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 /**
@@ -25,9 +27,30 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
  * Hotfixes: PRs straight to the release branch, and whether they made it back into dev.
  */
 const deck = useDeck()
-const v = useLayout().view('releases', { tab: 'releases' as 'releases' | 'hotfixes' | 'trains' | 'graph', query: '', collapsed: {} as Record<string, boolean> })
+const v = useLayout().view('releases', { sections: {} as Record<string, boolean>, tab: 'releases' as 'releases' | 'hotfixes' | 'trains', mode: 'list' as 'list' | 'graph', query: '', collapsed: {} as Record<string, boolean> })
+// The graph used to be a fourth tab
+if ((v.tab as string) === 'graph') (v.tab = 'releases'), (v.mode = 'graph')
+const graph = computed(() => v.mode === 'graph')
+/** One repo or all ('' / 'all'), shared with the graph (and set by "Show in the release graph") */
+const repoState = useLayout().view('releaseGraph', { repo: '' as string })
+/** Repos with releases, hotfixes, tags or unreleased work; counted by open releases and open hotfixes */
+const repoOptions = computed(() => {
+  const m = new Map<string, { key: string; repo: string; count: number }>()
+  const add = (repo: string, open: boolean) => {
+    const o = m.get(repo.toLowerCase()) ?? { key: repo.toLowerCase(), repo, count: 0 }
+    o.count += Number(open)
+    m.set(o.key, o)
+  }
+  for (const p of deck.prs) if ((p.flow === 'release' || p.flow === 'hotfix') && p.state !== 'CLOSED') add(p.repo, p.state === 'OPEN')
+  for (const p of deck.prs) if (isUnreleased(p)) add(p.repo, false)
+  for (const t of deck.overview?.tags ?? []) add(t.repo, false)
+  return [...m.values()].sort((a, b) => a.repo.localeCompare(b.repo))
+})
+const repoKey = computed(() => (repoState.repo && repoState.repo !== 'all' && repoOptions.value.some((o) => o.key === repoState.repo) ? repoState.repo : ''))
+const inRepo = (repo: string) => !repoKey.value || repo.toLowerCase() === repoKey.value
 
 const matches = (p: PrView) => {
+  if (!inRepo(p.repo)) return false
   const q = v.query.trim().toLowerCase()
   if (!q) return true
   const c = deck.releaseById.get(p.id)
@@ -44,6 +67,7 @@ const mergedReleases = computed(() => releases.value.filter((p) => p.state === '
 const tags = computed(() => {
   const q = v.query.trim().toLowerCase()
   return (deck.overview?.tags ?? []).filter((t) => {
+    if (!inRepo(t.repo)) return false
     if (!q) return true
     const hay = `${t.repo} ${t.tag} ${t.jiraKeys.join(' ')} ${t.items.map((i) => `${i.id} ${i.title}`).join(' ')}`.toLowerCase()
     return q.split(/\s+/).every((w) => hay.includes(w))
@@ -69,6 +93,7 @@ const doneHotfixes = computed(() => hotfixes.value.filter((p) => p.state === 'ME
 /** Release trains, filtered by the search */
 const trains = computed(() =>
   (deck.overview?.trains ?? []).filter((t) => {
+    if (repoKey.value && !t.releases.some((id) => inRepo(deck.byId.get(id)?.repo ?? id.split('#')[0]))) return false
     const q = v.query.trim().toLowerCase()
     if (!q) return true
     const hay = `${t.releases.join(' ')} ${t.jiraKeys.join(' ')} ${t.releases.map((id) => deck.byId.get(id)?.title ?? '').join(' ')}`.toLowerCase()
@@ -76,20 +101,18 @@ const trains = computed(() =>
   }),
 )
 
-const groupKeys = computed(() =>
-  v.tab === 'trains'
-    ? []
-    : v.tab === 'releases'
-    ? [...releases.value.map((p) => p.id), ...tags.value.map((t) => t.prId), ...unreleased.value.map((u) => `unreleased:${u.repo}`)]
-    : ['hf:needs', 'hf:open', 'hf:done'],
-)
 /** Merged releases and finished hotfixes start collapsed */
 const isCollapsed = (key: string, byDefault = false) => v.collapsed[key] ?? byDefault
-const allCollapsed = computed(() => groupKeys.value.every((k) => v.collapsed[k]))
-const toggleAll = () => {
-  const c = !allCollapsed.value
-  for (const k of groupKeys.value) v.collapsed[k] = c
+/** A section's cards (key, collapsed by default), for its heading's collapse / expand button */
+type SectionCards = { key: string; byDefault: boolean }[]
+const sectionCollapsed = (cards: SectionCards) => cards.every((c) => isCollapsed(c.key, c.byDefault))
+function toggleSection(cards: SectionCards) {
+  const collapse = !sectionCollapsed(cards)
+  for (const c of cards) v.collapsed[c.key] = collapse
 }
+const releaseCards = (prs: PrView[]): SectionCards => prs.map((r) => ({ key: r.id, byDefault: r.state === 'MERGED' }))
+const tagCards = computed<SectionCards>(() => tags.value.map((t) => ({ key: t.prId, byDefault: !latestPerRepo.value.has(t.prId) })))
+const unreleasedCards = computed<SectionCards>(() => unreleased.value.map((u) => ({ key: `unreleased:${u.repo}`, byDefault: false })))
 
 // ?focus=<pr id>: expand that release (or hotfix) and scroll to it; the graph tab handles it itself
 const route = useRoute()
@@ -97,7 +120,7 @@ const router = useRouter()
 watch(
   () => route.query.focus,
   async (focus) => {
-    if (typeof focus !== 'string' || !focus || v.tab === 'graph') return
+    if (typeof focus !== 'string' || !focus || graph.value) return
     v.query = ''
     if (v.tab === 'hotfixes') {
       // Open just the group the hotfix is in
@@ -132,36 +155,43 @@ async function refresh(id: string) {
 <template>
   <!-- Width cap on the children, not the page, so the scrollbar sits at the far right -->
   <!-- The graph fills the window; the other tabs scroll the page (native scrollbar, like Settings) -->
-  <div class="flex flex-col gap-4" :class="v.tab === 'graph' ? 'h-page' : '*:max-w-6xl'">
+  <div class="flex flex-col gap-4" :class="graph && 'h-page'">
     <!-- @container: buttons go icon-only when this row is narrow -->
     <div class="@container flex flex-wrap items-center gap-2">
-      <div v-if="v.tab !== 'graph'" class="relative min-w-24 flex-1 sm:max-w-64">
-        <PhMagnifyingGlass class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" :size="14" />
-        <Input v-model="v.query" type="search" placeholder="Search PRs, branches, Jira keys…" class="h-8 pl-8" />
-      </div>
       <Tabs v-model="v.tab">
         <TabsList>
           <TabsTrigger value="releases" :count="openReleases.length">Releases</TabsTrigger>
           <TabsTrigger value="hotfixes" :count="needsBackmerge.length + openHotfixes.length">Hotfixes</TabsTrigger>
           <TabsTrigger value="trains" :count="trains.length">Trains</TabsTrigger>
-          <TabsTrigger value="graph">Graph</TabsTrigger>
         </TabsList>
       </Tabs>
+      <!-- One repo or all, for the list and the graph (the graph also shows what links to it) -->
+      <RepoSelect v-if="repoOptions.length > 1" :model-value="repoKey || 'all'" :tabs="repoOptions" @update:model-value="(r) => (repoState.repo = r === 'all' ? '' : r)" />
       <span class="flex-1" />
-      <!-- The graph tab puts its filters and View menu here -->
+      <ExpandingSearch v-if="!graph" v-model="v.query" placeholder="Search PRs, branches, Jira keys…" />
       <div id="releases-toolbar" class="flex items-center gap-2 empty:hidden" />
-      <CollapseAllButton v-if="v.tab !== 'graph' && groupKeys.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
+      <!-- List or graph, for whichever tab is picked -->
+      <ToggleGroup :model-value="v.mode" type="single" variant="outline" size="sm" aria-label="List or graph" @update:model-value="(m) => m && (v.mode = m as 'list' | 'graph')">
+        <ToggleGroupItem value="list" aria-label="List" title="List"><PhListBullets /></ToggleGroupItem>
+        <ToggleGroupItem value="graph" aria-label="Graph" title="Graph"><PhGraph /></ToggleGroupItem>
+      </ToggleGroup>
     </div>
 
-    <ReleaseGraph v-if="v.tab === 'graph'" />
+    <ReleaseGraph v-if="graph" :scope="v.tab" />
     <div v-else class="space-y-4">
         <template v-if="v.tab === 'releases'">
           <template v-for="sec in [{ label: 'Open releases', prs: openReleases }, { label: 'Merged releases', prs: mergedReleases }]" :key="sec.label">
-          <h3 v-if="sec.prs.length" class="flex items-center gap-2 pt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase first:pt-0">
-            {{ sec.label }} <Badge variant="count">{{ sec.prs.length }}</Badge>
-          </h3>
+          <SectionHeading
+            v-if="sec.prs.length"
+            v-model:hidden="v.sections[sec.label]"
+            :label="sec.label"
+            :count="sec.prs.length"
+            cards-toggle
+            :cards-collapsed="sectionCollapsed(releaseCards(sec.prs))"
+            @toggle-cards="toggleSection(releaseCards(sec.prs))"
+          />
           <GroupCard
-            v-for="r in sec.prs"
+            v-for="r in v.sections[sec.label] ? [] : sec.prs"
             :key="r.id"
             :data-release-id="r.id"
             label=""
@@ -190,11 +220,9 @@ async function refresh(id: string) {
           </template>
 
           <template v-if="tags.length">
-            <h3 class="flex items-center gap-2 pt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              Tags <Badge variant="count">{{ tags.length }}</Badge>
-            </h3>
+            <SectionHeading v-model:hidden="v.sections.Tags" label="Tags" :count="tags.length" cards-toggle :cards-collapsed="sectionCollapsed(tagCards)" @toggle-cards="toggleSection(tagCards)" />
             <GroupCard
-              v-for="t in tags"
+              v-for="t in v.sections.Tags ? [] : tags"
               :key="t.prId"
               label=""
               :count="t.items.length"
@@ -214,9 +242,16 @@ async function refresh(id: string) {
           </template>
 
           <template v-if="unreleased.length">
-            <h3 class="pt-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Merged, not in a release yet</h3>
+            <SectionHeading
+              v-model:hidden="v.sections.unreleased"
+              label="Merged, not in a release yet"
+              :count="unreleased.length"
+              cards-toggle
+              :cards-collapsed="sectionCollapsed(unreleasedCards)"
+              @toggle-cards="toggleSection(unreleasedCards)"
+            />
             <GroupCard
-              v-for="u in unreleased"
+              v-for="u in v.sections.unreleased ? [] : unreleased"
               :key="u.repo"
               :label="u.repo"
               :count="u.prs.length"

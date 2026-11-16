@@ -88,6 +88,8 @@ const dv = useLayout().view('drawer', {
   depsHeight: 0, // 0: fit the list, up to 35% of the window
   // Whole footer (px, 0 = default), set by dragging the line above it; the note fills what's left
   footerHeight: 0,
+  // Footer height while the note is closed (px, 0 = fit): the Dependencies list fills it
+  closedFooterHeight: 0,
 })
 /**
  * While the note is open the footer has a set height and the note fills it, so dragging the line
@@ -95,11 +97,17 @@ const dv = useLayout().view('drawer', {
  */
 const FOOTER_DEFAULT = 360
 const footerHeight = computed({
-  get: () => (dv.noteOpen ? dv.footerHeight || FOOTER_DEFAULT : undefined) as number,
-  set: (h: number) => (dv.footerHeight = h),
+  get: () => (dv.noteOpen ? dv.footerHeight || FOOTER_DEFAULT : dv.depsOpen ? dv.closedFooterHeight : undefined) as number,
+  set: (h: number) => (dv.noteOpen ? (dv.footerHeight = h) : (dv.closedFooterHeight = h)),
 })
+/** Note closed and the footer sized from its top line: the Dependencies list takes all of it */
+const depsFill = computed(() => !dv.noteOpen && !!footerHeight.value)
 /** The note keeps at least this much room when the Dependencies list grows */
 const NOTE_MIN = 150
+/** How much the open note can still give up before it hits NOTE_MIN (dragging the lines above it stops there) */
+const noteEditor = ref<{ $el: HTMLElement } | null>(null)
+const noteSpare = () => Math.max(0, (noteEditor.value?.$el.offsetHeight ?? NOTE_MIN) - NOTE_MIN)
+const footerMin = (h: number) => (noteEditor.value ? h - noteSpare() : 80)
 const depsArea = ref<{ $el: HTMLElement } | null>(null)
 const depsViewport = () => depsArea.value?.$el.querySelector<HTMLElement>('[data-slot=scroll-area-viewport]')
 useArrowNav('pr', () => deck.selectedId, (id) => (deck.selectedId = id))
@@ -222,7 +230,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
 </script>
 
 <template>
-  <SidePanel v-model:footer-height="footerHeight" :open="!!pr" @close="deck.selectedId = null">
+  <SidePanel v-model:footer-height="footerHeight" :footer-min="footerMin" :open="!!pr" @close="deck.selectedId = null">
     <template v-if="pr" #header>
           <div class="mb-1.5 flex flex-wrap items-center gap-1.5">
             <Badge :variant="ACTION_TONE[pr.action.kind]">{{ pr.action.label }}</Badge>
@@ -494,15 +502,21 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
     <!-- Always visible at the bottom, whichever tab is open -->
     <template v-if="pr" #footer>
       <div :class="cn('flex w-full flex-col gap-3', footerHeight && 'min-h-0 flex-1')">
-        <section class="shrink-0">
+        <section :class="depsFill ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'">
+          <div class="flex items-center gap-2">
           <SectionToggle v-model:open="dv.depsOpen" label="Dependencies">
             <Badge variant="count">{{ pr.dependsOn.length + pr.dependents.length }}</Badge>
             <Badge v-if="waiting" variant="warning" class="h-4 px-1.5 text-[10px]">{{ waiting }} waiting</Badge>
           </SectionToggle>
+          <span class="flex-1" />
+          <Button v-if="pr.dependsOn.length + pr.dependents.length" variant="link" size="xs" class="h-auto p-0 text-xs" @click="nav.openDependencies([pr.id])">
+            <PhGraph /> Show in graph
+          </Button>
+          </div>
           <ScrollArea
             v-show="dv.depsOpen"
             ref="depsArea"
-            :class="cn('mt-2', dv.depsHeight ? '[&>[data-slot=scroll-area-viewport]]:h-(--deps-h)' : '[&>[data-slot=scroll-area-viewport]]:max-h-[35vh]')"
+            :class="cn('mt-2', depsFill ? 'min-h-0 flex-1' : dv.depsHeight ? '[&>[data-slot=scroll-area-viewport]]:h-(--deps-h)' : '[&>[data-slot=scroll-area-viewport]]:max-h-[35vh]')"
             :style="{ '--deps-h': `${dv.depsHeight}px` }"
           >
           <div class="pr-3">
@@ -579,22 +593,25 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
           </div>
           </ScrollArea>
           <ResizeHandle
-            v-if="dv.depsOpen"
+            v-if="dv.depsOpen && dv.noteOpen"
             line
             :model-value="dv.depsHeight || 240"
             :min="48"
-            :max="footerHeight ? Math.max(48, footerHeight - NOTE_MIN) : undefined"
+            :max-at="footerHeight ? (h: number) => h + noteSpare() : undefined"
             :reset="0"
             :target="depsViewport"
-            class="relative z-10 -mt-1 -mb-3"
+            class="relative z-10 -mx-3 -mt-1 -mb-3"
             @update:model-value="(h) => (dv.depsHeight = h)"
           />
         </section>
+        <!-- Not draggable now (a section is closed), but the sections stay divided -->
+        <div v-if="!(dv.depsOpen && dv.noteOpen)" class="-mx-3 h-px shrink-0 bg-border" aria-hidden="true" />
         <SectionToggle v-if="!dv.noteOpen" v-model:open="dv.noteOpen" label="My note">
           <span v-if="note.trim()" class="truncate text-xs text-muted-foreground normal-case">{{ note.trim().split('\n')[0] }}</span>
         </SectionToggle>
         <MarkdownEditor
           v-else
+          ref="noteEditor"
           v-model="note"
           fill
           placeholder="Private note… (Markdown)"

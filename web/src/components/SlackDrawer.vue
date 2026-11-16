@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
+import { PhCaretRight, PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
 import type { SlackContext, SlackMessage } from '@shared/types'
 import { toast } from 'vue-sonner'
 import { api } from '@/api'
@@ -70,6 +70,7 @@ watch(
   (id) => {
     ctx.value = null
     error.value = ''
+    threads.value = {}
     counts.value = { before: 2, after: 2 }
     closeReply()
     if (id) load(id, { reveal: true })
@@ -143,7 +144,11 @@ async function send(text: string) {
     closeReply()
     // Show the new message when it lands in the conversation being shown
     if (i.threadTs || !replyThread.value) counts.value = { ...counts.value, after: counts.value.after + 1 }
+    const thread = replyThread.value
     await resync()
+    // A reply into an expanded thread shows up in it
+    const parent = thread && ctx.value?.messages.find((x) => x.ts === thread)
+    if (parent && threads.value[thread]?.open) toggleThread(parent, true)
   } catch (e) {
     toast.error(`Couldn't send: ${(e as Error).message}`)
   } finally {
@@ -151,12 +156,34 @@ async function send(text: string) {
   }
 }
 /** A message's Slack link: the workspace from the item's permalink; thread replies open in their thread */
-function messageLink(m: SlackMessage): string | null {
+function messageLink(m: SlackMessage, parentTs?: string): string | null {
   const i = item.value
   const origin = i?.permalink ? new URL(i.permalink).origin : null
   if (!i || !origin) return null
   const url = `${origin}/archives/${i.channelId}/p${m.ts.replace('.', '')}`
-  return i.threadTs && m.ts !== i.threadTs ? `${url}?thread_ts=${i.threadTs}&cid=${i.channelId}` : url
+  const thread = parentTs ?? i.threadTs
+  return thread && m.ts !== thread ? `${url}?thread_ts=${thread}&cid=${i.channelId}` : url
+}
+
+/** Threads expanded under conversation messages (by the parent's ts) */
+const threads = ref<Record<string, { open: boolean; loading: boolean; replies: SlackMessage[] | null; error?: string }>>({})
+async function toggleThread(m: SlackMessage, force = false) {
+  const i = item.value
+  if (!i) return
+  threads.value[m.ts] ??= { open: false, loading: false, replies: null }
+  // Read it back through the reactive record (the object just assigned isn't reactive itself)
+  const t = threads.value[m.ts]
+  t.open = force || !t.open
+  if (!t.open || (t.replies && !force) || t.loading) return
+  t.loading = true
+  t.error = undefined
+  try {
+    t.replies = await api.slackThread(i.id, m.ts)
+  } catch (e) {
+    t.error = (e as Error).message
+  } finally {
+    t.loading = false
+  }
 }
 
 /** Copies at least what's loaded (and 20 messages either side) as a Markdown brief */
@@ -283,6 +310,47 @@ async function copyPrompt() {
                 <Badge v-if="m.isTarget" variant="primary" class="h-4 text-[10px]">{{ KIND[item.kind].label }}</Badge>
               </div>
               <SlackText :text="m.text" :rich="m.rich" class="mt-0.5 text-sm" />
+              <!-- Its thread, expandable in place -->
+              <template v-if="m.replyCount">
+                <Button variant="ghost" size="xs" class="-ml-2 mt-1 text-primary" :aria-expanded="!!threads[m.ts]?.open" @click="toggleThread(m)">
+                  <PhCircleNotch v-if="threads[m.ts]?.loading" class="animate-spin" />
+                  <PhCaretRight v-else :class="cn('transition-transform', threads[m.ts]?.open && 'rotate-90')" />
+                  {{ m.replyCount }} {{ m.replyCount === 1 ? 'reply' : 'replies' }}
+                </Button>
+                <div v-if="threads[m.ts]?.open" class="mt-1 space-y-2 border-l-2 pl-3">
+                  <p v-if="threads[m.ts].error" class="text-xs text-destructive">{{ threads[m.ts].error }}</p>
+                  <div v-for="r in threads[m.ts].replies ?? []" :key="r.ts" class="group/reply relative flex gap-2">
+                    <SlackUserCard :user-id="r.user" :name="r.userName" :avatar="r.userAvatar">
+                      <Avatar class="size-5 shrink-0">
+                        <AvatarImage v-if="r.userAvatar" :src="r.userAvatar" :alt="r.userName" />
+                        <AvatarFallback class="text-[9px]">{{ r.userName.slice(0, 2).toUpperCase() }}</AvatarFallback>
+                      </Avatar>
+                    </SlackUserCard>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-2 text-xs">
+                        <SlackUserCard :user-id="r.user" :name="r.userName" :avatar="r.userAvatar">
+                          <span class="font-semibold hover:underline">{{ r.userName }}</span>
+                        </SlackUserCard>
+                        <span class="text-muted-foreground" :title="r.postedAt">{{ timeAgo(r.postedAt) }}</span>
+                        <span class="flex-1" />
+                        <a
+                          v-if="messageLink(r, m.ts)"
+                          :href="messageLink(r, m.ts)!"
+                          target="_blank"
+                          rel="noopener"
+                          class="text-muted-foreground opacity-0 transition-opacity group-hover/reply:opacity-100 hover:text-foreground focus-visible:opacity-100"
+                          aria-label="Open in Slack"
+                          title="Open in Slack"
+                        ><PhArrowSquareOut /></a>
+                      </div>
+                      <SlackText :text="r.text" :rich="r.rich" class="mt-0.5 text-sm" />
+                    </div>
+                  </div>
+                  <Button v-if="threads[m.ts].replies" variant="ghost" size="xs" class="-ml-2 text-muted-foreground" @click="startReply(m)">
+                    <PhArrowBendUpLeft /> Reply in thread
+                  </Button>
+                </div>
+              </template>
             </div>
           </div>
           <!-- More conversation below -->

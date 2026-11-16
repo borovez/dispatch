@@ -14,7 +14,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
  * (px, 0 = fit the content) the line above the footer can be dragged to size the footer against the
  * body; double-click sets it to 0 (the parent's default). A sized footer is a column: give its content `flex-1`.
  */
-const props = defineProps<{ open: boolean }>()
+/** footerMin: the smallest the footer may get, given its height when a drag starts (e.g. so a note keeps its minimum) */
+const props = defineProps<{ open: boolean; footerMin?: (current: number) => number }>()
 const footerHeight = defineModel<number>('footerHeight')
 const emit = defineEmits<{ close: [] }>()
 const layout = useLayout()
@@ -91,7 +92,8 @@ function startFooterResize(ev: PointerEvent) {
   const startY = ev.clientY
   const startH = footerEl.value?.offsetHeight ?? 0
   const max = () => Math.round(window.innerHeight * 0.8)
-  const move = (e: PointerEvent) => (footerHeight.value = Math.round(Math.min(max(), Math.max(80, startH + startY - e.clientY))))
+  const min = Math.max(80, props.footerMin?.(startH) ?? 80)
+  const move = (e: PointerEvent) => (footerHeight.value = Math.round(Math.min(max(), Math.max(min, startH + startY - e.clientY))))
   const end = () => {
     bar.removeEventListener('pointermove', move)
     bar.removeEventListener('pointerup', end)

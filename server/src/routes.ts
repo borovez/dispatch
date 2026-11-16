@@ -7,7 +7,7 @@ import { adfToMarkdown } from '../../shared/adf.ts'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
-import type { AiProvider, GithubAccount, JiraFieldKind, JiraFieldOption, Settings } from '../../shared/types.ts'
+import type { AiProvider, GithubAccount, PrRecord, JiraFieldKind, JiraFieldOption, Settings } from '../../shared/types.ts'
 import {
   listPrs,
   addManualDep,
@@ -27,6 +27,7 @@ import {
   upsertJira,
   setPrTitle,
   updatePrData,
+  upsertPr,
   listReleaseContents,
 } from './db.ts'
 import { draftJiraIssue, draftPrText, envCredentials, testAi } from './ai.ts'
@@ -36,8 +37,8 @@ import { buildSlackPrompt } from './slackPrompt.ts'
 import { startUpdate, updateStatus, VERSION } from './updates.ts'
 import { claudeMdGuide } from './guides.ts'
 import { claudeBin } from './claudeCode.ts'
-import { messagesAround, postMessage, replyInThread, userProfile, slackAuthTest, threadContext } from './slack.ts'
-import { fetchPrsByNodeId, getPrText, ghCliToken, listRepos, prCommits, prDetail, prFileNames, prTemplate, updatePrText, whoAmI } from './github.ts'
+import { messagesAround, threadReplies, postMessage, replyInThread, userProfile, slackAuthTest, threadContext } from './slack.ts'
+import { fetchPrsByNodeId, fetchPrsByRef, getPrText, ghCliToken, listRepos, prCommits, prDetail, prFileNames, prTemplate, updatePrText, whoAmI } from './github.ts'
 import {
   addAttachments,
   addComment,
@@ -55,9 +56,10 @@ import {
   listProjects,
   projectIssueTypes,
   transition,
+  fetchIssuesByKey,
 } from './jira.ts'
 import { buildOverview } from './model.ts'
-import { normaliseRef } from './refs.ts'
+import { extractJiraKeys, normaliseRef, parseBodyDependencies, parsePrId } from './refs.ts'
 import { accountForOwner, runSync } from './sync.ts'
 import { repoCatalog } from './repoCatalog.ts'
 
@@ -333,6 +335,75 @@ api.post('/prs/resync', async (c) => {
   return c.json(prs[0])
 })
 
+/**
+ * Resync just these PRs (e.g. the ones on the dependency graph): their GitHub data (descriptions, so new
+ * or removed Depends on / Blocks lines), PRs their descriptions now name that aren't stored yet, and the
+ * Jira issues they reference (for "is blocked by" links). Much lighter than a full sync.
+ */
+api.post('/prs/resync-many', async (c) => {
+  const { ids } = z.object({ ids: z.array(z.string()).max(500) }).parse(await c.req.json())
+  const settings = getSettings()
+  const accounts = settings.github.accounts.filter((a) => a.token)
+  const stored = new Map(listPrs().map((s) => [s.pr.id, s.pr]))
+  const errors: string[] = []
+  const byAccount = new Map<GithubAccount, string[]>()
+  for (const id of new Set(ids)) {
+    const pr = stored.get(id)
+    if (!pr) continue
+    const acc = accounts.find((a) => a.id === pr.accountId) ?? accountForOwner(accounts, pr.owner)
+    if (acc) byAccount.set(acc, [...(byAccount.get(acc) ?? []), pr.nodeId])
+  }
+  const fresh: PrRecord[] = []
+  await Promise.all(
+    [...byAccount].map(async ([acc, nodeIds]) => {
+      const r = await fetchPrsByNodeId(acc, nodeIds)
+      fresh.push(...r.prs)
+      errors.push(...r.errors.map((e) => `[${acc.label}] ${e}`))
+    }),
+  )
+  for (const pr of fresh) updatePrData(pr)
+
+  // Dependency targets the descriptions now name that Dispatch doesn't have yet
+  const missing = [...new Set(fresh.flatMap((pr) => parseBodyDependencies(pr.body, pr.repo, pr.id).map((d) => d.to)))].filter((id) => !stored.has(id))
+  const refsByAccount = new Map<GithubAccount, { owner: string; name: string; number: number }[]>()
+  for (const id of missing) {
+    const ref = parsePrId(id)
+    const acc = ref && accountForOwner(accounts, ref.owner)
+    if (ref && acc) refsByAccount.set(acc, [...(refsByAccount.get(acc) ?? []), ref])
+  }
+  let added = 0
+  const now = new Date().toISOString()
+  await Promise.all(
+    [...refsByAccount].map(([acc, refs]) =>
+      fetchPrsByRef(acc, refs).then(
+        (prs) => prs.forEach((pr) => (upsertPr(pr, ['dependency'], now), added++)),
+        (e) => errors.push(`[${acc.label}] dependency fetch: ${(e as Error).message}`),
+      ),
+    ),
+  )
+
+  // Their Jira issues ("is blocked by" links)
+  let jiraCount = 0
+  const jira = settings.jira
+  if (jira?.apiToken) {
+    const keys = new Set<string>()
+    for (const pr of fresh) {
+      let k = extractJiraKeys([pr.title, pr.headRef], jira.projectKeys)
+      if (!k.length) k = extractJiraKeys([pr.body], jira.projectKeys)
+      k.forEach((x) => keys.add(x))
+    }
+    if (keys.size)
+      try {
+        const { issues } = await fetchIssuesByKey(jira, [...keys])
+        issues.forEach(upsertJira)
+        jiraCount = issues.length
+      } catch (e) {
+        errors.push(`Jira: ${(e as Error).message}`)
+      }
+  }
+  return c.json({ prs: fresh.length, added, jira: jiraCount, errors })
+})
+
 // ---------- Release contents ----------
 api.post('/releases/refresh', async (c) => {
   const { id } = await c.req.json<{ id: string }>()
@@ -451,6 +522,15 @@ api.get('/slack/:id/around', async (c) => {
   if (!s.slack?.token || !item) throw bad('Unknown Slack item')
   const n = (q: string | undefined) => Math.min(50, Math.max(0, Number(q ?? 2) || 0))
   return c.json(await messagesAround(s.slack, item, n(c.req.query('before')), n(c.req.query('after'))))
+})
+
+/** A message's thread replies, for expanding it in the conversation view */
+api.get('/slack/:id/thread-replies', async (c) => {
+  const s = getSettings()
+  const item = getSlackItem(c.req.param('id'))
+  const ts = c.req.query('ts')
+  if (!s.slack?.token || !item || !ts) throw bad('Unknown Slack item')
+  return c.json(await threadReplies(s.slack, item, ts))
 })
 
 /** Reply as me: into a message's thread (`threadTs`) or straight into the conversation */

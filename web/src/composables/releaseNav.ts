@@ -10,19 +10,43 @@ export function useReleaseNav() {
   const router = useRouter()
   const deck = useDeck()
   const layout = useLayout()
-  const releases = layout.view('releases', { tab: 'releases' as string })
+  const releases = layout.view('releases', { tab: 'releases' as string, mode: 'list' as string })
   const graph = layout.view('releaseGraph', { repo: '' as string })
 
   function openReleases(focus: string, tab: 'releases' | 'hotfixes' = 'releases') {
     releases.tab = tab
+    releases.mode = 'list'
+    // Don't let the repo filter hide what's being shown
+    const repo = deck.byId.get(focus)?.repo.toLowerCase()
+    if (graph.repo && graph.repo !== 'all' && repo && graph.repo !== repo) graph.repo = ''
     router.push({ path: '/releases', query: { focus } })
   }
   function openGraph(focus: string, repo: string) {
-    releases.tab = 'graph'
+    // The graph shows the tab's kind of items: hotfixes on Hotfixes, everything else on Releases
+    releases.tab = deck.byId.get(focus)?.flow === 'hotfix' ? 'hotfixes' : 'releases'
+    releases.mode = 'graph'
     graph.repo = repo.toLowerCase()
     // The panel stays open: the graph zooms to the box in the part the panel doesn't cover
     router.push({ path: '/releases', query: { focus } })
   }
+  const depGraph = layout.view('graph', { org: '', repo: '', hideDone: true, mineOnly: false })
+  /**
+   * The dependency graph focused on these PRs: their chains are highlighted and framed. Filters that would
+   * hide them are relaxed (repo: theirs when they share one, else all; finished chains shown when needed).
+   */
+  function openDependencies(ids: string[]) {
+    if (!ids.length) return
+    const repos = [...new Set(ids.map((id) => (deck.byId.get(id)?.repo ?? id.split('#')[0]).toLowerCase()))]
+    depGraph.repo = repos.length === 1 ? repos[0] : ''
+    if (depGraph.org && ids.some((id) => id.split('/')[0] !== depGraph.org)) depGraph.org = ''
+    depGraph.mineOnly = false
+    if ((deck.overview?.chains ?? []).some((c) => c.done && c.prs.some((id) => ids.includes(id)))) depGraph.hideDone = false
+    // The panel stays open; the graph frames the chains in the part it doesn't cover
+    router.push({ path: '/graph', query: { focus: ids.join(',') } })
+  }
+  /** PRs with at least one dependency either way */
+  const hasDeps = (id: string) => (deck.overview?.edges ?? []).some((e) => e.from === id || e.to === id)
+
   function openTrains() {
     releases.tab = 'trains'
     router.push('/releases')
@@ -63,5 +87,5 @@ export function useReleaseNav() {
     return null
   }
 
-  return { openReleases, openGraph, openTrains, releaseForIssue, releaseForPr, releaseForText }
+  return { openReleases, openGraph, openDependencies, hasDeps, openTrains, releaseForIssue, releaseForPr, releaseForText }
 }

@@ -1,4 +1,4 @@
-import type { SlackConfig, SlackContext, SlackItem, SlackKind, SlackUserProfile } from '../../shared/types.ts'
+import type { SlackConfig, SlackContext, SlackItem, SlackKind, SlackMessage, SlackUserProfile } from '../../shared/types.ts'
 import { getSlackUsers, saveSlackUsers } from './db.ts'
 
 // Slack Web API with a *user* token (xoxp-). Required user scopes:
@@ -365,8 +365,15 @@ export async function messagesAround(cfg: SlackConfig, item: SlackItem, before =
     rich: namedMentions(m.text ?? '', users),
     postedAt: tsToIso(m.ts),
     isTarget: m.ts === item.ts,
+    ...(!item.threadTs && m.reply_count ? { replyCount: Number(m.reply_count) } : {}),
   }))
   return { messages, hasBefore, hasAfter }
+}
+
+/** The replies in a message's thread (parent left out), oldest first */
+export async function threadReplies(cfg: SlackConfig, item: SlackItem, ts: string, max = 200): Promise<SlackMessage[]> {
+  const r = await messagesAround(cfg, { ...item, ts, threadTs: ts }, 0, max)
+  return r.messages.filter((m) => m.ts !== ts).map((m) => ({ ...m, isTarget: m.ts === item.ts }))
 }
 
 /**

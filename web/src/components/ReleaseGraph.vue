@@ -8,7 +8,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import './flowTheme.css'
-import { PhArrowsCounterClockwise, PhRocketLaunch } from '@phosphor-icons/vue'
+import { PhFrameCorners, PhRocketLaunch } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
@@ -16,7 +16,6 @@ import { isUnreleased } from '@/utils/releaseFlow'
 import ReleaseGroupNode, { GROUP_W, groupHeight, type GroupRow, type ReleaseGroupData } from './ReleaseGroupNode.vue'
 import RepoName from './RepoName.vue'
 import ViewMenu, { type ViewSection } from './ViewMenu.vue'
-import RepoSelect from './RepoSelect.vue'
 
 /**
  * Release graph: left to right is the path to production, one lane per repo.
@@ -24,9 +23,11 @@ import RepoSelect from './RepoSelect.vue'
  * merged to master (not released yet) → released. Releases are boxes listing their PRs; edges show
  * PR dependencies, which release has to go first, and releases that roll into another release.
  */
+/** Which tab it's drawn for: releases (no hotfixes), hotfixes (hotfixes, backmerges, released), trains (releases in a train) */
+const props = withDefaults(defineProps<{ scope?: 'releases' | 'hotfixes' | 'trains' }>(), { scope: 'releases' })
 const deck = useDeck()
 const VIEW_DEFAULTS = { showUnreleased: true, showHotfixes: true, showTags: true, mergedDays: '7' }
-/** repo: '' = the busiest repo, 'all' = every repo, else a repo (lower case) */
+/** repo: '' (or 'all') = every repo, else a repo (lower case); picked in the Releases page toolbar, shared with the list */
 const v = useLayout().view('releaseGraph', { ...VIEW_DEFAULTS, repo: '', expanded: {} as Record<string, boolean> })
 
 const COLUMNS = [
@@ -191,22 +192,21 @@ const allLanes = computed<Lane[]>(() => {
       put(e.repo, group({ kind: 'backmerge', id: `backmerge:${key}`, repo: e.repo, branch: e.into, rows, jiraKeys: [], missing: e.missing }, 0))
     }
   }
-  return [...byRepo.values()].sort((a, b) => a.repo.localeCompare(b.repo))
+  const inTrain = new Set((deck.overview?.trains ?? []).flatMap((t) => t.releases))
+  const keep = (i: Item) =>
+    props.scope === 'hotfixes'
+      ? ['hotfixes', 'backmerge', 'tag'].includes(i.data.kind)
+      : props.scope === 'trains'
+        ? i.data.kind === 'release' && !!i.data.pr && inTrain.has(i.data.pr.id)
+        : !['hotfixes', 'backmerge'].includes(i.data.kind)
+  return [...byRepo.values()]
+    .map((l) => ({ ...l, items: l.items.filter(keep) }))
+    .filter((l) => l.items.length)
+    .sort((a, b) => a.repo.localeCompare(b.repo))
 })
 
-/** Repo tabs: open releases and open hotfixes per repo */
-const repoTabs = computed(() =>
-  allLanes.value.map((l) => ({
-    key: l.key,
-    repo: l.repo,
-    count: l.items.reduce((n, i) => n + (i.data.kind === 'release' ? Number(i.data.pr?.state === 'OPEN') : i.data.kind === 'hotfixes' && i.col === 1 ? i.data.rows.length : 0), 0),
-  })),
-)
-const activeRepo = computed(() => {
-  if (v.repo === 'all') return 'all'
-  if (v.repo && allLanes.value.some((l) => l.key === v.repo)) return v.repo
-  return [...repoTabs.value].sort((a, b) => b.count - a.count)[0]?.key ?? 'all'
-})
+/** The repo picked in the page toolbar ('' or 'all' = every repo; one with nothing here shows everything) */
+const activeRepo = computed(() => (v.repo && v.repo !== 'all' && allLanes.value.some((l) => l.key === v.repo) ? v.repo : 'all'))
 
 /** The focused repo's lane, plus the parts of other lanes linked to it by dependencies */
 const lanes = computed<Lane[]>(() => {
@@ -500,8 +500,6 @@ const viewSections = computed<ViewSection[]>(() => [
   <div class="flex min-h-0 flex-1 flex-col gap-3">
     <!-- Filters live in the page toolbar, next to the tabs -->
     <Teleport defer to="#releases-toolbar">
-      <!-- One repo at a time; other repos show only what links to it -->
-      <RepoSelect v-if="repoTabs.length > 1" :model-value="activeRepo" :tabs="repoTabs" @update:model-value="(r) => (v.repo = r)" />
       <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
     </Teleport>
     <div class="relative min-h-0 flex-1 overflow-hidden rounded-xl border">
@@ -540,7 +538,7 @@ const viewSections = computed<ViewSection[]>(() => [
 
         <Background :gap="18" :size="1.2" />
         <Controls position="bottom-left" :show-interactive="false" :show-fit-view="false">
-          <ControlButton title="Reset view" aria-label="Reset view" @click="frame"><PhArrowsCounterClockwise /></ControlButton>
+          <ControlButton title="Fit to view" aria-label="Fit to view" @click="frame"><PhFrameCorners weight="bold" /></ControlButton>
         </Controls>
         <Panel position="bottom-right" class="graph-panel flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5 text-xs text-muted-foreground">
           <span class="flex items-center gap-1.5"><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="var(--primary)" stroke-width="2.5" /></svg>release goes first</span>

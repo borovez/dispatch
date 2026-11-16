@@ -32,6 +32,8 @@ const nav = useReleaseNav()
 const releaseId = computed(() => (key.value ? nav.releaseForIssue(key.value) : null))
 const issue = computed(() => (key.value ? (deck.jiraByKey.get(key.value) ?? null) : null))
 const prs = computed(() => (key.value ? deck.prs.filter((p) => p.jiraKeys.includes(key.value!)) : []))
+/** This issue's PRs that depend on or block others: "Show dependencies" focuses the graph on them */
+const depPrs = computed(() => prs.value.map((p) => p.id).filter(nav.hasDeps))
 /** Flags named by this issue's PRs */
 const flags = computed(() => [...new Set(prs.value.flatMap((p) => p.flags))])
 const url = computed(() => issue.value?.url ?? (deck.overview?.jiraBaseUrl && key.value ? `${deck.overview.jiraBaseUrl}/browse/${key.value}` : undefined))
@@ -151,7 +153,13 @@ const details = computed(() => {
         </div>
 
         <section>
-          <h3 class="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Pull requests</h3>
+          <div class="mb-1.5 flex items-center gap-2">
+            <h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Pull requests</h3>
+            <span class="flex-1" />
+            <Button v-if="depPrs.length" variant="link" size="xs" class="h-auto p-0 text-xs" @click="nav.openDependencies(depPrs)">
+              <PhGraph /> Show dependencies
+            </Button>
+          </div>
           <div v-if="prs.length" class="-mx-3"><PrRow v-for="p in prs" :key="p.id" :pr="p" compact :preview="false" /></div>
           <p v-else class="text-sm text-muted-foreground">No linked pull requests</p>
         </section>

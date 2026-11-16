@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onEscape } from '@/composables/escape'
 import { computed, nextTick, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { onKeyStroke, unrefElement, useElementSize, useEventListener } from '@vueuse/core'
 import { MarkerType, Panel, Position, VueFlow, useVueFlow, type Connection, type Edge, type EdgeMouseEvent, type Node, type NodeMouseEvent } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -10,9 +11,11 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@/components/flowTheme.css'
-import { PhArrowArcLeft, PhArrowArcRight, PhArrowsClockwise, PhArrowsCounterClockwise, PhArrowsDownUp, PhCheckCircle, PhClock, PhCircleNotch, PhPlus, PhBuildings, PhGraph, PhHandGrabbing, PhTrash, PhX } from '@phosphor-icons/vue'
+import { PhArrowArcLeft, PhArrowArcRight, PhArrowsClockwise, PhFrameCorners, PhArrowsDownUp, PhCheckCircle, PhClock, PhCircleNotch, PhPlus, PhBuildings, PhGraph, PhHandGrabbing, PhTrash, PhX } from '@phosphor-icons/vue'
 import type { DepEdge, DependencyKind, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
+import { api } from '@/api'
+import { toast } from 'vue-sonner'
 import { cn } from '@/lib/utils'
 import { useDependencies } from '@/composables/dependencies'
 import { useLayout } from '@/stores/layout'
@@ -73,6 +76,7 @@ const viewSections = computed<ViewSection[]>(() => [
 ])
 /** Active filters that aren't otherwise visible in the toolbar */
 const chips = computed(() => [
+  ...(focusIds.value.length ? [{ key: 'focus', label: `Chain of ${focusLabel.value}`, clear: () => (focusIds.value = []) }] : []),
   ...(v.org ? [{ key: 'org', label: v.org, clear: () => (v.org = '') }] : []),
 ])
 // A repo outside the chosen org would hide everything
@@ -164,15 +168,19 @@ const nodes = computed<Node<GraphNodeData>[]>(() =>
   })),
 )
 
-/** Hovering a card highlights its whole chain: everything it waits on and everything waiting on it */
+/**
+ * Hovering a card highlights its whole chain: everything it waits on and everything waiting on it.
+ * Without a hover, the PRs opened with ?focus= (Show in dependency graph) stay highlighted.
+ */
 const hoverNode = ref<string | null>(null)
+const focusIds = ref<string[]>([])
 const path = computed(() => {
-  const start = hoverNode.value
-  if (!start) return null
-  const nodes = new Set([start])
+  const starts = hoverNode.value ? [hoverNode.value] : focusIds.value.filter((id) => nodeIds.value.includes(id))
+  if (!starts.length) return null
+  const nodes = new Set(starts)
   const edges = new Set<string>()
   for (const dir of ['up', 'down'] as const) {
-    const queue: string[] = [start]
+    const queue: string[] = [...starts]
     while (queue.length) {
       const n = queue.shift()!
       for (const e of visibleEdges.value) {
@@ -261,7 +269,7 @@ const edges = computed<Edge[]>(() => [
   }),
 ])
 
-const { fitView, viewport } = useVueFlow('dep-graph')
+const { fitView, viewport, setViewport } = useVueFlow('dep-graph')
 const graphBox = ref<InstanceType<typeof Card> | null>(null)
 const { width: graphW, height: graphH } = useElementSize(graphBox)
 // Re-fit when the set of nodes changes (filters, new links), not on every poll
@@ -272,8 +280,40 @@ watch(
 /** The position and zoom the graph opens with (also the Reset view button) */
 async function resetView() {
   await nextTick()
-  setTimeout(() => fitView({ padding: 0.15, maxZoom: 1.25, duration: 200 }), 50)
+  // With focused PRs on screen, frame their chains instead of the whole graph
+  setTimeout(() => (path.value && focusIds.value.length && !hoverNode.value ? frameFocus() : fitView({ padding: 0.15, maxZoom: 1.25, duration: 200 })), 50)
 }
+
+// ?focus=a,b: highlight those PRs' chains and frame them beside the side panel (it stays open)
+const route = useRoute()
+const router = useRouter()
+watch(
+  () => route.query.focus,
+  async (focus) => {
+    if (typeof focus !== 'string' || !focus) return
+    focusIds.value = focus.split(',').filter(Boolean)
+    router.replace({ query: {} })
+    resetView()
+  },
+  { immediate: true },
+)
+async function frameFocus() {
+  const ids = path.value ? [...path.value.nodes] : []
+  if (!ids.length) return
+  await fitView({ nodes: ids, padding: 0.2, maxZoom: 1.1, duration: 0 })
+  // Shift the framed chains into the part of the graph the side panel doesn't cover
+  const box = (unrefElement(graphBox) as HTMLElement | undefined)?.getBoundingClientRect()
+  const panel = document.querySelector('[data-side-panel]')?.getBoundingClientRect()
+  const covered = box && panel ? Math.max(0, box.right - Math.max(panel.left, box.left)) : 0
+  const vp = viewport.value
+  if (covered && box) {
+    const zoom = Math.min(vp.zoom, vp.zoom * ((box.width - covered) / box.width))
+    const cx = (box.width / 2 - vp.x) / vp.zoom
+    const cy = (box.height / 2 - vp.y) / vp.zoom
+    setViewport({ zoom, x: (box.width - covered) / 2 - cx * zoom, y: box.height / 2 - cy * zoom }, { duration: 250 })
+  }
+}
+const focusLabel = computed(() => focusIds.value.map(shortRef).join(', '))
 
 function onNodeClick({ node }: NodeMouseEvent) {
   if (deck.byId.has(node.id)) deck.selectedId = node.id
@@ -329,6 +369,24 @@ function onEdgeHover({ edge, event }: EdgeMouseEvent) {
 function onEdgeLeave() {
   hoveredEdge.value = null
   tip.value = null
+}
+
+/** Resync only what's on the graph (the PRs shown), not everything; Shift-click runs a full sync */
+const resyncing = ref(false)
+async function resyncShown() {
+  const ids = nodeIds.value.filter((id) => deck.byId.has(id))
+  if (!ids.length || resyncing.value) return
+  resyncing.value = true
+  let res: Awaited<ReturnType<typeof api.resyncPrs>> | undefined
+  try {
+    if (!(await deck.mutate(async () => void (res = await api.resyncPrs(ids))))) return
+    const r = res!
+    const parts = [`${r.prs} PRs`, r.added && `${r.added} new dependency target${r.added === 1 ? '' : 's'}`, r.jira && `${r.jira} Jira issues`].filter(Boolean).join(', ')
+    if (r.errors.length) toast.warning(`Resynced ${parts}`, { description: r.errors[0] })
+    else toast.success('Graph resynced', { description: parts })
+  } finally {
+    resyncing.value = false
+  }
 }
 
 /** Any dependency write running: controls are disabled until it finishes */
@@ -450,11 +508,17 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
       <div class="flex shrink-0 items-center">
         <Tooltip>
           <TooltipTrigger as-child>
-            <Button variant="ghost" size="icon-sm" aria-label="Resync links" :disabled="deck.syncRunning" @click="deck.sync()">
-              <PhArrowsClockwise :class="{ 'animate-spin': deck.syncRunning }" />
+            <Button variant="ghost" size="icon-sm" aria-label="Resync the PRs on the graph" :disabled="resyncing || deck.syncRunning" @click="(e: MouseEvent) => (e.shiftKey ? deck.sync() : resyncShown())">
+              <PhArrowsClockwise :class="{ 'animate-spin': resyncing || deck.syncRunning }" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent class="max-w-72">{{ deck.syncRunning ? 'Syncing…' : 'Resync: fetch PR descriptions and Jira links again for new or changed dependencies' }}</TooltipContent>
+          <TooltipContent class="max-w-72">
+            <template v-if="resyncing || deck.syncRunning">Syncing…</template>
+            <template v-else>
+              Resync the {{ nodeIds.length }} PRs on the graph: descriptions, the PRs they now depend on, and their Jira links.
+              <span class="opacity-70">Shift-click for a full sync.</span>
+            </template>
+          </TooltipContent>
         </Tooltip>
         <span class="mx-1 h-4 w-px bg-border" aria-hidden="true" />
         <Tooltip>
@@ -494,7 +558,7 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
         @edge-mouse-enter="onEdgeHover"
         @edge-mouse-move="onEdgeHover"
         @edge-mouse-leave="onEdgeLeave"
-        @pane-click="(selectedEdge = null), (pending = null)"
+        @pane-click="(selectedEdge = null), (pending = null), (focusIds = [])"
         @node-mouse-enter="({ node }) => (hoverNode = node.id)"
         @node-mouse-leave="hoverNode = null"
         @connect="onConnect"
@@ -505,7 +569,7 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
 
         <Background :gap="18" :size="1.2" />
         <Controls position="bottom-left" :show-interactive="false" :show-fit-view="false">
-          <ControlButton title="Reset view" aria-label="Reset view" @click="resetView"><PhArrowsCounterClockwise /></ControlButton>
+          <ControlButton title="Fit to view" aria-label="Fit to view" @click="(focusIds = []), resetView()"><PhFrameCorners weight="bold" /></ControlButton>
         </Controls>
 
         <Panel v-if="legendOrgs.length" position="top-left" class="graph-panel flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5 text-xs">

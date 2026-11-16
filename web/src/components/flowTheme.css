@@ -71,6 +71,11 @@
 }
 .dep-graph .vue-flow__controls-button svg {
   fill: currentColor;
+  /* Vue Flow caps icons at 12px, which scales our Phosphor icons down blurry */
+  width: 14px;
+  height: 14px;
+  max-width: 14px;
+  max-height: 14px;
 }
 
 /* Cards off the hovered chain fade back */

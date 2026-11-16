@@ -2,15 +2,17 @@ import type { SlackItem, SlackMessage } from '../../shared/types.ts'
 import { getSettings } from './db.ts'
 import { buildOverview } from './model.ts'
 import { extractJiraKeys, normaliseRef } from './refs.ts'
-import { messagesAround } from './slack.ts'
+import { messagesAround, threadReplies } from './slack.ts'
 
 /** Most messages a prompt takes on either side of the item */
 const MAX = 200
+/** Most threads expanded under conversation messages */
+const MAX_THREADS = 15
 
 /**
  * A Markdown brief for pasting into any AI chat: where a Slack message was posted, the conversation around
  * it (a thread reply: the whole thread; a channel or DM message: `before` / `after` messages around it plus
- * its own thread replies), and the PRs and Jira issues the conversation names, as Dispatch knows them.
+ * every thread in it nested under its message), and the PRs and Jira issues the conversation names, as Dispatch knows them.
  * No AI call.
  */
 export async function buildSlackPrompt(item: SlackItem, before = 20, after = 20): Promise<string> {
@@ -19,16 +21,29 @@ export async function buildSlackPrompt(item: SlackItem, before = 20, after = 20)
   const clamp = (n: number) => Math.min(MAX, Math.max(0, n))
   const inThread = !!item.threadTs
   const around = await messagesAround(s.slack, item, inThread ? MAX : clamp(before), inThread ? MAX : clamp(after))
-  // A channel/DM message can have its own thread: take it too
-  const replies = inThread
-    ? []
-    : await messagesAround(s.slack, { ...item, threadTs: item.ts }, 0, MAX)
-        .then((r) => r.messages.filter((m) => !m.isTarget))
-        .catch(() => [] as SlackMessage[])
+  // Conversation messages with threads: their replies go under them (the item's own thread always,
+  // then the others nearest the item first, up to MAX_THREADS)
+  const withThreads = around.messages
+    .filter((m) => m.replyCount)
+    .sort((a, b) => Number(b.isTarget) - Number(a.isTarget) || Math.abs(Number(a.ts) - Number(item.ts)) - Math.abs(Number(b.ts) - Number(item.ts)))
+    .slice(0, MAX_THREADS)
+  const threads = new Map<string, SlackMessage[]>(
+    await Promise.all(
+      withThreads.map(async (m) => [m.ts, await threadReplies(s.slack!, item, m.ts).catch(() => [] as SlackMessage[])] as [string, SlackMessage[]]),
+    ),
+  )
+  const replies = [...threads.values()].flat()
 
   const when = (iso: string) => iso.slice(0, 16).replace('T', ' ')
   const indent = (text: string) => text.trim().split('\n').join('\n  ')
   const line = (m: SlackMessage) => `- **${m.userName}** (${when(m.postedAt)})${m.isTarget ? ' ★ *the message in question*' : ''}:\n  ${indent(m.text) || '_(no text)_'}`
+  /** A conversation message, then its thread replies nested under it */
+  const withReplies = (m: SlackMessage) => {
+    const r = threads.get(m.ts)
+    if (!r?.length) return [line(m)]
+    const nested = r.map((x) => line(x).split('\n').map((l) => `    ${l}`).join('\n'))
+    return [line(m), `  - _Thread (${r.length} ${r.length === 1 ? 'reply' : 'replies'}):_`, ...nested]
+  }
 
   // What the conversation names, as Dispatch knows it
   const all = [...around.messages, ...replies]
@@ -64,10 +79,9 @@ export async function buildSlackPrompt(item: SlackItem, before = 20, after = 20)
     `## ${inThread ? 'Thread' : 'Conversation'}`,
     '',
     ...(around.hasBefore ? ['_(earlier messages not included)_', ''] : []),
-    ...around.messages.map(line),
+    ...around.messages.flatMap(withReplies),
     ...(around.hasAfter ? ['', '_(later messages not included)_'] : []),
   ]
-  if (replies.length) out.push('', '## Replies in its thread', '', ...replies.map(line))
   if (prs.length) out.push('', '## Pull requests mentioned', '', ...prs)
   if (jira.length) out.push('', '## Jira issues mentioned', '', ...jira)
   return out.join('\n') + '\n'

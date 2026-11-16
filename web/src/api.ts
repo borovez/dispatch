@@ -1,4 +1,4 @@
-import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, PrDetail, Overview, Settings, SlackContext, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
+import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, PrDetail, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
 
 async function call<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -40,6 +40,8 @@ export const api = {
   removeDep: (id: number) => call('DELETE', `/deps/${id}`),
   prDetail: (id: string) => call<PrDetail>('GET', `/prs/detail?id=${encodeURIComponent(id)}`),
   resyncPr: (id: string) => call('POST', '/prs/resync', { id }),
+  /** Resync just these PRs, the PRs their descriptions now depend on, and their Jira issues */
+  resyncPrs: (ids: string[]) => call<{ prs: number; added: number; jira: number; errors: string[] }>('POST', '/prs/resync-many', { ids }),
   refreshRelease: (id: string) => call('POST', '/releases/refresh', { id }),
   setMeta: (id: string, note: string | null, pinned: boolean) => call('PUT', '/prs/meta', { id, note, pinned }),
   prText: (id: string) => call<{ title: string; body: string }>('GET', `/prs/text?id=${encodeURIComponent(id)}`),
@@ -71,6 +73,7 @@ export const api = {
     call<SlackContext>('GET', `/slack/${encodeURIComponent(id)}/around?before=${before}&after=${after}`),
   slackPrompt: (id: string, before?: number, after?: number) =>
     call<{ prompt: string }>('GET', `/slack/${encodeURIComponent(id)}/prompt${before === undefined ? '' : `?before=${before}&after=${after ?? before}`}`),
+  slackThread: (id: string, ts: string) => call<SlackMessage[]>('GET', `/slack/${encodeURIComponent(id)}/thread-replies?ts=${encodeURIComponent(ts)}`),
   slackReply: (id: string, text: string, threadTs?: string | null) => call<{ ok: boolean }>('POST', `/slack/${encodeURIComponent(id)}/reply`, { text, threadTs }),
   slackUser: (id: string) => call<SlackUserProfile>('GET', `/slack/users/${encodeURIComponent(id)}`),
   slackStatus: (id: string, status: SlackStatus) =>

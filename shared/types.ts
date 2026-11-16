@@ -405,6 +405,8 @@ export interface SlackMessage {
   postedAt: string
   /** The inbox item itself */
   isTarget: boolean
+  /** Replies in this message's thread (conversation view only; the thread itself isn't loaded) */
+  replyCount?: number
 }
 
 /** Messages around a Slack inbox item, and whether the conversation goes on either side */

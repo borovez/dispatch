@@ -162,6 +162,9 @@ export function usePrMenu() {
                 ]),
           ] as MenuEntry[])
         : []),
+      ...(nav.hasDeps(pr.id)
+        ? ([{ label: 'Show in the dependency graph', icon: PhGraph, run: () => nav.openDependencies([pr.id]) }] as MenuEntry[])
+        : []),
       ...(release
         ? ([
             'separator',
