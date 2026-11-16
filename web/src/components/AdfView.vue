@@ -73,7 +73,7 @@ function node(n: AdfNode): VNode | string {
     case 'panel':
       return h('div', { class: 'my-2 rounded-md border bg-muted/50 px-3 py-1' }, kids())
     case 'table':
-      return h('div', { class: 'my-2 overflow-x-auto' }, [h('table', { class: 'w-full border-collapse text-xs' }, [h('tbody', kids())])])
+      return h('div', { class: 'my-2 overflow-x-auto' }, [h('table', { class: 'w-full border-collapse text-[0.92em]' }, [h('tbody', kids())])])
     case 'tableRow':
       return h('tr', kids())
     case 'tableHeader':
