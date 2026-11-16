@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { cn } from '@/lib/utils'
+import { useStuck } from '@/composables/stuck'
 
 /**
  * A list page's toolbar that stays under the app header while the page scrolls. It reaches out over
@@ -13,26 +14,16 @@ import { cn } from '@/lib/utils'
 /** contentClass: caps the controls (e.g. `max-w-6xl` to line up with a capped list) while the bar spans the page */
 defineProps<{ class?: string; contentClass?: string }>()
 const el = ref<HTMLElement>()
-const stuck = ref(false)
+const stuck = useStuck(el)
 let ro: ResizeObserver | undefined
-let frame = 0
-/** Stuck: the page has scrolled and the toolbar sits at the header's bottom edge */
-function check() {
-  cancelAnimationFrame(frame)
-  frame = requestAnimationFrame(() => (stuck.value = window.scrollY > 0 && (el.value?.getBoundingClientRect().top ?? 99) <= 57))
-}
 
 onMounted(() => {
   const root = document.documentElement
   ro = new ResizeObserver(() => root.style.setProperty('--sticky-top', `${56 + (el.value?.offsetHeight ?? 0)}px`))
   if (el.value) ro.observe(el.value)
-  window.addEventListener('scroll', check, { passive: true })
-  check()
 })
 onBeforeUnmount(() => {
   ro?.disconnect()
-  window.removeEventListener('scroll', check)
-  cancelAnimationFrame(frame)
   document.documentElement.style.removeProperty('--sticky-top')
 })
 </script>

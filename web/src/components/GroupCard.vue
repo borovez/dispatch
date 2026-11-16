@@ -5,7 +5,8 @@ import { Card } from '@/components/ui/card'
 
 /**
  * Collapsible list section: caret, label, count; `#actions` for buttons on the right of the heading.
- * The heading sticks under the page toolbar (`--sticky-top`, StickyToolbar) while its list scrolls.
+ * The heading sticks under the page toolbar (`--sticky-top`, StickyToolbar), and under a sticky
+ * SectionHeading where the page sets `--section-h`, while its list scrolls.
  */
 defineProps<{ label: string; count: number }>()
 const collapsed = defineModel<boolean>('collapsed', { default: false })
@@ -15,7 +16,7 @@ const collapsed = defineModel<boolean>('collapsed', { default: false })
   <!-- overflow-visible: a clipping card would stop the heading sticking -->
   <Card class="gap-0 overflow-visible py-0">
     <div
-      class="sticky top-(--sticky-top,--spacing(14)) z-10 flex items-center gap-2 rounded-t-xl bg-card pr-2"
+      class="sticky top-[calc(var(--sticky-top,3.5rem)+var(--section-h,0px))] z-10 flex items-center gap-2 rounded-t-xl bg-card pr-2"
       :class="collapsed ? 'rounded-b-xl' : 'border-b'"
     >
       <button class="flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-4 text-left" @click="collapsed = !collapsed">

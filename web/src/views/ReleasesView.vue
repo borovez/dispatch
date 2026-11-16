@@ -182,7 +182,8 @@ async function refresh(id: string) {
     </StickyToolbar>
 
     <ReleaseGraph v-if="graph" :scope="v.tab" />
-    <div v-else class="space-y-4">
+    <!-- --section-h: sticky SectionHeadings are 2.5rem; card headings stick below them -->
+    <div v-else class="space-y-4" :class="v.tab === 'releases' && '[--section-h:2.5rem]'">
         <template v-if="v.tab === 'releases'">
           <template v-for="sec in [{ label: 'Open releases', prs: openReleases }, { label: 'Merged releases', prs: mergedReleases }]" :key="sec.label">
           <SectionHeading
