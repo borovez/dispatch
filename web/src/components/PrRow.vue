@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, type HTMLAttributes } from 'vue'
+import { computed, ref, type HTMLAttributes } from 'vue'
+import { useRowArming } from '@/composables/arming'
 import {
   PhCheckCircle,
   PhCircleNotch,
@@ -38,6 +39,9 @@ const contents = computed(() => deck.releaseById.get(props.pr.id))
 const contentIds = computed(() => contents.value?.items.map((i) => i.id) ?? [])
 const contentItem = (id: string) => contents.value?.items.find((i) => i.id === id)
 const prMenu = usePrMenu()
+const rowEl = ref<HTMLElement>()
+// Menus, hover card, tooltips and popovers mount once the row nears the viewport
+useRowArming(rowEl)
 const openDeps = computed(() => props.pr.dependsOn.filter((d) => !d.satisfied).length)
 </script>
 
@@ -45,9 +49,10 @@ const openDeps = computed(() => props.pr.dependsOn.filter((d) => !d.satisfied).l
   <ItemContextMenu :entries="() => prMenu(pr)">
   <PrHover :pr="pr" side="bottom" :disabled="!preview">
   <div
+    ref="rowEl"
     :data-pr-id="pr.id"
     :class="cn(
-      'group flex min-w-0 cursor-pointer flex-wrap items-start gap-x-3 gap-y-1.5 rounded-lg px-3 transition-colors hover:bg-accent sm:flex-nowrap',
+      'lazy-row group flex min-w-0 cursor-pointer flex-wrap items-start gap-x-3 gap-y-1.5 rounded-lg px-3 transition-colors hover:bg-accent sm:flex-nowrap',
       compact ? 'py-1.5' : 'py-2.5',
       deck.selectedId === pr.id && 'bg-accent ring-2 ring-primary ring-inset',
       props.class,

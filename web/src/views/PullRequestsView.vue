@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { openInAppOr } from '@/lib/external'
 import { computed, ref } from 'vue'
 import {
   PhBuildings,
@@ -30,8 +29,7 @@ import DisplayMenu, { type DisplayRow } from '@/components/DisplayMenu.vue'
 import FilterChips from '@/components/FilterChips.vue'
 import FilterMenu, { type FilterField, type FilterOption, type Filters } from '@/components/FilterMenu.vue'
 import GroupCard from '@/components/GroupCard.vue'
-import PrCard from '@/components/PrCard.vue'
-import PrHover from '@/components/PrHover.vue'
+import BoardCard from '@/components/BoardCard.vue'
 import PrRow from '@/components/PrRow.vue'
 import RepoName from '@/components/RepoName.vue'
 import { Badge } from '@/components/ui/badge'
@@ -313,9 +311,7 @@ const toggleAll = () => {
         <ScrollArea type="auto" class="min-h-0 flex-1">
           <!-- pt-1: the viewport clips, and the selected card's ring draws outside the card; pr-3.5 clears the scrollbar (shown only when the column overflows) -->
           <div class="space-y-2 pt-1 pr-3.5 pb-2 pl-2">
-            <PrHover v-for="p in g.prs" :key="p.id" :pr="p">
-              <PrCard :id="p.id" :pr="p" class="cursor-pointer" @click="openInAppOr($event, p.url, () => (deck.selectedId = p.id))" />
-            </PrHover>
+            <BoardCard v-for="p in g.prs" :key="p.id" :pr="p" />
             <p v-if="!g.prs.length" class="py-6 text-center text-xs text-muted-foreground">Nothing here</p>
           </div>
         </ScrollArea>

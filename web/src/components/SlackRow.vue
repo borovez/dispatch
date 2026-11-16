@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { SlackItem } from '@shared/types'
+import { useRowArming } from '@/composables/arming'
 import { useDeck } from '@/stores/deck'
 import { fullDate, timeAgo } from '@/utils/format'
 import { KIND } from '@/utils/slack'
@@ -17,14 +19,17 @@ import { Badge } from '@/components/ui/badge'
 defineProps<{ item: SlackItem }>()
 const deck = useDeck()
 const slackMenu = useSlackMenu()
+const rowEl = ref<HTMLElement>()
+useRowArming(rowEl)
 </script>
 
 <template>
   <ItemContextMenu :entries="() => slackMenu(item)">
   <div
+    ref="rowEl"
     :data-slack-id="item.id"
     :class="cn(
-      'group flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-1 rounded-lg px-3 py-2.5 transition-colors hover:bg-accent sm:flex-nowrap',
+      'lazy-row group flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-1 rounded-lg px-3 py-2.5 transition-colors hover:bg-accent sm:flex-nowrap',
       item.status !== 'new' && 'opacity-60',
       deck.selectedSlackId === item.id && 'bg-accent ring-2 ring-primary ring-inset',
     )"

@@ -6,6 +6,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Long lists: the browser skips layout and paint for rows far off screen (the DOM stays, so find,
+   arrow navigation and scrollIntoView still work). `auto` remembers each row's last rendered height. */
+@utility lazy-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3.5rem;
+}
+
 /*
  * The generated shadcn-vue classes use state shorthands (data-checked:, data-open: …), but reka-ui
  * marks state as data-state="checked" etc. Match both, or switches, checkboxes, tabs and

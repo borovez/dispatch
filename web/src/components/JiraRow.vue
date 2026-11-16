@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import ExternalLink from '@/components/ExternalLink.vue'
 import { modClickHint, openInAppOr } from '@/lib/external'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useRowArming } from '@/composables/arming'
 import type { JiraIssueView, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { timeAgo } from '@/utils/format'
@@ -22,6 +23,8 @@ function select(e: MouseEvent) {
   openInAppOr(e, href.value, () => (deck.selectedJiraKey = props.issueKey))
 }
 const deck = useDeck()
+const rowEl = ref<HTMLElement>()
+useRowArming(rowEl)
 const jiraMenu = useJiraMenu()
 const href = computed(
   () => props.issue?.url ?? (deck.overview?.jiraBaseUrl ? `${deck.overview.jiraBaseUrl}/browse/${props.issueKey}` : undefined),
@@ -43,8 +46,9 @@ const initials = (name: string) =>
 <template>
   <ItemContextMenu :entries="() => jiraMenu(issueKey, issue, prs)">
   <div
+    ref="rowEl"
     :data-jira-id="issueKey"
-    :class="cn('group cursor-pointer rounded-lg px-3 py-2.5 transition-colors hover:bg-accent', deck.selectedJiraKey === issueKey && 'bg-accent ring-2 ring-primary ring-inset')"
+    :class="cn('lazy-row group cursor-pointer rounded-lg px-3 py-2.5 transition-colors hover:bg-accent', deck.selectedJiraKey === issueKey && 'bg-accent ring-2 ring-primary ring-inset')"
     :title="href ? `Open in Dispatch · ${modClickHint(href)}` : undefined"
     @click="select"
   >
