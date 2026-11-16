@@ -16,7 +16,7 @@ import { isUnreleased } from '@/utils/releaseFlow'
 import ReleaseGroupNode, { GROUP_W, groupHeight, type GroupRow, type ReleaseGroupData } from './ReleaseGroupNode.vue'
 import RepoName from './RepoName.vue'
 import ViewMenu, { type ViewSection } from './ViewMenu.vue'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import RepoSelect from './RepoSelect.vue'
 
 /**
  * Release graph: left to right is the path to production, one lane per repo.
@@ -425,7 +425,30 @@ const edges = computed<Edge[]>(() => {
   })
 })
 
-const { fitView, setViewport, dimensions } = useVueFlow('release-graph')
+const { fitView, setViewport, dimensions, findNode, vueFlowRef } = useVueFlow('release-graph')
+
+/**
+ * Zoom to one node inside the part of the graph a side panel doesn't cover (the panel stays open
+ * beside it), at a readable zoom (0.6 to 1).
+ */
+function frameNode(id: string) {
+  const n = findNode(id)
+  const box = vueFlowRef.value?.getBoundingClientRect()
+  if (!n || !box) return
+  const panel = document.querySelector<HTMLElement>('[data-side-panel]')?.getBoundingClientRect()
+  const covered = panel ? Math.max(0, Math.min(box.right, panel.right) - Math.max(box.left, panel.left)) : 0
+  const w = Math.max(200, box.width - covered)
+  const h = box.height
+  const nw = n.dimensions.width || 300
+  const nh = n.dimensions.height || 200
+  const pad = 0.15
+  const zoom = Math.min(1, Math.max(0.6, Math.min((w * (1 - 2 * pad)) / nw, (h * (1 - 2 * pad)) / nh)))
+  const cx = n.computedPosition.x + nw / 2
+  const cy = n.computedPosition.y + nh / 2
+  // Tall boxes start at their top rather than their middle
+  const y = nh * zoom > h * (1 - 2 * pad) ? h * pad - n.computedPosition.y * zoom : h / 2 - cy * zoom
+  setViewport({ x: w / 2 - cx * zoom, y, zoom }, { duration: 300 })
+}
 /** Fit when it stays readable; otherwise start at the top left at a readable zoom and let people pan */
 /** ?focus=<pr id>: zoom to the box holding that PR (set by the PR panel's "Show in release graph") */
 const route = useRoute()
@@ -435,7 +458,7 @@ async function frame() {
   const focus = typeof route.query.focus === 'string' ? route.query.focus : null
   const node = focus ? locate.value.get(focus)?.node : undefined
   if (node) {
-    setTimeout(() => fitView({ nodes: [node], maxZoom: 1, minZoom: 0.6, padding: 0.3, duration: 300 }), 80)
+    setTimeout(() => frameNode(node), 80)
     router.replace({ query: {} })
     return
   }
@@ -477,17 +500,10 @@ const viewSections = computed<ViewSection[]>(() => [
   <div class="flex min-h-0 flex-1 flex-col gap-3">
     <!-- Filters live in the page toolbar, next to the tabs -->
     <Teleport defer to="#releases-toolbar">
+      <!-- One repo at a time; other repos show only what links to it -->
+      <RepoSelect v-if="repoTabs.length > 1" :model-value="activeRepo" :tabs="repoTabs" @update:model-value="(r) => (v.repo = r)" />
       <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
     </Teleport>
-    <!-- One repo at a time; other repos show only what links to it -->
-    <div v-if="repoTabs.length > 1" class="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
-      <Tabs :model-value="activeRepo" @update:model-value="(r) => (v.repo = String(r))">
-        <TabsList>
-          <TabsTrigger v-for="r in repoTabs" :key="r.key" :value="r.key" :count="r.count" :title="r.repo">{{ r.repo.split('/')[1] }}</TabsTrigger>
-          <TabsTrigger value="all">All repos</TabsTrigger>
-        </TabsList>
-      </Tabs>
-    </div>
     <div class="relative min-h-0 flex-1 overflow-hidden rounded-xl border">
       <VueFlow
         id="release-graph"

@@ -20,10 +20,7 @@ export function useReleaseNav() {
   function openGraph(focus: string, repo: string) {
     releases.tab = 'graph'
     graph.repo = repo.toLowerCase()
-    // Panels would cover the box the graph zooms to
-    deck.selectedId = null
-    deck.selectedJiraKey = null
-    deck.selectedSlackId = null
+    // The panel stays open: the graph zooms to the box in the part the panel doesn't cover
     router.push({ path: '/releases', query: { focus } })
   }
   function openTrains() {

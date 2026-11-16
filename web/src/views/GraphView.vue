@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onEscape } from '@/composables/escape'
 import { computed, nextTick, ref, watch } from 'vue'
-import { unrefElement, useElementSize } from '@vueuse/core'
+import { onKeyStroke, unrefElement, useElementSize, useEventListener } from '@vueuse/core'
 import { MarkerType, Panel, Position, VueFlow, useVueFlow, type Connection, type Edge, type EdgeMouseEvent, type Node, type NodeMouseEvent } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { ControlButton, Controls } from '@vue-flow/controls'
@@ -10,8 +10,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@/components/flowTheme.css'
-import { PhArrowsCounterClockwise, PhArrowsDownUp, PhCheckCircle, PhClock, PhCircleNotch, PhPlus, PhBuildings, PhGitBranch, PhGraph, PhHandGrabbing, PhTrash, PhX } from '@phosphor-icons/vue'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { PhArrowArcLeft, PhArrowArcRight, PhArrowsClockwise, PhArrowsCounterClockwise, PhArrowsDownUp, PhCheckCircle, PhClock, PhCircleNotch, PhPlus, PhBuildings, PhGraph, PhHandGrabbing, PhTrash, PhX } from '@phosphor-icons/vue'
 import type { DepEdge, DependencyKind, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { cn } from '@/lib/utils'
@@ -21,9 +20,12 @@ import GraphNode, { CARD_W, cardHeight, type GraphNodeData } from '@/components/
 import FilterChips from '@/components/FilterChips.vue'
 import ViewMenu, { type ViewSection } from '@/components/ViewMenu.vue'
 import PrPicker from '@/components/PrPicker.vue'
+import Kbd from '@/components/Kbd.vue'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import RepoSelect from '@/components/RepoSelect.vue'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
 const deck = useDeck()
@@ -31,6 +33,7 @@ const deps = useDependencies()
 // Escape: the PR drawer closes first (its own handler), then the edge panel
 onEscape(() => {
   if (deck.selectedId) return false
+  if (pending.value) return (pending.value = null), true
   if (selectedEdge.value) return (selectedEdge.value = null), true
   if (adding.value) return (adding.value = false), true
   return false
@@ -61,14 +64,9 @@ const orgs = computed(() => {
   return [...new Set([...ids].map(ownerOf))].sort()
 })
 const orgColor = computed(() => new Map(orgs.value.map((o, i) => [o, ORG_COLORS[i % ORG_COLORS.length]])))
-const repos = computed(() => {
-  const all = new Set<string>([...deck.repos, ...allEdges.value.flatMap((e) => [repoOf(e.from), repoOf(e.to)])])
-  return [...all].filter((r) => !v.org || ownerOf(r) === v.org).sort()
-})
 
 const viewSections = computed<ViewSection[]>(() => [
   { type: 'filter', key: 'org', label: 'Org', icon: PhBuildings, allLabel: 'All orgs', options: orgs.value.map((o) => ({ value: o, label: o })), mono: true },
-  { type: 'filter', key: 'repo', label: 'Repo', icon: PhGitBranch, allLabel: 'All repos', options: repos.value.map((r) => ({ value: r, label: r })), mono: true },
   { type: 'check', key: 'hideDone', label: 'Hide finished chains' },
   { type: 'check', key: 'mineOnly', label: 'Only chains with my PRs' },
   { type: 'check', key: 'showUnlinked', label: 'Show unlinked PRs (to draw links)' },
@@ -76,29 +74,60 @@ const viewSections = computed<ViewSection[]>(() => [
 /** Active filters that aren't otherwise visible in the toolbar */
 const chips = computed(() => [
   ...(v.org ? [{ key: 'org', label: v.org, clear: () => (v.org = '') }] : []),
-  ...(v.repo ? [{ key: 'repo', label: v.repo, clear: () => (v.repo = '') }] : []),
 ])
 // A repo outside the chosen org would hide everything
 watch(() => v.org, (org) => org && v.repo && ownerOf(v.repo) !== org && (v.repo = ''))
 
-const matchesScope = (id: string) => (!v.org || ownerOf(id) === v.org) && (!v.repo || repoOf(id) === v.repo)
+const inOrg = (id: string) => !v.org || ownerOf(id) === v.org
 
-const visibleChains = computed(() =>
+/** Chains after the org / finished / mine filters, before focusing on a repo */
+const scopedChains = computed(() =>
   (deck.overview?.chains ?? []).filter(
-    (c) =>
-      (!v.hideDone || !c.done) &&
-      (!v.mineOnly || c.prs.some((id) => deck.byId.get(id)?.isMine)) &&
-      c.prs.some(matchesScope),
+    (c) => (!v.hideDone || !c.done) && (!v.mineOnly || c.prs.some((id) => deck.byId.get(id)?.isMine)) && c.prs.some(inOrg),
   ),
 )
+const unlinkedPrs = computed(() => {
+  if (!v.showUnlinked) return []
+  const inChains = new Set(scopedChains.value.flatMap((c) => c.prs))
+  return deck.prs.filter((p) => p.state === 'OPEN' && !inChains.has(p.id) && inOrg(p.id) && (!v.mineOnly || p.isMine)).map((p) => p.id)
+})
+
+/** Repo tabs: repos with PRs in the chains shown, counted by open PRs */
+const repoTabs = computed(() => {
+  const counts = new Map<string, { key: string; repo: string; count: number }>()
+  for (const id of new Set([...scopedChains.value.flatMap((c) => c.prs.filter(inOrg)), ...unlinkedPrs.value])) {
+    const repo = deck.byId.get(id)?.repo ?? repoOf(id)
+    const t = counts.get(repo.toLowerCase()) ?? { key: repo.toLowerCase(), repo, count: 0 }
+    t.count += Number(deck.byId.get(id)?.state === 'OPEN')
+    counts.set(t.key, t)
+  }
+  return [...counts.values()].sort((a, b) => a.repo.localeCompare(b.repo))
+})
+/** '' = all repos; a saved repo that has nothing left falls back to all */
+const activeRepo = computed(() => (v.repo && repoTabs.value.some((t) => t.key === v.repo.toLowerCase()) ? v.repo.toLowerCase() : 'all'))
+const inFocus = (id: string) => activeRepo.value === 'all' || (deck.byId.get(id)?.repo ?? repoOf(id)).toLowerCase() === activeRepo.value
+
+const visibleChains = computed(() => scopedChains.value.filter((c) => c.prs.some(inFocus)))
 
 const nextSteps = computed(() => new Set(visibleChains.value.map((c) => c.nextStep).filter(Boolean) as string[]))
 
+/** PRs from other repos shown only because they link to the focused repo's PRs */
+const linkedIds = computed(() => {
+  if (activeRepo.value === 'all') return new Set<string>()
+  const chainIds = new Set(visibleChains.value.flatMap((c) => c.prs))
+  const own = new Set([...chainIds].filter(inFocus))
+  const linked = new Set<string>()
+  for (const e of allEdges.value) {
+    if (own.has(e.from) && chainIds.has(e.to) && !own.has(e.to)) linked.add(e.to)
+    if (own.has(e.to) && chainIds.has(e.from) && !own.has(e.from)) linked.add(e.from)
+  }
+  return linked
+})
+
 const nodeIds = computed(() => {
-  const ids = new Set(visibleChains.value.flatMap((c) => c.prs))
-  if (v.showUnlinked)
-    for (const p of deck.prs)
-      if (p.state === 'OPEN' && !ids.has(p.id) && matchesScope(p.id) && (!v.mineOnly || p.isMine)) ids.add(p.id)
+  const ids = new Set(activeRepo.value === 'all' ? visibleChains.value.flatMap((c) => c.prs) : visibleChains.value.flatMap((c) => c.prs.filter(inFocus)))
+  for (const id of linkedIds.value) ids.add(id)
+  for (const id of unlinkedPrs.value) if (inFocus(id)) ids.add(id)
   return [...ids]
 })
 
@@ -128,7 +157,7 @@ const nodes = computed<Node<GraphNodeData>[]>(() =>
     position: positions.value.get(id)!,
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
-    data: { id, pr: deck.byId.get(id) ?? null, color: orgColor.value.get(ownerOf(id)) ?? 'var(--muted-foreground)', isNext: nextSteps.value.has(id) },
+    data: { id, pr: deck.byId.get(id) ?? null, color: orgColor.value.get(ownerOf(id)) ?? 'var(--muted-foreground)', isNext: nextSteps.value.has(id), linked: linkedIds.value.has(id) },
     // Cards always above edges (hovered edges are raised above other edges only)
     zIndex: 10,
     class: path.value && !path.value.nodes.has(id) ? 'is-dimmed' : undefined,
@@ -164,9 +193,48 @@ const selectedEdge = ref<DepEdge | null>(null)
 /** Where the edge was clicked, in graph coordinates: the card stays there while the graph pans and zooms */
 const edgeAt = ref<{ x: number; y: number } | null>(null)
 
-const edges = computed<Edge[]>(() =>
-  visibleEdges.value.map((e) => {
+const nodeSet = computed(() => new Set(nodeIds.value))
+const removing = computed(() => new Set(deps.writing.value.filter((w) => w.op === 'remove').map((w) => `${w.from}>${w.to}`)))
+const WRITING_EDGE = {
+  style: { stroke: 'var(--muted-foreground)', strokeWidth: 2, strokeDasharray: '4 4', opacity: 0.6 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--muted-foreground)', width: 16, height: 16 },
+  labelStyle: { fill: 'var(--muted-foreground)', fontSize: '11px' },
+  labelBgStyle: { fill: 'var(--card)' },
+  labelBgPadding: [4, 2] as [number, number],
+  labelBgBorderRadius: 4,
+}
+const edges = computed<Edge[]>(() => [
+  ...(pending.value
+    ? [{
+        id: 'pending',
+        source: pending.value.to,
+        target: pending.value.from,
+        type: 'smoothstep',
+        animated: true,
+        zIndex: 6,
+        style: { stroke: 'var(--primary)', strokeWidth: 3, strokeDasharray: '4 4' },
+        markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--primary)', width: 16, height: 16 },
+        selectable: false,
+      } satisfies Edge]
+    : []),
+  // Links being written: grey and moving until GitHub / Dispatch answers
+  ...deps.writing.value
+    .filter((w) => w.op === 'add' && nodeSet.value.has(w.from) && nodeSet.value.has(w.to) && !visibleEdges.value.some((e) => e.from === w.from && e.to === w.to))
+    .map((w) => ({
+      id: `adding:${w.from}>${w.to}`,
+      source: w.to,
+      target: w.from,
+      type: 'smoothstep',
+      animated: true,
+      zIndex: 6,
+      label: 'Adding…',
+      ...WRITING_EDGE,
+      selectable: false,
+    }) satisfies Edge),
+  ...visibleEdges.value.map((e) => {
     const key = edgeKey(e)
+    if (removing.value.has(`${e.from}>${e.to}`))
+      return { id: key, source: e.to, target: e.from, type: 'smoothstep', animated: true, zIndex: 6, label: 'Removing…', ...WRITING_EDGE, data: e } satisfies Edge
     const picked = !!selectedEdge.value && edgeKey(selectedEdge.value) === key
     // The picked edge is primary, thicker and glows (.is-picked); the others fade while it's open
     const color = picked ? 'var(--primary)' : e.satisfied ? 'var(--success)' : 'var(--warning)'
@@ -191,7 +259,7 @@ const edges = computed<Edge[]>(() =>
       data: e,
     }
   }),
-)
+])
 
 const { fitView, viewport } = useVueFlow('dep-graph')
 const graphBox = ref<InstanceType<typeof Card> | null>(null)
@@ -227,21 +295,20 @@ function onEdgeClick({ edge, event }: EdgeMouseEvent) {
  */
 const edgeCard = ref<HTMLElement | null>(null)
 const { width: edgeCardW, height: edgeCardH } = useElementSize(edgeCard)
-const edgeCardStyle = computed(() => {
-  const at = edgeAt.value
+const edgeCardStyle = computed(() => cardAt(edgeAt.value, edgeCardW.value || 320, edgeCardH.value || 300))
+/** Beside a point in graph coordinates, flipped / clamped to stay inside the graph area */
+function cardAt(at: { x: number; y: number } | null, w: number, h: number) {
   if (!at) return { top: '12px', right: '12px' }
   const vp = viewport.value
   const x = at.x * vp.zoom + vp.x
   const y = at.y * vp.zoom + vp.y
   const W = graphW.value || 1200
   const H = graphH.value || 800
-  const w = edgeCardW.value || 320
-  const h = edgeCardH.value || 300
   const clamp = (v: number, max: number) => Math.min(Math.max(8, v), Math.max(8, max))
   const left = clamp(x + 16 + w > W - 8 ? x - 16 - w : x + 16, W - w - 8)
   const top = clamp(y - 24, H - h - 8)
   return { left: `${left}px`, top: `${top}px` }
-})
+}
 /** Right-click on an edge: the same card as a click (see the dependency, remove it), not the browser menu */
 function onEdgeContextMenu(e: EdgeMouseEvent) {
   e.event.preventDefault()
@@ -267,11 +334,55 @@ function onEdgeLeave() {
 /** Any dependency write running: controls are disabled until it finishes */
 const busy = deps.busy
 
-/** Drag from prerequisite (right handle) to dependent (left handle). */
+/** Where the pointer was last released over the graph: a dropped link asks its question there */
+let dropAt: { x: number; y: number } | null = null
+useEventListener(window, 'pointerup', (e: PointerEvent) => {
+  const box = (unrefElement(graphBox) as HTMLElement | undefined)?.getBoundingClientRect()
+  const vp = viewport.value
+  dropAt = box ? { x: (e.clientX - box.left - vp.x) / vp.zoom, y: (e.clientY - box.top - vp.y) / vp.zoom } : null
+}, { capture: true })
+
+/**
+ * Drag from prerequisite (right handle) to dependent (left handle). The link isn't made yet: a card at
+ * the drop point asks whether the dependent waits for a merge or a release (M / R, Escape cancels).
+ */
+const pending = ref<{ from: string; to: string; at: { x: number; y: number } | null } | null>(null)
+const pendingCard = ref<HTMLElement | null>(null)
+const { width: pendingW, height: pendingH } = useElementSize(pendingCard)
+const pendingStyle = computed(() => cardAt(pending.value?.at ?? null, pendingW.value || 288, pendingH.value || 140))
+/** Why the dropped pair can't be linked, if it can't */
+const pendingProblem = computed(() => {
+  const p = pending.value
+  if (!p) return null
+  if (allEdges.value.some((e) => e.from === p.from && e.to === p.to)) return 'Already depends on it'
+  if (allEdges.value.some((e) => e.from === p.to && e.to === p.from)) return 'The other PR already waits on this one (would loop)'
+  return null
+})
 function onConnect(c: Connection) {
   if (!c.source || !c.target || c.source === c.target || busy.value) return
-  deps.add(c.target, c.source, v.newKind)
+  selectedEdge.value = null
+  pending.value = { from: c.target, to: c.source, at: dropAt }
 }
+async function confirmPending(kind: DependencyKind) {
+  const p = pending.value
+  if (!p || pendingProblem.value || busy.value) return
+  v.newKind = kind
+  pending.value = null
+  await deps.add(p.from, p.to, kind)
+}
+// Cmd/Ctrl+Z undoes the last dependency change, Shift+Cmd/Ctrl+Z (or Ctrl+Y) redoes it
+onKeyStroke(['z', 'Z', 'y'], (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || (e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return
+  const redo = e.key === 'y' || e.shiftKey
+  if (e.key === 'y' && e.metaKey) return
+  e.preventDefault()
+  void (redo ? deps.redo() : deps.undo())
+})
+onKeyStroke(['m', 'r'], (e) => {
+  if (!pending.value || e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) return
+  e.preventDefault()
+  confirmPending(e.key === 'r' ? 'release' : 'merge')
+})
 
 async function deleteSelected() {
   const e = selectedEdge.value
@@ -331,23 +442,34 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
 
 <template>
   <div class="h-page flex flex-col gap-3">
-    <div class="flex flex-wrap items-center gap-2">
+    <!-- One repo at a time, with the PRs in other repos its PRs depend on or block -->
+    <div class="flex items-center gap-2">
+      <RepoSelect v-if="repoTabs.length > 1" :model-value="activeRepo" :tabs="repoTabs" @update:model-value="(r) => (v.repo = r === 'all' ? '' : r)" />
       <FilterChips :chips="chips" />
       <span class="flex-1" />
-      <!-- Kind of dependency created by dragging from one card's right dot to another card's left dot -->
-      <Tooltip>
-        <TooltipTrigger as-child>
-          <span class="flex cursor-help items-center gap-1 text-xs text-muted-foreground max-sm:hidden"><PhHandGrabbing :size="14" />Drag a link: next PR waits for its</span>
-        </TooltipTrigger>
-        <TooltipContent class="max-w-72">
-          Drag from a card's right dot to another card's left dot to add a dependency. The card on the right then waits for the one
-          on the left to be merged, or to be released.
-        </TooltipContent>
-      </Tooltip>
-      <ToggleGroup :model-value="v.newKind" type="single" @update:model-value="(k) => k && (v.newKind = k as DependencyKind)" variant="outline" size="sm" aria-label="Kind of dependency for new links">
-        <ToggleGroupItem value="merge">merge</ToggleGroupItem>
-        <ToggleGroupItem value="release">release</ToggleGroupItem>
-      </ToggleGroup>
+      <div class="flex shrink-0 items-center">
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon-sm" aria-label="Resync links" :disabled="deck.syncRunning" @click="deck.sync()">
+              <PhArrowsClockwise :class="{ 'animate-spin': deck.syncRunning }" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent class="max-w-72">{{ deck.syncRunning ? 'Syncing…' : 'Resync: fetch PR descriptions and Jira links again for new or changed dependencies' }}</TooltipContent>
+        </Tooltip>
+        <span class="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon-sm" aria-label="Undo" :disabled="!deps.canUndo.value || busy" @click="deps.undo()"><PhArrowArcLeft /></Button>
+          </TooltipTrigger>
+          <TooltipContent class="max-w-80">{{ deps.undoLabel.value }} <span class="opacity-70">⌘Z</span></TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <Button variant="ghost" size="icon-sm" aria-label="Redo" :disabled="!deps.canRedo.value || busy" @click="deps.redo()"><PhArrowArcRight /></Button>
+          </TooltipTrigger>
+          <TooltipContent class="max-w-80">{{ deps.redoLabel.value }} <span class="opacity-70">⇧⌘Z</span></TooltipContent>
+        </Tooltip>
+      </div>
       <Button variant="outline" size="sm" :class="adding && 'bg-accent'" @click="adding = !adding"><PhPlus /> Add dependency</Button>
       <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
     </div>
@@ -372,7 +494,7 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
         @edge-mouse-enter="onEdgeHover"
         @edge-mouse-move="onEdgeHover"
         @edge-mouse-leave="onEdgeLeave"
-        @pane-click="selectedEdge = null"
+        @pane-click="(selectedEdge = null), (pending = null)"
         @node-mouse-enter="({ node }) => (hoverNode = node.id)"
         @node-mouse-leave="hoverNode = null"
         @connect="onConnect"
@@ -387,6 +509,9 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
         </Controls>
 
         <Panel v-if="legendOrgs.length" position="top-left" class="graph-panel flex flex-wrap items-center gap-x-3 gap-y-1 px-2.5 py-1.5 text-xs">
+          <span v-if="linkedIds.size" class="flex items-center gap-1.5 text-muted-foreground">
+            <span class="size-2.5 rounded-sm border border-dashed border-muted-foreground" />other repos
+          </span>
           <span v-for="o in legendOrgs" :key="o" class="flex items-center gap-1.5">
             <span class="size-2.5 rounded-sm" :style="{ background: orgColor.get(o) }" />{{ o }}
           </span>
@@ -396,6 +521,11 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
           <span class="flex items-center gap-1.5 text-muted-foreground">
             <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="currentColor" stroke-width="1.75" stroke-dasharray="6 4" /></svg>release
           </span>
+        </Panel>
+
+        <!-- How to link two cards (hidden while a dropped link asks merge / release) -->
+        <Panel v-if="!pending && nodeIds.length > 1" position="bottom-center" class="graph-panel pointer-events-none flex items-center gap-1.5 select-none px-2.5 py-1.5 text-xs text-muted-foreground">
+          <PhHandGrabbing :size="14" />Drag from a card's right dot to another card's left dot to link them
         </Panel>
 
         <Panel v-if="adding" position="top-right" class="graph-panel nodrag nopan nowheel w-96 p-0 text-sm shadow-lg">
@@ -450,6 +580,30 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
           </form>
         </Panel>
 
+        <!-- A dropped link: merge or release? -->
+        <div v-if="pending" ref="pendingCard" class="graph-panel nodrag nopan nowheel absolute z-20 w-72 p-0 text-sm shadow-lg" :style="pendingStyle" @click.stop @pointerdown.stop>
+          <div class="flex items-center gap-2 px-3 pt-2.5">
+            <span class="font-semibold">New dependency</span>
+            <span class="flex-1" />
+            <Button variant="ghost" size="icon-xs" class="-mr-1" aria-label="Cancel" @click="pending = null"><PhX /></Button>
+          </div>
+          <p class="px-3 pt-1.5 text-xs leading-snug text-muted-foreground">
+            <span class="font-mono font-medium text-foreground">{{ shortRef(pending.from) }}</span> waits until
+            <span class="font-mono font-medium text-foreground">{{ shortRef(pending.to) }}</span> is…
+          </p>
+          <p v-if="pendingProblem" class="px-3 pt-2 text-xs text-destructive">{{ pendingProblem }}</p>
+          <div class="grid grid-cols-2 gap-2 p-3">
+            <Button size="sm" :variant="v.newKind === 'merge' ? 'default' : 'outline'" :disabled="busy || !!pendingProblem" @click="confirmPending('merge')">
+              Merged <Kbd class="ml-auto">M</Kbd>
+            </Button>
+            <Button size="sm" :variant="v.newKind === 'release' ? 'default' : 'outline'" :disabled="busy || !!pendingProblem" @click="confirmPending('release')">
+              Released <Kbd class="ml-auto">R</Kbd>
+            </Button>
+          </div>
+          <p class="border-t px-3 py-2 text-xs text-muted-foreground">
+            {{ deck.overview?.dependencyWrites.description ? `Written into ${shortRef(pending.from)}'s description${deck.overview?.dependencyWrites.bothSides ? ' (and Blocks: on the other)' : ''}` : 'Kept in Dispatch only' }}
+          </p>
+        </div>
         <div v-if="selectedEdge" ref="edgeCard" class="graph-panel nodrag nopan nowheel absolute z-10 w-80 p-0 text-sm shadow-lg" :style="edgeCardStyle" @click.stop @pointerdown.stop>
           <!-- One sentence says what the link means; then the two PRs top to bottom, prerequisite first -->
           <div class="flex items-center gap-2 px-3 pt-2.5">
@@ -508,7 +662,7 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
         <PhGraph :size="40" weight="duotone" class="text-primary" />
         <div class="text-sm font-medium text-foreground">{{ hasAnyEdges ? 'No chains match these filters' : 'No dependencies yet' }}</div>
         <p class="max-w-md text-xs">
-          <template v-if="hasAnyEdges">Try clearing the org/repo filter or showing finished chains.</template>
+          <template v-if="hasAnyEdges">Try another repo tab, clearing the org filter or showing finished chains.</template>
           <template v-else>
             Add <code class="font-mono">Depends on: owner/repo#123</code> to a PR description, link Jira issues with "is blocked by", or turn on
             <span class="font-medium">Unlinked PRs</span> and drag from one card's right handle to another's left handle.

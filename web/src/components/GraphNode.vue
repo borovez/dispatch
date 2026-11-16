@@ -16,6 +16,8 @@ export interface GraphNodeData {
   /** CSS colour for the org stripe */
   color: string
   isNext: boolean
+  /** From another repo, shown for its link to the focused repo */
+  linked?: boolean
 }
 </script>
 
@@ -31,7 +33,7 @@ const prMenu = usePrMenu()
 
 <template>
   <ItemContextMenu :entries="() => prMenu.byId(data.id)">
-  <PrCard :id="data.id" :pr="data.pr" :is-next="data.isNext" :accent="data.color" :selected="selected" class="w-[264px]">
+  <PrCard :id="data.id" :pr="data.pr" :is-next="data.isNext" :accent="data.color" :selected="selected" :class="['w-[264px]', data.linked && 'opacity-70 outline-1 outline-offset-2 outline-muted-foreground/50 outline-dashed transition-opacity hover:opacity-100']">
     <Handle type="target" :position="Position.Left" class="graph-handle" />
     <Handle type="source" :position="Position.Right" class="graph-handle" />
   </PrCard>
