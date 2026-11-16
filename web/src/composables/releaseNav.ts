@@ -47,6 +47,14 @@ export function useReleaseNav() {
   /** PRs with at least one dependency either way */
   const hasDeps = (id: string) => (deck.overview?.edges ?? []).some((e) => e.from === id || e.to === id)
 
+  /** The Trains tab's graph (all repos), framing this release's box */
+  function openTrainGraph(focus: string) {
+    releases.tab = 'trains'
+    releases.mode = 'graph'
+    graph.repo = ''
+    router.push({ path: '/releases', query: { focus } })
+  }
+
   function openTrains() {
     releases.tab = 'trains'
     router.push('/releases')
@@ -87,5 +95,5 @@ export function useReleaseNav() {
     return null
   }
 
-  return { openReleases, openGraph, openDependencies, hasDeps, openTrains, releaseForIssue, releaseForPr, releaseForText }
+  return { openReleases, openGraph, openTrainGraph, openDependencies, hasDeps, openTrains, releaseForIssue, releaseForPr, releaseForText }
 }

@@ -6,6 +6,7 @@ import { useDeck } from '@/stores/deck'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import PrRow from './PrRow.vue'
+import { STATUS_SOFT, useReleaseStatus } from '@/composables/trainStatus'
 import RepoName from './RepoName.vue'
 import JiraPill from './JiraPill.vue'
 import FlagChip from './FlagChip.vue'
@@ -16,6 +17,9 @@ import { useReleaseFlags } from '@/composables/flags'
  * and "Ships after…" to set an order (adds a dependency between the release PRs).
  */
 const props = defineProps<{ train: ReleaseTrain }>()
+const releaseStatus = useReleaseStatus()
+/** Colour of the step number: ready to merge green, waiting amber, merged purple… */
+const status = (id: string) => releaseStatus(props.train, id)
 const deck = useDeck()
 
 const flagsOf = useReleaseFlags()
@@ -63,8 +67,8 @@ const other = (l: ReleaseTrain['links'][number], id: string) => (l.from === id ?
       <li v-for="s in steps" :key="s.id" class="flex items-start gap-3 px-1.5 py-1">
         <span
           class="mt-2 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums"
-          :class="s.pr?.state === 'MERGED' ? 'bg-success/15 text-success' : train.next === s.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
-          :title="s.pr?.state === 'MERGED' ? 'Merged' : train.next === s.id ? 'Ship this next' : hasOrder ? `Step ${s.n}` : 'No order set'"
+          :class="train.next === s.id && s.pr?.state === 'OPEN' ? 'bg-primary text-primary-foreground' : (STATUS_SOFT[status(s.id).tone] ?? 'bg-muted text-muted-foreground')"
+          :title="`${train.next === s.id && s.pr?.state === 'OPEN' ? 'Ship this next' : hasOrder ? `Step ${s.n}` : 'No order set'} · ${status(s.id).label}`"
         >
           {{ hasOrder ? s.n : '·' }}
         </span>

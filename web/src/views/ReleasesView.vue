@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useReleaseStatus } from '@/composables/trainStatus'
 import StickyToolbar from '@/components/StickyToolbar.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -92,6 +93,10 @@ const needsBackmerge = computed(() => hotfixes.value.filter((p) => p.state === '
 const openHotfixes = computed(() => hotfixes.value.filter((p) => p.state === 'OPEN'))
 const doneHotfixes = computed(() => hotfixes.value.filter((p) => p.state === 'MERGED' && !(p.backmerge && !p.backmerge.backmerged)))
 
+/** A release's train (if any) and where it stands, for the status badge on its card */
+const trainOf = (id: string) => (deck.overview?.trains ?? []).find((t) => t.releases.includes(id)) ?? null
+const releaseStatus = useReleaseStatus()
+const statusOf = (id: string) => releaseStatus(trainOf(id), id)
 /** Release trains, filtered by the search */
 const trains = computed(() =>
   (deck.overview?.trains ?? []).filter((t) => {
@@ -204,6 +209,11 @@ async function refresh(id: string) {
             :collapsed="isCollapsed(r.id, r.state === 'MERGED')"
             @update:collapsed="(c: boolean) => (v.collapsed[r.id] = c)"
           >
+            <!-- Where it stands: ready to merge, waiting on its train, CI… -->
+            <template v-if="r.state === 'OPEN'" #actions>
+              <Badge v-if="trainOf(r.id)?.next === r.id" variant="primary" class="shrink-0" title="First release of its train with nothing left to wait for">Ship next</Badge>
+              <Badge :variant="statusOf(r.id).tone" class="shrink-0" :title="statusOf(r.id).title">{{ statusOf(r.id).label }}</Badge>
+            </template>
             <template #label>
               <span class="flex min-w-0 items-center gap-2">
                 <Badge :variant="r.state === 'OPEN' ? 'success' : 'merged'" class="shrink-0">{{ r.state === 'OPEN' ? 'Open' : `Merged ${timeAgo(r.mergedAt!)}` }}</Badge>
