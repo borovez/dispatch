@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import JiraBulkStatus from '@/components/JiraBulkStatus.vue'
 import StickyToolbar from '@/components/StickyToolbar.vue'
-import { computed } from 'vue'
-import { PhListChecks, PhCircleHalf, PhKanban, PhMagnifyingGlass, PhNotePencil } from '@phosphor-icons/vue'
+import { computed, reactive } from 'vue'
+import { onEscape } from '@/composables/escape'
+import ActionBar from '@/components/ActionBar.vue'
+import Kbd from '@/components/Kbd.vue'
+import { PhCheck, PhListChecks, PhMinus, PhCircleHalf, PhKanban, PhMagnifyingGlass, PhNotePencil } from '@phosphor-icons/vue'
 import type { LinkedPr, JiraIssueView, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useLayout, type SortDir } from '@/stores/layout'
@@ -14,6 +17,7 @@ import ViewMenu, { type ViewSection } from '@/components/ViewMenu.vue'
 import JiraRow from '@/components/JiraRow.vue'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -155,6 +159,38 @@ const filtered = computed(() => {
 
 /** Issues loaded from Jira (keys only seen in PRs have no workflow to move) */
 const bulkKeys = (list: Item[]) => list.filter((i) => i.issue).map((i) => i.key)
+
+// Selection for bulk actions (in memory): row checkboxes, Shift-click for a range, Select all per group
+const canBulk = computed(() => !!deck.overview?.configured.jira)
+const selected = reactive(new Set<string>())
+/** Selected and still shown (filters can hide some), in list order */
+const selectedKeys = computed(() => bulkKeys(groups.value.flatMap((g) => g.items)).filter((k) => selected.has(k)))
+const hiddenSelected = computed(() => selected.size - selectedKeys.value.length)
+let anchor: string | null = null
+function toggleSelect(key: string, e: MouseEvent) {
+  const order = bulkKeys(groups.value.flatMap((g) => g.items))
+  const on = !selected.has(key)
+  const a = anchor ? order.indexOf(anchor) : -1
+  const b = order.indexOf(key)
+  const range = e.shiftKey && a >= 0 && b >= 0 ? order.slice(Math.min(a, b), Math.max(a, b) + 1) : [key]
+  for (const k of range) on ? selected.add(k) : selected.delete(k)
+  anchor = key
+}
+const groupState = (items: Item[]) => {
+  const keys = bulkKeys(items)
+  const n = keys.filter((k) => selected.has(k)).length
+  return n === 0 ? 'none' : n === keys.length ? 'all' : 'some'
+}
+function toggleGroup(items: Item[]) {
+  const all = groupState(items) === 'all'
+  for (const k of bulkKeys(items)) all ? selected.delete(k) : selected.add(k)
+}
+// Escape clears the selection (a side panel closes first)
+onEscape(() => {
+  if (deck.currentPanel || !selected.size) return false
+  selected.clear()
+  return true
+})
 const groups = computed(() => {
   if (v.group === 'none') return [{ key: 'all', label: 'Jira issues', items: filtered.value, category: '' }]
   const map = new Map<string, { label: string; rank: string; items: Item[]; category: string }>()
@@ -214,11 +250,6 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
         <span class="flex-1" />
         <CollapseAllButton v-if="groups.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
         <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
-        <JiraBulkStatus v-if="deck.overview?.configured.jira && bulkKeys(filtered).length > 1" :keys="bulkKeys(filtered)" context="Every issue on this page with the current tab, search and filters.">
-          <template #trigger>
-            <Button variant="outline" size="sm" :title="`Change the status of the ${bulkKeys(filtered).length} issues shown`"><PhListChecks /> <span class="@max-3xl:sr-only">Change status…</span></Button>
-          </template>
-        </JiraBulkStatus>
         <Button v-if="deck.overview?.configured.jira" size="sm" @click="deck.composer = { mode: 'create' }"><PhNotePencil /> <span class="@max-3xl:sr-only">New issue</span></Button>
       </div>
     </StickyToolbar>
@@ -233,17 +264,52 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
           :count="g.items.length"
           @update:collapsed="(c: boolean) => (collapsed[g.key] = c)"
         >
-          <template v-if="deck.overview?.configured.jira && bulkKeys(g.items).length > 1" #actions>
-            <JiraBulkStatus :keys="bulkKeys(g.items)" :context="`The issues in “${g.label}”.`" />
+          <template v-if="canBulk && bulkKeys(g.items).length" #actions>
+            <!-- Select the group: checked all, a dash for some -->
+            <Checkbox
+              :model-value="groupState(g.items) === 'all' ? true : groupState(g.items) === 'some' ? 'indeterminate' : false"
+              :aria-label="`Select every issue in ${g.label}`"
+              :title="groupState(g.items) === 'all' ? 'Deselect all' : 'Select all'"
+              class="mr-1 data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground"
+              @click.stop="toggleGroup(g.items)"
+            >
+              <template #default="{ state }"><PhMinus v-if="state === 'indeterminate'" /><PhCheck v-else /></template>
+            </Checkbox>
           </template>
           <template v-if="g.category" #label>
             <span class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-full" :class="DOT[g.category] ?? 'bg-muted-foreground'" />{{ g.label }}</span>
           </template>
           <div>
-            <JiraRow v-for="i in g.items" :key="i.key" :issue-key="i.key" :issue="i.issue" :prs="i.prs" :links="i.links" :dense="layout.prefs.dense" />
+            <JiraRow
+              v-for="i in g.items"
+              :key="i.key"
+              :issue-key="i.key"
+              :issue="i.issue"
+              :prs="i.prs"
+              :links="i.links"
+              :dense="layout.prefs.dense"
+              :selected="canBulk && i.issue ? selected.has(i.key) : undefined"
+              :selecting="selected.size > 0"
+              @toggle-select="toggleSelect(i.key, $event)"
+            />
           </div>
         </GroupCard>
         <div v-if="!filtered.length" class="py-16 text-center text-muted-foreground">No Jira issues match.</div>
     </div>
+
+    <!-- Bulk actions: only while issues are selected -->
+    <ActionBar v-if="selectedKeys.length">
+      <Checkbox :model-value="true" aria-label="Deselect all" title="Deselect all" @click="selected.clear()" />
+      <span class="text-foreground">{{ selectedKeys.length }} selected</span>
+      <span v-if="hiddenSelected" class="text-xs">({{ hiddenSelected }} more hidden by filters, left out)</span>
+      <template #actions>
+        <Button variant="ghost" size="sm" @click="selected.clear()">Clear <Kbd>Esc</Kbd></Button>
+        <JiraBulkStatus :keys="selectedKeys" context="The issues you selected." @finished="selected.clear()">
+          <template #trigger>
+            <Button size="sm"><PhListChecks /> Change status…</Button>
+          </template>
+        </JiraBulkStatus>
+      </template>
+    </ActionBar>
   </div>
 </template>

@@ -15,10 +15,23 @@ import PrRow from './PrRow.vue'
 import LinkedPrRow from './LinkedPrRow.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { PhRobot } from '@phosphor-icons/vue'
 
 /** links: PRs naming the issue that Dispatch doesn't sync (GitHub search, Jira's development panel) */
-const props = defineProps<{ issueKey: string; issue: JiraIssueView | null; prs: PrView[]; links?: LinkedPr[]; dense?: boolean }>()
+const props = defineProps<{
+  issueKey: string
+  issue: JiraIssueView | null
+  prs: PrView[]
+  links?: LinkedPr[]
+  dense?: boolean
+  /** Set to show a selection checkbox (Jira page bulk actions); shown on hover until something is selected */
+  selected?: boolean
+  /** Something in the list is selected: show every checkbox */
+  selecting?: boolean
+}>()
+/** Checkbox clicked (the event, for Shift-click ranges) */
+const emit = defineEmits<{ toggleSelect: [e: MouseEvent] }>()
 /** Opens the Jira panel, unless the click was on a linked PR, a link or a button (they do their own thing) */
 function select(e: MouseEvent) {
   if ((e.target as HTMLElement).closest('a, button, [data-pr-id], [role="menu"]')) return
@@ -55,6 +68,14 @@ const initials = (name: string) =>
     @click="select"
   >
     <div class="flex flex-wrap items-start gap-x-2 gap-y-1.5 sm:flex-nowrap">
+      <Checkbox
+        v-if="selected !== undefined"
+        :model-value="selected"
+        :aria-label="`Select ${issueKey}`"
+        title="Select for bulk actions (Shift-click selects a range)"
+        :class="cn('mt-0.5 shrink-0 transition-opacity', !selected && !selecting && 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100')"
+        @click.stop="emit('toggleSelect', $event)"
+      />
       <img v-if="issue?.typeIconUrl" :src="issue.typeIconUrl" :title="issue.type" class="mt-0.5 size-4 shrink-0" alt="" />
       <div class="min-w-0 flex-1">
         <!-- Narrow screens: the summary wraps to two lines instead of a few truncated characters -->

@@ -18,6 +18,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
  * way there from its status), untick any, confirm. Runs one at a time and shows each result.
  */
 const props = defineProps<{ keys: string[]; /** A sentence before the instructions, e.g. "The Jira issues this release ships." */ context?: string }>()
+/** Closed after the moves ran (e.g. to clear a selection) */
+const emit = defineEmits<{ finished: [] }>()
 const deck = useDeck()
 
 type Transition = Awaited<ReturnType<typeof api.transitions>>[number]
@@ -33,7 +35,10 @@ const done = ref(false)
 const CATEGORY_ORDER = ['done', 'indeterminate', 'new']
 async function onOpen(v: boolean) {
   open.value = v
-  if (!v) return
+  if (!v) {
+    if (done.value) emit('finished')
+    return
+  }
   done.value = false
   for (const k of Object.keys(results)) delete results[k]
   loading.value = true
@@ -122,7 +127,8 @@ async function run() {
         </Button>
       </slot>
     </DialogTrigger>
-    <DialogContent class="sm:max-w-xl">
+    <!-- grid-cols-1 (minmax(0,1fr)): long summaries truncate instead of widening the dialog -->
+    <DialogContent class="grid-cols-1 sm:max-w-2xl">
       <DialogHeader>
         <DialogTitle>Change status of {{ keys.length }} Jira issues</DialogTitle>
         <DialogDescription>
@@ -132,7 +138,7 @@ async function run() {
 
       <div v-if="loading" class="flex items-center gap-2 py-6 text-sm text-muted-foreground"><PhCircleNotch class="animate-spin" /> Loading transitions…</div>
       <template v-else>
-        <div v-if="targets.length" class="flex flex-wrap gap-1.5">
+        <div v-if="targets.length" class="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
           <Button
             v-for="t in targets"
             :key="t.key"
