@@ -131,9 +131,14 @@ export async function searchJql(cfg: JiraConfig, jql: string, isMine: boolean, m
  * Fetch issues by key. A JQL `key in (...)` fails as a whole if one key doesn't exist,
  * so on 400 we fall back to fetching keys one by one and skip the missing ones.
  */
-export async function fetchIssuesByKey(cfg: JiraConfig, keys: string[]): Promise<{ issues: JiraIssue[]; missing: string[] }> {
+/**
+ * Issues by key. Jira answers an old key of a moved issue (PLAT-158 → GROW-1333) with the issue under its
+ * new key, so a key asked for but not returned is looked up on its own: `moved` maps old → new keys.
+ */
+export async function fetchIssuesByKey(cfg: JiraConfig, keys: string[]): Promise<{ issues: JiraIssue[]; missing: string[]; moved: Record<string, string> }> {
   const issues: JiraIssue[] = []
   const missing: string[] = []
+  const moved: Record<string, string> = {}
   for (let i = 0; i < keys.length; i += 80) {
     const chunk = keys.slice(i, i + 80)
     try {
@@ -151,7 +156,20 @@ export async function fetchIssuesByKey(cfg: JiraConfig, keys: string[]): Promise
       }
     }
   }
-  return { issues, missing }
+  // Asked for but not returned under that key: moved (Jira resolves the old key) or gone
+  const got = new Set(issues.map((i) => i.key))
+  const unanswered = keys.filter((k) => !got.has(k) && !missing.includes(k)).slice(0, 40)
+  for (const key of unanswered) {
+    try {
+      const raw = await request<any>(cfg, `/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS.join(',')}`)
+      if (raw.key && raw.key !== key) moved[key] = raw.key
+      if (!got.has(raw.key)) (issues.push(mapIssue(cfg, raw, false)), got.add(raw.key))
+    } catch (err) {
+      if (err instanceof JiraError && (err.status === 404 || err.status === 403)) missing.push(key)
+      else throw err
+    }
+  }
+  return { issues, missing, moved }
 }
 
 /** Description and the latest comments, for the Jira side panel */

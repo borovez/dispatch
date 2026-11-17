@@ -1,5 +1,5 @@
 import type { GithubAccount, JiraIssue, PrId, PrRecord, Relation, Settings, SyncState, SyncStep } from '../../shared/types.ts'
-import {
+import { addJiraMoved,
   replaceFeatureFlags,
   listFeatureFlags,
   deletePrsNotSyncedAt,
@@ -25,7 +25,7 @@ import { integrationBranches, releaseBranches, releaseRefFor } from './flow.ts'
 import { fetchPrsByNodeId, fetchPrsByRef, isCommitIn, resolveReleaseRef, searchPrHits, whoAmI, type PrHit } from './github.ts'
 import { fetchIssuesByKey, searchJql } from './jira.ts'
 import { fetchSlackInbox } from './slack.ts'
-import { extractJiraKeys, parseBodyDependencies, parseFeatureFlags, parsePrId } from './refs.ts'
+import { parseBodyBlocks, extractJiraKeys, parseBodyDependencies, parseFeatureFlags, parsePrId } from './refs.ts'
 import { getFlag } from './launchdarkly.ts'
 
 let inFlight: Promise<SyncState> | null = null
@@ -248,7 +248,8 @@ async function doSync(): Promise<SyncState> {
   if (settingsDirty) saveSettings(settings)
   if (logins.length) saveMyLogins([...new Set(logins)])
 
-  // 2. Pull in dependency targets (and manual-dep sources) that searches didn't return. Two levels deep.
+  // 2. Pull in dependency targets, PRs named by Blocks: lines (they wait on one of ours), and manual-dep
+  // sources that searches didn't return. Two levels deep.
   const manual = listManualDeps()
   const keep = new Set<PrId>()
   for (const d of manual) keep.add(d.from).add(d.to)
@@ -256,7 +257,10 @@ async function doSync(): Promise<SyncState> {
   else await p.run('deps', errors, async (errors) => {
     for (let round = 0; round < 2; round++) {
       const wanted = new Set<PrId>(round === 0 ? keep : [])
-      for (const { pr } of found.values()) for (const d of parseBodyDependencies(pr.body, pr.repo, pr.id)) wanted.add(d.to)
+      for (const { pr } of found.values()) {
+        for (const d of parseBodyDependencies(pr.body, pr.repo, pr.id)) wanted.add(d.to)
+        for (const b of parseBodyBlocks(pr.body, pr.repo, pr.id)) wanted.add(b.from)
+      }
       const missing = [...wanted].filter((id) => !found.has(id))
       if (!missing.length) break
       const byAccount = new Map<GithubAccount, { owner: string; name: string; number: number }[]>()
@@ -357,10 +361,11 @@ async function doSync(): Promise<SyncState> {
           k.forEach((x) => keys.add(x))
         }
         const mineKeys = new Set(mine.map((i) => i.key))
-        const { issues } = await fetchIssuesByKey(
+        const { issues, moved } = await fetchIssuesByKey(
           jira,
           [...keys].filter((k) => !mineKeys.has(k)),
         )
+        addJiraMoved(moved)
         // Parents (epics etc.) of those issues, so the panel can open them
         const have = new Set([...mine, ...issues].map((i) => i.key))
         const parentKeys = [...new Set([...mine, ...issues].map((i) => i.parent?.key).filter((k): k is string => !!k && !have.has(k)))]

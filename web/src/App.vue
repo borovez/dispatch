@@ -27,6 +27,8 @@ import UpdateButton from '@/components/UpdateButton.vue'
 import AppVersion from '@/components/AppVersion.vue'
 import NavUser from '@/components/NavUser.vue'
 import PrDrawer from '@/components/PrDrawer.vue'
+import UnsyncedPrPanel from '@/components/UnsyncedPrPanel.vue'
+import PanelTab from '@/components/PanelTab.vue'
 import SlackDrawer from '@/components/SlackDrawer.vue'
 import JiraDrawer from '@/components/JiraDrawer.vue'
 import JiraComposer from '@/components/JiraComposer.vue'
@@ -203,6 +205,8 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
       </SidebarInset>
     </SidebarProvider>
     <PrDrawer />
+    <UnsyncedPrPanel />
+    <PanelTab />
     <SlackDrawer />
     <JiraDrawer />
     <JiraComposer />

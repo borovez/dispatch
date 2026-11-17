@@ -41,6 +41,8 @@ export const api = {
   prDetail: (id: string) => call<PrDetail>('GET', `/prs/detail?id=${encodeURIComponent(id)}`),
   /** Just the Slack inbox (the Slack page's refresh), not a full sync */
   slackRefresh: () => call<{ items: number; errors: string[] }>('POST', '/slack/refresh'),
+  /** Fetch and store a PR Dispatch doesn't have yet ("not synced") */
+  fetchPr: (id: string) => call<unknown>('POST', '/prs/fetch', { id }),
   resyncPr: (id: string) => call('POST', '/prs/resync', { id }),
   /** Resync just these PRs, the PRs their descriptions now depend on, and their Jira issues */
   resyncPrs: (ids: string[]) => call<{ prs: number; added: number; jira: number; errors: string[] }>('POST', '/prs/resync-many', { ids }),

@@ -456,3 +456,9 @@ export function closeStaleSlack(kinds: string[], seen: Set<string>) {
   for (const it of listSlack())
     if (it.status === 'new' && kinds.includes(it.kind) && !seen.has(it.id)) setSlackStatus(it.id, 'done')
 }
+
+/** Jira keys that moved to another key (old → new), e.g. an issue moved between projects */
+export const listJiraMoved = () => kvGet<Record<string, string>>('jiraMoved', {})
+export function addJiraMoved(moved: Record<string, string>) {
+  if (Object.keys(moved).length) kvSet('jiraMoved', { ...listJiraMoved(), ...moved })
+}

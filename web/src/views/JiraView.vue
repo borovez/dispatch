@@ -94,7 +94,12 @@ const collapsed = layout.view('jira-collapsed', {} as Record<string, boolean | u
 
 const items = computed<Item[]>(() => {
   const keys = new Map<string, PrView[]>()
-  for (const p of deck.prs) for (const k of p.jiraKeys) keys.set(k, [...(keys.get(k) ?? []), p])
+  // A moved issue's old key (PLAT-158 → GROW-1333) joins its new key's row
+  const moved = deck.overview?.jiraMoved ?? {}
+  for (const p of deck.prs) for (const k0 of p.jiraKeys) {
+    const k = moved[k0] ?? k0
+    if (!keys.get(k)?.includes(p)) keys.set(k, [...(keys.get(k) ?? []), p])
+  }
   for (const j of deck.overview?.jira ?? []) if (!j.parentOnly && !keys.has(j.key)) keys.set(j.key, [])
   const linked = deck.overview?.linkedPrs ?? {}
   return [...keys].map(([key, synced]) => {

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import type { AiProvider, GithubAccount, LinkedPrs, PrRecord, JiraFieldKind, JiraFieldOption, Settings } from '../../shared/types.ts'
 import {
+  addJiraMoved,
   listPrs,
   addManualDep,
   DB_PATH,
@@ -338,6 +339,23 @@ api.post('/prs/resync', async (c) => {
  * or removed Depends on / Blocks lines), PRs their descriptions now name that aren't stored yet, and the
  * Jira issues they reference (for "is blocked by" links). Much lighter than a full sync.
  */
+/**
+ * Fetch a PR Dispatch doesn't have (e.g. a chain step named only by a Blocks: line, shown as "not
+ * synced") and store it, so its panel opens. Kept like a dependency target.
+ */
+api.post('/prs/fetch', async (c) => {
+  const { id } = z.object({ id: z.string() }).parse(await c.req.json())
+  const ref = parsePrId(id)
+  if (!ref) throw bad('Not a PR id (owner/repo#number)')
+  const accounts = getSettings().github.accounts.filter((a) => a.token)
+  const acc = accountForOwner(accounts, ref.owner)
+  if (!acc) throw bad(`No GitHub account can read ${ref.owner}`)
+  const [pr] = await fetchPrsByRef(acc, [ref])
+  if (!pr) throw bad(`GitHub has no PR ${id} this account can see`)
+  upsertPr(pr, ['dependency'], new Date().toISOString())
+  return c.json(pr)
+})
+
 api.post('/prs/resync-many', async (c) => {
   const { ids } = z.object({ ids: z.array(z.string()).max(500) }).parse(await c.req.json())
   const settings = getSettings()
@@ -426,8 +444,11 @@ api.put('/prs/meta', async (c) => {
 /** Re-read one issue from Jira into the cache (e.g. a parent the sync didn't fetch) */
 api.post('/jira/:key/refresh', async (c) => {
   // An issue the sync didn't fetch stays off the Jira page list (parentOnly)
-  const issue = { ...(await getIssue(jiraCfg(), c.req.param('key'))), parentOnly: true }
+  const asked = c.req.param('key').toUpperCase()
+  const issue = { ...(await getIssue(jiraCfg(), asked)), parentOnly: true }
   upsertJira(issue)
+  // Moved issue (Jira answers the old key with the new one): remember it, so the old key resolves
+  if (issue.key !== asked) addJiraMoved({ [asked]: issue.key })
   return c.json(issue)
 })
 

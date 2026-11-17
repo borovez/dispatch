@@ -312,6 +312,8 @@ export interface Overview {
   /** Latest tags of tag-based repos, newest first, with what each shipped */
   tags: TagRelease[]
   jira: JiraIssueView[]
+  /** Jira keys that moved (old → new key); PRs naming the old key resolve to the moved issue */
+  jiraMoved: Record<string, string>
   /** Per Jira key: PRs naming it found beyond the synced ones (GitHub search, Jira's development panel); keys with none are left out */
   linkedPrs: Record<string, LinkedPr[]>
   slack: SlackItem[]

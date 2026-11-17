@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, nextTick, ref, watch } from 'vue'
 import type { JiraFieldValue, Overview, PrView, SyncState } from '@shared/types'
+import { useLayout } from './layout'
 
 /** An item shown in the side panel */
 export interface PanelRef {
@@ -40,7 +41,7 @@ export const useDeck = defineStore('deck', () => {
   for (const p of panels) watch(p, (v) => v && panels.forEach((o) => o !== p && (o.value = null)))
 
   // ---- Side panel history: back / forward through the PRs, Jira issues and Slack messages opened
-  // since the panel opened. Closing the panel clears it.
+  // this session (in memory: kept when the panel closes, gone when the app closes; 50 each way).
   const panelKinds = ['pr', 'slack', 'jira'] as const
   const currentPanel = computed<PanelRef | null>(() => {
     const i = panels.findIndex((p) => p.value)
@@ -52,16 +53,33 @@ export const useDeck = defineStore('deck', () => {
   let historyMode: 'push' | 'replace' | 'travel' = 'push'
   const showPanel = (r: PanelRef) => (panels[panelKinds.indexOf(r.kind)].value = r.id)
   const same = (a: PanelRef | null, b: PanelRef | null) => !!a && !!b && a.kind === b.kind && a.id === b.id
+  // ---- Recently opened items (newest first, saved with the view prefs), for reopening one while the
+  // panel is closed (PanelTab, Alt+→)
+  const recentState = useLayout().view('recent-panels', { items: [] as PanelRef[] })
+  const recentPanels = computed(() => recentState.items)
+  /** The item shown when the panel closed: the next item opened goes back to it */
+  let lastShown: PanelRef | null = null
+  watch(currentPanel, (now) => {
+    if (now) recentState.items = [now, ...recentState.items.filter((r) => !same(r, now))].slice(0, 15)
+  })
+  /** Reopen an item from the recent list (the history carries on: Back still works) */
+  function reopenPanel(r: PanelRef | undefined = recentState.items[0]) {
+    if (!r || currentPanel.value) return
+    showPanel(r)
+  }
+
   watch(currentPanel, (now, before) => {
     const mode = historyMode
     historyMode = 'push'
+    // Closing keeps the history; the item shown becomes Back for whatever opens next
     if (!now) {
-      panelBack.value = []
-      panelForward.value = []
+      if (before) lastShown = before
       return
     }
-    if (mode !== 'push' || !before || same(now, before)) return
-    panelBack.value = [...panelBack.value, before].slice(-50)
+    const prev = before ?? lastShown
+    lastShown = null
+    if (mode !== 'push' || !prev || same(now, prev)) return
+    panelBack.value = [...panelBack.value, prev].slice(-50)
     panelForward.value = []
   })
   function panelGo(dir: -1 | 1) {
@@ -71,7 +89,7 @@ export const useDeck = defineStore('deck', () => {
     const now = currentPanel.value
     if (!target || !now) return
     from.value = from.value.slice(0, -1)
-    to.value = [...to.value, now]
+    to.value = [...to.value, now].slice(-50)
     historyMode = 'travel'
     showPanel(target)
     void nextTick(() => (historyMode = 'push'))
@@ -98,7 +116,12 @@ export const useDeck = defineStore('deck', () => {
   const releaseById = computed(() => new Map((overview.value?.releases ?? []).map((r) => [r.prId, r])))
   const selectedSlack = computed(() => (overview.value?.slack ?? []).find((i) => i.id === selectedSlackId.value) ?? null)
   const selected = computed<PrView | null>(() => (selectedId.value ? byId.value.get(selectedId.value) ?? null : null))
-  const jiraByKey = computed(() => new Map((overview.value?.jira ?? []).map((j) => [j.key, j])))
+  /** Issues by key; an old key of a moved issue (overview.jiraMoved) finds the issue under its new key */
+  const jiraByKey = computed(() => {
+    const m = new Map((overview.value?.jira ?? []).map((j) => [j.key, j]))
+    for (const [old, now] of Object.entries(overview.value?.jiraMoved ?? {})) if (!m.has(old) && m.has(now)) m.set(old, m.get(now)!)
+    return m
+  })
   /** LaunchDarkly flags by key */
   const flagByKey = computed(() => new Map((overview.value?.flags ?? []).map((f) => [f.key, f])))
   const repos = computed(() => [...new Set(prs.value.map((p) => p.repo))].sort())
@@ -183,6 +206,6 @@ export const useDeck = defineStore('deck', () => {
     timer = window.setInterval(() => !syncRunning.value && load(), 60_000)
   }
 
-  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, replacePanel, composer, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
+  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, replacePanel, currentPanel, recentPanels, reopenPanel, composer, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
     releaseById, selected, jiraByKey, flagByKey, repos, load, sync, mutate, startPolling }
 })

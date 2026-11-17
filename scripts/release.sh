@@ -18,6 +18,8 @@ git pull --ff-only
 # app build syncs that version too, and a changed file afterwards would block self-updates
 VERSION="v$(npm version "$BUMP" --no-git-tag-version | sed 's/^v//')"
 node -e 'const f="desktop/package.json",fs=require("fs"),p=JSON.parse(fs.readFileSync(f));p.version=process.argv[1];fs.writeFileSync(f,JSON.stringify(p,null,2)+"\n")' "${VERSION#v}"
+# The lock records the desktop workspace's version too: refresh it now, not during the app build
+npm install --package-lock-only --ignore-scripts --no-audit --no-fund >/dev/null
 git add package.json package-lock.json desktop/package.json
 git commit -m "Release $VERSION"
 git tag -a "$VERSION" -m "Release $VERSION"

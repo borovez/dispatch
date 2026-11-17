@@ -34,7 +34,14 @@ const key = computed(() => deck.selectedJiraKey)
 const nav = useReleaseNav()
 const releaseId = computed(() => (key.value ? nav.releaseForIssue(key.value) : null))
 const issue = computed(() => (key.value ? (deck.jiraByKey.get(key.value) ?? null) : null))
-const prs = computed(() => (key.value ? deck.prs.filter((p) => p.jiraKeys.includes(key.value!)) : []))
+/** The key shown, the issue's current key (when it moved) and older keys that moved to it */
+const aliases = computed(() => {
+  if (!key.value) return []
+  const now = issue.value?.key ?? key.value
+  const olds = Object.entries(deck.overview?.jiraMoved ?? {}).filter(([, n]) => n === now).map(([o]) => o)
+  return [...new Set([key.value, now, ...olds])]
+})
+const prs = computed(() => (key.value ? deck.prs.filter((p) => p.jiraKeys.some((k) => aliases.value.includes(k))) : []))
 /** This issue's PRs that depend on or block others: "Show dependencies" focuses the graph on them */
 const depPrs = computed(() => prs.value.map((p) => p.id).filter(nav.hasDeps))
 /** Flags named by this issue's PRs */
@@ -128,6 +135,15 @@ const details = computed(() => {
         <img v-if="issue?.typeIconUrl" :src="issue.typeIconUrl" :title="issue.type" class="size-4" alt="" />
         <ExternalLink v-if="url" :href="url" icon="always" class="font-mono text-sm font-medium text-primary">{{ key }}</ExternalLink>
         <span v-else class="font-mono text-sm font-medium">{{ key }}</span>
+        <!-- Moved in Jira (another project): the old key resolves to it -->
+        <button
+          v-if="issue && issue.key !== key"
+          class="rounded-md bg-warning/12 px-1.5 py-0.5 text-xs text-warning hover:bg-warning/20"
+          :title="`Jira moved ${key} to ${issue.key}; open it under its new key`"
+          @click="deck.selectedJiraKey = issue.key"
+        >
+          moved to <span class="font-mono font-medium">{{ issue.key }}</span>
+        </button>
         <Badge v-if="issue" :variant="jiraTone(issue.statusCategory)">{{ issue.status }}</Badge>
         <span class="flex-1" />
         <Button variant="outline" size="sm" class="h-7" title="Copy a prompt for an AI agent to implement this issue" @click="deck.agentPromptKey = key">

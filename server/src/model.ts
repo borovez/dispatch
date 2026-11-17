@@ -29,6 +29,7 @@ import {
   listReleaseContents,
   listTagContents,
   listLinkedPrs,
+  listJiraMoved,
   listFeatureFlags,
   type StoredPr,
 } from './db.ts'
@@ -250,6 +251,7 @@ export function buildOverview(): Overview {
     flags: listFeatureFlags(),
     tags,
     jira: jiraViews,
+    jiraMoved: listJiraMoved(),
     linkedPrs: Object.fromEntries(listLinkedPrs().filter((l) => l.prs.length).map((l) => [l.key, l.prs])),
     slack,
     stats,

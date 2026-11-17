@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import ChainStep from '@/components/ChainStep.vue'
 import { modClickHint, wantsExternal } from '@/lib/external'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { PhCaretRight, PhCheckCircle, PhCircle, PhCircleDashed, PhEye, PhPlus, PhRocketLaunch, PhSlidersHorizontal, PhWarning } from '@phosphor-icons/vue'
+import { PhLinkSimple, PhCaretRight, PhEye, PhPlus, PhRocketLaunch, PhSlidersHorizontal, PhWarning } from '@phosphor-icons/vue'
 import { isUnreleased } from '@/utils/releaseFlow'
 import { useReleaseNav } from '@/composables/releaseNav'
 import { useReleaseFlags } from '@/composables/flags'
@@ -12,7 +13,6 @@ import { filterPrs, sortPrs, useLayout, type PanelConfig, type PanelType } from 
 import { jiraTone } from '@/utils/format'
 import { type PrFocus } from '@/utils/prFocus'
 import DashPanel from '@/components/DashPanel.vue'
-import RepoName from '@/components/RepoName.vue'
 import PrListPopover from '@/components/PrListPopover.vue'
 import PrRow from '@/components/PrRow.vue'
 import SlackList from '@/components/SlackList.vue'
@@ -409,24 +409,24 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
               No cross-PR dependencies yet. Add one from a PR's detail panel, or write
               <code class="rounded bg-muted px-1 text-xs">Depends on: org/repo#12</code> in a PR description.
             </div>
-            <div v-for="c in openChains.slice(0, p.limit)" :key="c.id" class="rounded-lg px-3 py-2 transition-colors hover:bg-accent">
-              <div class="mb-2 text-xs text-muted-foreground">{{ c.repos.join(' · ') }}</div>
-              <ol class="flex flex-wrap items-center gap-1 text-xs">
-                <li v-for="(id, i) in c.prs" :key="id" class="flex max-w-full min-w-0 items-center gap-1">
-                  <span v-if="i" class="text-muted-foreground">→</span>
-                  <button
-                    class="flex max-w-full min-w-0 items-center gap-1 rounded-md border px-2 py-1 transition-colors hover:bg-accent"
-                    :class="id === c.nextStep ? 'border-primary bg-primary/10' : ''"
-                    @click="deck.selectedId = id"
-                  >
-                    <PhCheckCircle v-if="stepDone(id)" weight="fill" class="text-success" />
-                    <PhCircle v-else-if="id === c.nextStep" weight="fill" class="text-primary" />
-                    <PhCircleDashed v-else class="text-muted-foreground" />
-                    <RepoName :id="id" class="max-w-56 min-w-0 font-mono" />
-                    <span class="max-w-36 shrink-0 truncate text-muted-foreground max-sm:hidden">{{ stateOf(id)?.action.label ?? 'not synced' }}</span>
-                  </button>
-                </li>
-              </ol>
+            <!-- One block per chain, divided, each headed by a chain icon, its repos and progress -->
+            <div class="divide-y">
+              <div v-for="c in openChains.slice(0, p.limit)" :key="c.id" class="space-y-2 px-3 py-3 first:pt-2 last:pb-2">
+                <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                  <PhLinkSimple :size="14" class="shrink-0 text-primary" />
+                  <span class="min-w-0 truncate">{{ c.repos.join(' · ') }}</span>
+                  <span class="flex-1" />
+                  <span class="shrink-0 tabular-nums" :title="`${c.prs.filter(stepDone).length} of ${c.prs.length} steps merged (and released where needed)`">
+                    {{ c.prs.filter(stepDone).length }} of {{ c.prs.length }} done
+                  </span>
+                </div>
+                <ol class="flex flex-wrap items-center gap-1 text-xs">
+                  <li v-for="(id, i) in c.prs" :key="id" class="flex max-w-full min-w-0 items-center gap-1">
+                    <span v-if="i" class="text-muted-foreground">→</span>
+                    <ChainStep :id="id" :next="id === c.nextStep" :step="i + 1" :of="c.prs.length" />
+                  </li>
+                </ol>
+              </div>
             </div>
           </template>
         </template>
