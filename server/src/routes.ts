@@ -25,6 +25,7 @@ import {
   setMeta,
   setPrBody,
   setSlackStatus,
+  setSlackPinned,
   upsertJira,
   setPrTitle,
   updatePrData,
@@ -539,6 +540,14 @@ api.put('/slack/:id/status', async (c) => {
     }
   }
   return c.json({ ok: true, slack: null })
+})
+
+api.put('/slack/:id/pin', async (c) => {
+  const { pinned } = await c.req.json<{ pinned: boolean }>()
+  const id = c.req.param('id')
+  if (!getSlackItem(id)) return c.json({ error: 'Unknown Slack item' }, 404)
+  setSlackPinned(id, !!pinned)
+  return c.json({ ok: true })
 })
 
 api.get('/slack/:id/thread', async (c) => {

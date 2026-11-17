@@ -248,6 +248,11 @@ export async function setSlackStatus(deck: ReturnType<typeof useDeck>, item: Sla
   return true
 }
 
+/** Pin / unpin a Slack message: pinned ones stay at the top of the inbox until unpinned */
+export async function toggleSlackPin(deck: ReturnType<typeof useDeck>, item: SlackItem): Promise<boolean> {
+  return deck.mutate(() => api.slackPin(item.id, !item.pinned), item.pinned ? 'Unpinned' : 'Pinned to the top of the inbox')
+}
+
 /** New Jira issue with a Slack message as context: Claude reads the thread; creating it marks the message done */
 export function slackToJira(deck: ReturnType<typeof useDeck>, item: SlackItem) {
   deck.composer = {
@@ -281,6 +286,7 @@ export function useSlackMenu() {
             { label: 'Dismiss', icon: PhX, run: () => setSlackStatus(deck, item, 'dismissed') },
           ]
         : [{ label: 'Back to inbox', icon: PhArrowCounterClockwise, run: () => setSlackStatus(deck, item, 'new') }]),
+      { label: item.pinned ? 'Unpin' : 'Pin to top', icon: item.pinned ? PhPushPinSlash : PhPushPin, run: () => toggleSlackPin(deck, item) },
       'separator',
       {
         label: 'Copy',

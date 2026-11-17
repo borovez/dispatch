@@ -3,7 +3,7 @@ import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { externalHint } from '@/lib/external'
 import { computed, nextTick, ref, watch } from 'vue'
-import { PhCaretRight, PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
+import { PhCaretRight, PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhPushPin, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
 import type { SlackContext, SlackMessage } from '@shared/types'
 import { toast } from 'vue-sonner'
 import { api } from '@/api'
@@ -11,7 +11,7 @@ import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
 import { useArrowNav } from '@/composables/prNav'
 import { useReleaseNav } from '@/composables/releaseNav'
-import { copySlackPrompt, copyText } from '@/composables/itemMenus'
+import { copySlackPrompt, copyText, toggleSlackPin } from '@/composables/itemMenus'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
@@ -202,6 +202,14 @@ async function copyPrompt() {
 <template>
   <SidePanel :open="!!item" @close="deck.selectedSlackId = null">
     <template v-if="item" #actions>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button variant="ghost" size="icon-sm" :aria-label="item.pinned ? 'Unpin' : 'Pin to top of the inbox'" @click="toggleSlackPin(deck, item)">
+            <PhPushPin :weight="item.pinned ? 'fill' : 'regular'" :class="{ 'text-primary': item.pinned }" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{{ item.pinned ? 'Unpin' : 'Pin to top of the inbox (stays until unpinned)' }}</TooltipContent>
+      </Tooltip>
       <Tooltip>
         <TooltipTrigger as-child>
           <Button variant="ghost" size="icon-sm" aria-label="Copy the conversation as an AI prompt" :disabled="copying" @click="copyPrompt"><PhCircleNotch v-if="copying" class="animate-spin" /><PhRobot v-else /></Button>

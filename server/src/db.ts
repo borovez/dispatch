@@ -87,6 +87,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS tag_contents (id TEXT PRIMARY KEY, repo TEXT NOT NULL, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS linked_prs (key TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL);
 `)
+// Pinned Slack items stay (never pruned, superseded or closed) until unpinned
+if (!(db.prepare('PRAGMA table_info(slack_items)').all() as { name: string }[]).some((c) => c.name === 'pinned'))
+  db.exec('ALTER TABLE slack_items ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
 
 // ---------- kv ----------
 export function kvGet<T>(key: string, fallback: T): T {
@@ -396,25 +399,25 @@ export function setMeta(id: PrId, note: string | null, pinned: boolean) {
 }
 
 // ---------- Slack ----------
+type SlackRowDb = { data: string; status: SlackStatus; jira_key: string | null; pinned: number }
+const slackItem = (r: SlackRowDb): SlackItem => ({ ...JSON.parse(r.data), status: r.status, jiraKey: r.jira_key, pinned: !!r.pinned })
+
 export function listSlack(): SlackItem[] {
-  const rows = db.prepare('SELECT data, status, jira_key FROM slack_items ORDER BY posted_at DESC').all() as {
-    data: string
-    status: SlackStatus
-    jira_key: string | null
-  }[]
-  return rows.map((r) => ({ ...JSON.parse(r.data), status: r.status, jiraKey: r.jira_key }))
+  return (db.prepare('SELECT data, status, jira_key, pinned FROM slack_items ORDER BY posted_at DESC').all() as SlackRowDb[]).map(slackItem)
 }
 
 export function getSlackItem(id: string): SlackItem | null {
-  const r = db.prepare('SELECT data, status, jira_key FROM slack_items WHERE id = ?').get(id) as
-    | { data: string; status: SlackStatus; jira_key: string | null }
-    | undefined
-  return r ? { ...JSON.parse(r.data), status: r.status, jiraKey: r.jira_key } : null
+  const r = db.prepare('SELECT data, status, jira_key, pinned FROM slack_items WHERE id = ?').get(id) as SlackRowDb | undefined
+  return r ? slackItem(r) : null
+}
+
+export function setSlackPinned(id: string, pinned: boolean) {
+  db.prepare('UPDATE slack_items SET pinned = ? WHERE id = ?').run(pinned ? 1 : 0, id)
 }
 
 /** Upsert content; status/jira link are user state and survive re-syncs (unless autoDone). */
 export function upsertSlackItem(item: SlackItem, autoDone: boolean) {
-  const { status: _s, jiraKey: _j, ...data } = item
+  const { status: _s, jiraKey: _j, pinned: _p, ...data } = item
   db.prepare(
     `INSERT INTO slack_items (id, data, status, posted_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET data = excluded.data,
@@ -428,7 +431,7 @@ export function setSlackStatus(id: string, status: SlackStatus, jiraKey?: string
 }
 
 export function pruneSlack(olderThanIso: string) {
-  db.prepare("DELETE FROM slack_items WHERE posted_at < ? AND status <> 'new'").run(olderThanIso)
+  db.prepare("DELETE FROM slack_items WHERE posted_at < ? AND status <> 'new' AND pinned = 0").run(olderThanIso)
 }
 
 export const getSlackUsers = () => kvGet<Record<string, { name: string; avatar: string | null }>>('slackUsers', {})
@@ -446,7 +449,7 @@ export const saveUiPrefs = (p: Record<string, unknown>) => kvSet('uiPrefs', p)
 export function supersedeSlackDms(awaiting: Map<string, string>) {
   const del = db.prepare('DELETE FROM slack_items WHERE id = ?')
   for (const it of listSlack()) {
-    if (it.status !== 'new' || it.jiraKey || !it.awaitingReply || (it.kind !== 'dm' && it.kind !== 'group')) continue
+    if (it.status !== 'new' || it.jiraKey || it.pinned || !it.awaitingReply || (it.kind !== 'dm' && it.kind !== 'group')) continue
     const latest = awaiting.get(it.channelId)
     if (latest !== undefined && it.ts !== latest) del.run(it.id)
   }
@@ -454,7 +457,7 @@ export function supersedeSlackDms(awaiting: Map<string, string>) {
 
 export function closeStaleSlack(kinds: string[], seen: Set<string>) {
   for (const it of listSlack())
-    if (it.status === 'new' && kinds.includes(it.kind) && !seen.has(it.id)) setSlackStatus(it.id, 'done')
+    if (it.status === 'new' && !it.pinned && kinds.includes(it.kind) && !seen.has(it.id)) setSlackStatus(it.id, 'done')
 }
 
 /** Jira keys that moved to another key (old → new), e.g. an issue moved between projects */

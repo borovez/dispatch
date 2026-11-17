@@ -49,8 +49,12 @@ const TIME_SORTS = [
 ]
 
 const prsFor = (p: PanelConfig): PrView[] => sortPrs(filterPrs(deck.prs, p.filter), p.sort, p.dir)
-const slackNew = computed(() => (deck.overview?.slack ?? []).filter((i) => i.status === 'new'))
-const slackFor = (p: PanelConfig) => (p.sort === 'oldest' ? [...slackNew.value].reverse() : slackNew.value)
+const slackNew = computed(() => (deck.overview?.slack ?? []).filter((i) => i.status === 'new' || i.pinned))
+/** Pinned first (so the panel's limit keeps them), then by time */
+const slackFor = (p: PanelConfig) => {
+  const list = p.sort === 'oldest' ? [...slackNew.value].reverse() : slackNew.value
+  return [...list.filter((i) => i.pinned), ...list.filter((i) => !i.pinned)]
+}
 const myJira = computed(() => (deck.overview?.jira ?? []).filter((j) => j.isMine && j.statusCategory !== 'done'))
 const openChains = computed(() => (deck.overview?.chains ?? []).filter((c) => !c.done))
 /** Releases panel: open releases, hotfixes not back in dev, my merged work not in a release yet */

@@ -381,6 +381,8 @@ export interface SlackItem {
   awaitingReply: boolean
   status: SlackStatus
   jiraKey: string | null
+  /** Pinned in Dispatch: shown at the top of the inbox and kept until unpinned */
+  pinned: boolean
 }
 
 /** A field Jira requires when creating an issue of a given project + type (beyond summary, description etc.) */

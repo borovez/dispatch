@@ -283,6 +283,7 @@ export async function fetchSlackInbox(cfg: SlackConfig): Promise<SlackFetchResul
         awaitingReply: r.awaitingReply,
         status: 'new',
         jiraKey: null,
+        pinned: false,
       },
     })
   }

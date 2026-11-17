@@ -40,8 +40,10 @@ const matchesQuery = (i: SlackItem) => {
   const q = v.query.toLowerCase().trim()
   return !q || `${i.text} ${i.userName} ${i.channelName} ${i.jiraKey ?? ''}`.toLowerCase().includes(q)
 }
+/** Pinned messages live in the Inbox (under Pinned) whatever their status, until unpinned */
+const inTab = (i: SlackItem, s: SlackStatus) => (s === 'new' ? i.status === 'new' || i.pinned : i.status === s && !i.pinned)
 const items = computed(() => {
-  const list = all.value.filter((i) => i.status === v.status && (!v.kind || i.kind === v.kind) && matchesQuery(i))
+  const list = all.value.filter((i) => inTab(i, v.status) && (!v.kind || i.kind === v.kind) && matchesQuery(i))
   return v.dir === 'desc' ? list : [...list].reverse()
 })
 const STATUS_TABS: { value: SlackStatus; label: string }[] = [
@@ -49,7 +51,7 @@ const STATUS_TABS: { value: SlackStatus; label: string }[] = [
   { value: 'done', label: 'Done' },
   { value: 'dismissed', label: 'Dismissed' },
 ]
-const count = (s: SlackStatus) => all.value.filter((i) => i.status === s).length
+const count = (s: SlackStatus) => all.value.filter((i) => inTab(i, s)).length
 const KINDS: { value: SlackKind; label: string }[] = [
   { value: 'mention', label: '@-mentions' },
   { value: 'dm', label: 'Direct messages' },
@@ -57,7 +59,7 @@ const KINDS: { value: SlackKind; label: string }[] = [
   { value: 'saved', label: 'Saved / bookmarked' },
   { value: 'todo', label: 'Marked todo' },
 ]
-const kindCount = (k: SlackKind) => all.value.filter((i) => i.status === v.status && i.kind === k).length
+const kindCount = (k: SlackKind) => all.value.filter((i) => inTab(i, v.status) && i.kind === k).length
 const viewSections = computed<ViewSection[]>(() => [
   { type: 'filter', key: 'kind', label: 'Source', icon: PhFunnel, allLabel: 'All sources', options: KINDS.map((k) => ({ value: k.value, label: `${k.label} · ${kindCount(k.value)}` })) },
   { type: 'dir', key: 'dir', desc: 'Newest first', asc: 'Oldest first' },

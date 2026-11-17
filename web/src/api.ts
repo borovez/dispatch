@@ -83,6 +83,7 @@ export const api = {
   slackThread: (id: string, ts: string) => call<SlackMessage[]>('GET', `/slack/${encodeURIComponent(id)}/thread-replies?ts=${encodeURIComponent(ts)}`),
   slackReply: (id: string, text: string, threadTs?: string | null) => call<{ ok: boolean }>('POST', `/slack/${encodeURIComponent(id)}/reply`, { text, threadTs }),
   slackUser: (id: string) => call<SlackUserProfile>('GET', `/slack/users/${encodeURIComponent(id)}`),
+  slackPin: (id: string, pinned: boolean) => call<{ ok: boolean }>('PUT', `/slack/${encodeURIComponent(id)}/pin`, { pinned }),
   slackStatus: (id: string, status: SlackStatus) =>
     call<{ ok: boolean; slack: { reaction: string; done: boolean } | null; warning?: string }>('PUT', `/slack/${encodeURIComponent(id)}/status`, { status }),
 }

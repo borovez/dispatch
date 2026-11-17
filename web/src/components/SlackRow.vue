@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { PhPushPin } from '@phosphor-icons/vue'
 import type { SlackItem } from '@shared/types'
 import { useRowArming } from '@/composables/arming'
 import { useDeck } from '@/stores/deck'
@@ -43,6 +44,7 @@ useRowArming(rowEl)
     <!-- Narrow screens: time and actions go on a line under the message -->
     <div class="min-w-0 flex-1 max-sm:basis-[calc(100%-2.5rem)]">
       <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <PhPushPin v-if="item.pinned" :size="12" weight="fill" class="shrink-0 text-primary" aria-label="Pinned" />
         <span class="font-semibold">{{ item.userName }}</span>
         <span class="inline-flex items-center gap-1 text-muted-foreground">
           <component :is="KIND[item.kind].icon" :size="12" />{{ item.channelName }}
