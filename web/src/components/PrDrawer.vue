@@ -213,6 +213,8 @@ const note = ref('')
 watch(pr, (p) => (note.value = p?.note ?? ''), { immediate: true })
 const saveMeta = (pinned = pr.value!.pinned) => deck.mutate(() => api.setMeta(pr.value!.id, note.value, pinned))
 
+/** A dependent already merged although this PR hasn't satisfied it yet (it went out of order) */
+const jumpedAhead = (id: string) => deck.byId.get(id)?.state === 'MERGED'
 /** Which dependency list has its inline add form open */
 const adding = ref<'waitsFor' | 'waitedOn' | null>(null)
 watch(() => pr.value?.id, () => (adding.value = null))
@@ -542,7 +544,11 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                 <span class="truncate text-muted-foreground">{{ deck.byId.get(e.to)?.title ?? (e.missing ? '(not synced yet)' : '') }}</span>
                 <span class="flex-1" />
                 <Badge :variant="prStatus(deck.byId.get(e.to)).tone" class="shrink-0">{{ prStatus(deck.byId.get(e.to)).label }}</Badge>
-                <Badge variant="outline" class="shrink-0" :title="e.satisfied ? `Done: ${e.kind === 'release' ? 'released' : 'merged'}` : `This PR waits for it to be ${e.kind === 'release' ? 'released' : 'merged'}`">needs {{ e.kind }}</Badge>
+                <Badge
+                  :variant="e.satisfied ? 'success' : 'outline'"
+                  class="shrink-0"
+                  :title="e.satisfied ? `No longer waiting: it is ${e.kind === 'release' ? 'released' : 'merged'}` : `This PR waits for it to be ${e.kind === 'release' ? 'released' : 'merged'}`"
+                >{{ e.satisfied ? `${e.kind === 'release' ? 'released' : 'merged'} ✓` : `needs ${e.kind}` }}</Badge>
                 <Badge variant="muted" :title="e.note ?? ''">{{ e.source }}</Badge>
                 <Button v-if="deps.canRemove(e)" variant="ghost" size="icon-xs" :disabled="deps.busy.value" :title="e.id != null ? 'Remove' : 'Remove from the PR description'" @click="removeDep(e)"><PhCircleNotch v-if="deps.isPending(e.from, e.to)" class="animate-spin" /><PhTrash v-else /></Button>
               </li>
@@ -566,10 +572,10 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                 <span class="flex-1" />
                 <Badge :variant="prStatus(deck.byId.get(e.from)).tone" class="shrink-0">{{ prStatus(deck.byId.get(e.from)).label }}</Badge>
                 <Badge
-                  :variant="e.satisfied ? 'success' : 'outline'"
+                  :variant="e.satisfied ? 'success' : jumpedAhead(e.from) ? 'warning' : 'outline'"
                   class="shrink-0"
-                  :title="e.satisfied ? `No longer waiting: this PR is ${e.kind === 'release' ? 'released' : 'merged'}` : `Waits for this PR to be ${e.kind === 'release' ? 'released' : 'merged'}`"
-                >{{ e.satisfied ? `${e.kind === 'release' ? 'released' : 'merged'} ✓` : `waits for ${e.kind}` }}</Badge>
+                  :title="e.satisfied ? `No longer waiting: this PR is ${e.kind === 'release' ? 'released' : 'merged'}` : jumpedAhead(e.from) ? `It was meant to wait for this PR to be ${e.kind === 'release' ? 'released' : 'merged'}, but it is already merged` : `Waits for this PR to be ${e.kind === 'release' ? 'released' : 'merged'}`"
+                >{{ e.satisfied ? `${e.kind === 'release' ? 'released' : 'merged'} ✓` : jumpedAhead(e.from) ? 'merged first' : `waits for ${e.kind}` }}</Badge>
                 <Button v-if="deps.canRemove(e)" variant="ghost" size="icon-xs" :disabled="deps.busy.value" :title="e.id != null ? 'Remove' : 'Remove from the PR description'" @click="removeDep(e)"><PhCircleNotch v-if="deps.isPending(e.from, e.to)" class="animate-spin" /><PhTrash v-else /></Button>
               </li>
               </ItemContextMenu>
