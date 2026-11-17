@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { writeClipboard } from '@/lib/clipboard'
 import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { PhArrowClockwise, PhCheck, PhCopy, PhRobot } from '@phosphor-icons/vue'
@@ -36,7 +37,7 @@ watch(open, (o) => o && load(), { immediate: true })
 
 async function copy() {
   try {
-    await navigator.clipboard.writeText(prompt.value)
+    await writeClipboard(prompt.value)
     copied.value = true
     toast.success('Setup prompt copied', { description: 'Paste it into Claude Code (or another agent).' })
     setTimeout(() => (copied.value = false), 2000)

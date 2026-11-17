@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ShareMenu from '@/components/ShareMenu.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
@@ -11,7 +12,7 @@ import { useArrowNav } from '@/composables/prNav'
 import { useReleaseNav } from '@/composables/releaseNav'
 import { followBeside, openBeside } from '@/composables/besideWindow'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { jiraTone, timeAgo, fullDate } from '@/utils/format'
+import { jiraTone, timeAgo, fullDate, jiraIcon } from '@/utils/format'
 import AdfView from './AdfView.vue'
 import JiraLinks from './JiraLinks.vue'
 import ItemContextMenu from './ItemContextMenu.vue'
@@ -132,7 +133,7 @@ const details = computed(() => {
   <SidePanel :open="!!key" @close="deck.selectedJiraKey = null">
     <template v-if="key" #header>
       <div class="flex flex-wrap items-center gap-1.5">
-        <img v-if="issue?.typeIconUrl" :src="issue.typeIconUrl" :title="issue.type" class="size-4" alt="" />
+        <img v-if="issue?.typeIconUrl" :src="jiraIcon(issue!.typeIconUrl!)" :title="issue.type" class="size-4" alt="" />
         <ExternalLink v-if="url" :href="url" icon="always" class="font-mono text-sm font-medium text-primary">{{ key }}</ExternalLink>
         <span v-else class="font-mono text-sm font-medium">{{ key }}</span>
         <!-- Moved in Jira (another project): the old key resolves to it -->
@@ -258,6 +259,7 @@ const details = computed(() => {
     <!-- Pinned actions, like the Slack panel -->
     <!-- To the release that ships this issue; Jira beside this window -->
     <template v-if="key && (releaseId || url || deck.overview?.configured.jira)" #actions>
+      <ShareMenu v-if="url" :url="url" :ref-label="key" :title="issue?.summary" what="issue" />
       <template v-if="releaseId">
       <Tooltip>
         <TooltipTrigger as-child>

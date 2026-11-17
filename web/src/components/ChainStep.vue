@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { PhCheckCircle, PhCircle, PhCircleDashed, PhClock, PhQuestion, PhXCircle } from '@phosphor-icons/vue'
-import type { BadgeVariants } from '@/components/ui/badge'
+import { PhCheckCircle, PhCircleDashed } from '@phosphor-icons/vue'
+import { prStatus, type StatusTone } from '@/composables/prStatus'
 import { useDeck } from '@/stores/deck'
-import { ACTION_TONE, CHECK_STYLE, timeAgo } from '@/utils/format'
+import { CHECK_STYLE, timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
@@ -21,18 +21,8 @@ const deck = useDeck()
 const prMenu = usePrMenu()
 const pr = computed(() => deck.byId.get(props.id) ?? null)
 
-type Tone = NonNullable<BadgeVariants['variant']>
-const status = computed<{ tone: Tone; label: string; icon: unknown }>(() => {
-  const p = pr.value
-  if (!p) return { tone: 'muted', label: 'Not synced', icon: PhQuestion }
-  if (p.state === 'CLOSED') return { tone: 'muted', label: 'Closed without merging', icon: PhXCircle }
-  if (p.state === 'MERGED') {
-    if (p.release && !p.release.released) return { tone: 'info', label: 'Merged, awaiting release', icon: PhClock }
-    return { tone: 'success', label: p.release?.released ? 'Released' : 'Merged', icon: PhCheckCircle }
-  }
-  if (props.next) return { tone: 'primary', label: p.action.label, icon: PhCircle }
-  return { tone: ACTION_TONE[p.action.kind], label: p.action.label, icon: PhCircleDashed }
-})
+type Tone = StatusTone
+const status = computed(() => prStatus(pr.value, props.next))
 /** Chip: tinted border and fill; the icon and label carry the colour */
 const CHIP: Partial<Record<Tone, string>> = {
   success: 'border-success/40 bg-success/8',

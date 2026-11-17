@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { prStatus } from '@/composables/prStatus'
+import { externalHint } from '@/lib/external'
+import ShareMenu from '@/components/ShareMenu.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { useArrowNav } from '@/composables/prNav'
@@ -16,7 +19,7 @@ import type { DepEdge, PrDetail, PrView } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
-import { ACTION_TONE, CHECK_STYLE, jiraCardTone, timeAgo } from '@/utils/format'
+import { ACTION_TONE, CHECK_STYLE, jiraCardTone, timeAgo, jiraIcon } from '@/utils/format'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -259,6 +262,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
           </ExternalLink>
     </template>
     <template v-if="pr" #actions>
+        <ShareMenu :url="pr.url" :ref-label="`${pr.repo}#${pr.number}`" :title="pr.title" what="pull request" />
         <template v-if="releaseTarget">
           <Tooltip>
             <TooltipTrigger as-child>
@@ -478,23 +482,33 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             >
               <template v-if="issue">
                 <div class="flex items-center gap-2">
-                  <img v-if="issue.typeIconUrl" :src="issue.typeIconUrl" class="size-4" alt="" />
+                  <img v-if="issue.typeIconUrl" :src="jiraIcon(issue.typeIconUrl!)" class="size-4" alt="" />
                   <span class="font-mono text-sm">{{ issue.key }}</span>
                   <Tooltip>
                     <TooltipTrigger as-child>
-                      <Button variant="ghost" size="icon-xs" class="text-muted-foreground" as="a" :href="issue.url" target="_blank" rel="noopener" :aria-label="`Open ${issue.key} in Jira`">
+                      <Button variant="ghost" size="icon-sm" class="text-muted-foreground" as="a" :href="issue.url" target="_blank" rel="noopener" :aria-label="`Open ${issue.key} in Jira`">
                         <PhArrowSquareOut />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Open in Jira</TooltipContent>
+                    <TooltipContent>{{ externalHint(issue.url) }}</TooltipContent>
                   </Tooltip>
                   <span class="flex-1" />
-                  <Button variant="ghost" size="icon-xs" class="text-muted-foreground hover:text-primary" :aria-label="`Prompt for an AI agent to implement ${issue.key}`" title="Prompt for an AI agent" @click="deck.agentPromptKey = issue.key">
-                    <PhRobot />
-                  </Button>
-                  <Button variant="ghost" size="icon-xs" class="text-muted-foreground" :aria-label="`Edit ${issue.key}`" title="Edit" @click="deck.composer = { mode: 'edit', key: issue.key }">
-                    <PhPencilSimple />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-primary" :aria-label="`Prompt for an AI agent to implement ${issue.key}`" @click="deck.agentPromptKey = issue.key">
+                        <PhRobot />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Prompt for an AI agent to implement {{ issue.key }}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button variant="ghost" size="icon-sm" class="text-muted-foreground" :aria-label="`Edit ${issue.key}`" @click="deck.composer = { mode: 'edit', key: issue.key }">
+                        <PhPencilSimple />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit {{ issue.key }}</TooltipContent>
+                  </Tooltip>
                   <JiraTransition :issue-key="issue.key" />
                 </div>
                 <div class="mt-1 text-sm">{{ issue.summary }}</div>
@@ -543,7 +557,8 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                 <button class="max-w-1/2 min-w-0 shrink-0 font-mono text-primary hover:underline" @click="deck.selectedId = e.to"><RepoName :id="e.to" /></button>
                 <span class="truncate text-muted-foreground">{{ deck.byId.get(e.to)?.title ?? (e.missing ? '(not synced yet)' : '') }}</span>
                 <span class="flex-1" />
-                <Badge variant="outline">{{ e.kind }}</Badge>
+                <Badge :variant="prStatus(deck.byId.get(e.to)).tone" class="shrink-0">{{ prStatus(deck.byId.get(e.to)).label }}</Badge>
+                <Badge variant="outline" class="shrink-0" :title="e.satisfied ? `Done: ${e.kind === 'release' ? 'released' : 'merged'}` : `This PR waits for it to be ${e.kind === 'release' ? 'released' : 'merged'}`">needs {{ e.kind }}</Badge>
                 <Badge variant="muted" :title="e.note ?? ''">{{ e.source }}</Badge>
                 <Button v-if="deps.canRemove(e)" variant="ghost" size="icon-xs" :disabled="deps.busy.value" :title="e.id != null ? 'Remove' : 'Remove from the PR description'" @click="removeDep(e)"><PhCircleNotch v-if="deps.isPending(e.from, e.to)" class="animate-spin" /><PhTrash v-else /></Button>
               </li>
@@ -554,10 +569,18 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             <ul class="space-y-1">
               <ItemContextMenu v-for="e in pr.dependents" :key="e.from" :entries="() => depMenu(e.from, e)">
               <li class="flex items-center gap-2 text-sm">
+                <!-- Satisfied: this PR is merged / released, so the other one no longer waits on it -->
+                <PhCheckCircle v-if="e.satisfied" :size="16" weight="fill" class="shrink-0 text-success" />
+                <PhCircleDashed v-else :size="16" class="shrink-0 text-warning" />
                 <button class="max-w-1/2 min-w-0 shrink-0 font-mono text-primary hover:underline" @click="deck.selectedId = e.from"><RepoName :id="e.from" /></button>
                 <span class="truncate text-muted-foreground">{{ deck.byId.get(e.from)?.title }}</span>
                 <span class="flex-1" />
-                <Badge variant="outline">waits for {{ e.kind }}</Badge>
+                <Badge :variant="prStatus(deck.byId.get(e.from)).tone" class="shrink-0">{{ prStatus(deck.byId.get(e.from)).label }}</Badge>
+                <Badge
+                  :variant="e.satisfied ? 'success' : 'outline'"
+                  class="shrink-0"
+                  :title="e.satisfied ? `No longer waiting: this PR is ${e.kind === 'release' ? 'released' : 'merged'}` : `Waits for this PR to be ${e.kind === 'release' ? 'released' : 'merged'}`"
+                >{{ e.satisfied ? `${e.kind === 'release' ? 'released' : 'merged'} ✓` : `waits for ${e.kind}` }}</Badge>
                 <Button v-if="deps.canRemove(e)" variant="ghost" size="icon-xs" :disabled="deps.busy.value" :title="e.id != null ? 'Remove' : 'Remove from the PR description'" @click="removeDep(e)"><PhCircleNotch v-if="deps.isPending(e.from, e.to)" class="animate-spin" /><PhTrash v-else /></Button>
               </li>
               </ItemContextMenu>

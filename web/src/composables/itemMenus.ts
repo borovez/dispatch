@@ -1,5 +1,6 @@
 import type { Component } from 'vue'
 import { toast } from 'vue-sonner'
+import { writeClipboard } from '@/lib/clipboard'
 import {
   PhArrowSquareOut,
   PhArrowsClockwise,
@@ -50,7 +51,7 @@ export type MenuEntry = MenuAction | 'separator' | { heading: string }
 
 export async function copyText(text: string, what: string) {
   try {
-    await navigator.clipboard.writeText(text)
+    await writeClipboard(text)
     toast.success(`Copied ${what}`)
   } catch {
     toast.error(`Couldn't copy the ${what}`)
@@ -62,7 +63,7 @@ export async function copySlackPrompt(item: SlackItem, before = 20, after = 20) 
   const id = toast.loading('Collecting the conversation…')
   try {
     const { prompt } = await api.slackPrompt(item.id, Math.max(20, before), Math.max(20, after))
-    await navigator.clipboard.writeText(prompt)
+    await writeClipboard(prompt)
     toast.success('Copied the conversation as an AI prompt', { id })
   } catch (e) {
     toast.error(`Couldn't copy the conversation: ${(e as Error).message}`, { id })

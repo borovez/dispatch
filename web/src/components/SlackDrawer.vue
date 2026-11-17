@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ShareMenu from '@/components/ShareMenu.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { externalHint } from '@/lib/external'
@@ -202,6 +203,12 @@ async function copyPrompt() {
 <template>
   <SidePanel :open="!!item" @close="deck.selectedSlackId = null">
     <template v-if="item" #actions>
+      <ShareMenu
+        v-if="item.permalink"
+        :url="item.permalink"
+        :title="`${item.userName} in ${item.channelName}: ${item.text.replace(/\s+/g, ' ').slice(0, 80)}`"
+        what="message"
+      />
       <Tooltip>
         <TooltipTrigger as-child>
           <Button variant="ghost" size="icon-sm" :aria-label="item.pinned ? 'Unpin' : 'Pin to top of the inbox'" @click="toggleSlackPin(deck, item)">

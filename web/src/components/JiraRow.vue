@@ -5,7 +5,7 @@ import { computed, ref } from 'vue'
 import { useRowArming } from '@/composables/arming'
 import type { LinkedPr, JiraIssueView, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
-import { timeAgo } from '@/utils/format'
+import { timeAgo, jiraIcon } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import JiraTransition from './JiraTransition.vue'
 import PrListPopover from './PrListPopover.vue'
@@ -76,7 +76,7 @@ const initials = (name: string) =>
         :class="cn('mt-0.5 shrink-0 transition-opacity', !selected && !selecting && 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100')"
         @click.stop="emit('toggleSelect', $event)"
       />
-      <img v-if="issue?.typeIconUrl" :src="issue.typeIconUrl" :title="issue.type" class="mt-0.5 size-4 shrink-0" alt="" />
+      <img v-if="issue?.typeIconUrl" :src="jiraIcon(issue!.typeIconUrl!)" :title="issue.type" class="mt-0.5 size-4 shrink-0" alt="" />
       <div class="min-w-0 flex-1">
         <!-- Narrow screens: the summary wraps to two lines instead of a few truncated characters -->
         <div class="flex items-baseline gap-2">

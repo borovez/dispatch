@@ -91,3 +91,6 @@ export function dateGroup(iso: string, now = new Date()): string {
 /** "Tue 4 Nov 2026, 14:05" for tooltips */
 export const fullDate = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+/** Jira issue-type icon at a size that stays sharp on retina screens (Jira serves `size=medium` as a 16px PNG) */
+export const jiraIcon = (url: string) => url.replace(/([?&]size=)(xsmall|small|medium)\b/, '$1xlarge')

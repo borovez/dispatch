@@ -4,7 +4,7 @@ import { computed, type HTMLAttributes } from 'vue'
 import { PhTrain, PhArrowRight, PhCheckCircle, PhCircleNotch, PhCloudSlash, PhGitMerge, PhLightning, PhRocketLaunch, PhXCircle } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
-import { ACTION_TONE, CHECK_STYLE, jiraTone } from '@/utils/format'
+import { ACTION_TONE, CHECK_STYLE, jiraTone, jiraIcon } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -92,7 +92,7 @@ const jira = computed(() => {
         <!-- Jira issue and its epic/parent, with their statuses -->
         <div v-if="jira" class="space-y-1 border-t pt-1.5 text-[11px]">
           <div class="flex min-w-0 items-center gap-1" :title="jira.issue ? `${jira.key}: ${jira.issue.summary}` : jira.key">
-            <img v-if="jira.issue?.typeIconUrl" :src="jira.issue.typeIconUrl" class="size-3.5" alt="" />
+            <img v-if="jira.issue?.typeIconUrl" :src="jiraIcon(jira.issue.typeIconUrl!)" class="size-3.5" alt="" />
             <span class="shrink-0 font-mono">{{ jira.key }}</span>
             <span v-if="jira.issue" class="min-w-0 flex-1 truncate text-muted-foreground">{{ jira.issue.summary }}</span>
             <span v-else class="flex-1" />
