@@ -4,6 +4,9 @@ import type { DepEdge, DependencyKind } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 
+/** org/repo#12 → repo#12: toasts are narrow, and the org is rarely what tells two PRs apart */
+const short = (id: string) => id.replace(/^[^/]+\//, '')
+
 /** Writes in flight, shared by every caller ("from>to"), so the same dependency isn't written twice at once */
 const pending = reactive(new Set<string>())
 /** What those writes are, so views can draw them (a grey link being added, a grey link being removed) */
@@ -48,7 +51,7 @@ export function useDependencies() {
     if (pending.has(key)) return false
     const existing = deck.overview?.edges.find((e) => e.from === from && e.to === to)
     if (existing && existing.kind === kind) {
-      toast.info('That dependency already exists', { description: `${from} already waits for ${to}` })
+      toast.info('That dependency already exists', { description: `${short(from)} already waits for ${short(to)}` })
       return false
     }
     pending.add(key)
@@ -59,11 +62,12 @@ export function useDependencies() {
       if (!ok || !res) return false
       record({ op: 'add', from, to, kind }, via)
       const action = actionFor(via)
-      const where = [res.written && from, res.writtenOther && to].filter(Boolean).join(' and ')
-      if (where && !res.error) toast.success(res.written && res.writtenOther ? 'Dependency added to both PR descriptions' : 'Dependency added to the PR description', { description: where, action })
-      else if (where) toast.warning(`Dependency added to ${where}`, { description: `Couldn't edit the other description: ${res.error}`, action })
-      else if (res.error) toast.warning('Dependency saved in Dispatch only', { description: `Couldn't edit the descriptions: ${res.error}`, action })
-      else toast.success('Dependency added', { description: `${from} waits for ${to}`, action })
+      const waits = `${short(from)} waits for ${short(to)} to be ${kind === 'release' ? 'released' : 'merged'}.`
+      if (res.written && res.writtenOther && !res.error) toast.success('Dependency added', { description: `${waits} Written into both PR descriptions.`, action })
+      else if ((res.written || res.writtenOther) && !res.error) toast.success('Dependency added', { description: `${waits} Written into ${short(res.written ? from : to)}'s description.`, action })
+      else if (res.written || res.writtenOther) toast.warning('Dependency added', { description: `${waits} Only ${short(res.written ? from : to)}'s description was edited: ${res.error}`, action })
+      else if (res.error) toast.warning('Dependency saved in Dispatch only', { description: `${waits} Couldn't edit the descriptions: ${res.error}`, action })
+      else toast.success('Dependency added', { description: waits, action })
       return true
     } finally {
       pending.delete(key)
@@ -82,7 +86,7 @@ export function useDependencies() {
       const ok = await deck.mutate(() => (e.id != null ? api.removeDep(e.id) : api.removeDepFromDescription(e.from, e.to)))
       if (!ok) return false
       record({ op: 'remove', from: e.from, to: e.to, kind: e.kind }, via)
-      toast.success(e.id != null ? 'Dependency removed' : 'Removed from the PR descriptions', { description: `${e.from} no longer waits for ${e.to}`, action: actionFor(via) })
+      toast.success(e.id != null ? 'Dependency removed' : 'Removed from the PR descriptions', { description: `${short(e.from)} no longer waits for ${short(e.to)}`, action: actionFor(via) })
       return true
     } finally {
       pending.delete(key)
@@ -96,7 +100,7 @@ export function useDependencies() {
     if (op === 'add') return add(c.from, c.to, c.kind, via)
     const edge = deck.overview?.edges.find((e) => e.from === c.from && e.to === c.to)
     if (!edge || !canRemove(edge)) {
-      toast.info(`Nothing to ${via}`, { description: edge ? `${c.from} → ${c.to} comes from Jira and can't be removed here` : `${c.from} → ${c.to} is already gone` })
+      toast.info(`Nothing to ${via}`, { description: edge ? `${short(c.from)} → ${short(c.to)} comes from Jira and can't be removed here` : `${short(c.from)} → ${short(c.to)} is already gone` })
       return false
     }
     return remove(edge, via)

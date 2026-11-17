@@ -14,8 +14,8 @@ import { loadPrDetail } from '@/composables/prDetail'
 import { releaseStatus } from '@shared/release'
 import SidePanel from './SidePanel.vue'
 import { computed, ref, watch } from 'vue'
-import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhCaretDown, PhPlus, PhPushPin, PhSquareSplitHorizontal, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit } from '@phosphor-icons/vue'
-import type { DepEdge, PrDetail, PrView } from '@shared/types'
+import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhPlus, PhPushPin, PhSquareSplitHorizontal, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit } from '@phosphor-icons/vue'
+import type { DepEdge, PrDetail } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
@@ -23,16 +23,6 @@ import { ACTION_TONE, CHECK_STYLE, jiraCardTone, timeAgo, jiraIcon } from '@/uti
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ButtonGroup } from '@/components/ui/button-group'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
@@ -50,7 +40,7 @@ import { cn } from '@/lib/utils'
 import ReleaseItems from './ReleaseItems.vue'
 import FlagList from './FlagList.vue'
 import TrainOrder from './TrainOrder.vue'
-import PrPicker from './PrPicker.vue'
+import DepAddForm from './DepAddForm.vue'
 import { FLOW_LABEL } from '@/utils/releaseFlow'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -63,7 +53,6 @@ const alertTone = computed(() => {
 const dv = useLayout().view('drawer', {
   tab: 'details' as 'details' | 'contents' | 'description' | 'files' | 'conversations',
   // Last dependency type used in the add form
-  depDirection: 'dependsOn' as 'dependsOn' | 'blocks',
   depKind: 'merge' as 'merge' | 'release',
   // Collapsible footer sections
   depsOpen: true,
@@ -224,18 +213,9 @@ const note = ref('')
 watch(pr, (p) => (note.value = p?.note ?? ''), { immediate: true })
 const saveMeta = (pinned = pr.value!.pinned) => deck.mutate(() => api.setMeta(pr.value!.id, note.value, pinned))
 
-const depTarget = ref('')
-/** PRs already linked to this one can't be added again (either direction) */
-function linkedReason(p: PrView): string | null {
-  if (pr.value?.dependsOn.some((e) => e.to === p.id)) return 'already a prerequisite'
-  if (pr.value?.dependents.some((e) => e.from === p.id)) return 'already waits on this'
-  return null
-}
-async function addDep() {
-  if (deps.busy.value) return
-  const [from, to] = dv.depDirection === 'dependsOn' ? [pr.value!.id, depTarget.value] : [depTarget.value, pr.value!.id]
-  if (await deps.add(from, to, dv.depKind)) depTarget.value = ''
-}
+/** Which dependency list has its inline add form open */
+const adding = ref<'waitsFor' | 'waitedOn' | null>(null)
+watch(() => pr.value?.id, () => (adding.value = null))
 /** Prerequisites not yet merged/released */
 const waiting = computed(() => pr.value?.dependsOn.filter((e) => !e.satisfied).length ?? 0)
 const deps = useDependencies()
@@ -548,7 +528,11 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             :style="{ '--deps-h': `${dv.depsHeight}px` }"
           >
           <div class="pr-3">
-            <h4 class="mb-1 text-xs text-muted-foreground">Depends on: merge these first</h4>
+            <div class="mb-1 flex items-center gap-2">
+              <h4 class="text-xs text-muted-foreground">Waits for <span class="opacity-70">· these go first</span></h4>
+              <span class="flex-1" />
+              <Button v-if="adding !== 'waitsFor'" variant="ghost" size="xs" class="h-6 text-xs text-muted-foreground" title="Add a PR that must be merged or released before this one" @click="adding = 'waitsFor'"><PhPlus /> Add</Button>
+            </div>
             <ul class="space-y-1">
               <ItemContextMenu v-for="e in pr.dependsOn" :key="e.to" :entries="() => depMenu(e.to, e)">
               <li class="flex items-center gap-2 text-sm">
@@ -563,9 +547,14 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                 <Button v-if="deps.canRemove(e)" variant="ghost" size="icon-xs" :disabled="deps.busy.value" :title="e.id != null ? 'Remove' : 'Remove from the PR description'" @click="removeDep(e)"><PhCircleNotch v-if="deps.isPending(e.from, e.to)" class="animate-spin" /><PhTrash v-else /></Button>
               </li>
               </ItemContextMenu>
-              <li v-if="!pr.dependsOn.length" class="text-sm text-muted-foreground">None</li>
+              <li v-if="!pr.dependsOn.length && adding !== 'waitsFor'" class="text-sm text-muted-foreground">None</li>
             </ul>
-            <h4 class="mt-3 mb-1 text-xs text-muted-foreground">Blocks: waiting on this</h4>
+            <DepAddForm v-if="adding === 'waitsFor'" :key="pr.id" :pr="pr" side="waitsFor" @done="adding = null" />
+            <div class="mt-3 mb-1 flex items-center gap-2">
+              <h4 class="text-xs text-muted-foreground">Waiting on this PR <span class="opacity-70">· go after it</span></h4>
+              <span class="flex-1" />
+              <Button v-if="adding !== 'waitedOn'" variant="ghost" size="xs" class="h-6 text-xs text-muted-foreground" title="Add a PR that can only merge after this one" @click="adding = 'waitedOn'"><PhPlus /> Add</Button>
+            </div>
             <ul class="space-y-1">
               <ItemContextMenu v-for="e in pr.dependents" :key="e.from" :entries="() => depMenu(e.from, e)">
               <li class="flex items-center gap-2 text-sm">
@@ -584,49 +573,10 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                 <Button v-if="deps.canRemove(e)" variant="ghost" size="icon-xs" :disabled="deps.busy.value" :title="e.id != null ? 'Remove' : 'Remove from the PR description'" @click="removeDep(e)"><PhCircleNotch v-if="deps.isPending(e.from, e.to)" class="animate-spin" /><PhTrash v-else /></Button>
               </li>
               </ItemContextMenu>
-              <li v-if="!pr.dependents.length" class="text-sm text-muted-foreground">None</li>
+              <li v-if="!pr.dependents.length && adding !== 'waitedOn'" class="text-sm text-muted-foreground">None</li>
             </ul>
+            <DepAddForm v-if="adding === 'waitedOn'" :key="pr.id" :pr="pr" side="waitedOn" @done="adding = null" />
 
-            <form class="mt-3 space-y-2 rounded-lg bg-muted/60 p-3" @submit.prevent="addDep">
-              <div class="flex gap-2">
-                <PrPicker v-model="depTarget" :exclude="pr.id" :disabled-reason="linkedReason" :disabled="deps.busy.value" placeholder="Search PRs by title, repo, #number, Jira key, or paste a URL" class="h-8 min-w-0 flex-1" required />
-                <!-- Split button: add with the current choice, or switch direction / kind from the menu -->
-                <ButtonGroup class="shrink-0">
-                  <Button size="sm" type="submit" :disabled="deps.busy.value">
-                    <PhCircleNotch v-if="deps.busy.value" class="animate-spin" /><PhPlus v-else /> {{ dv.depDirection === 'dependsOn' ? 'Depends on' : 'Blocks' }}
-                    <span class="opacity-75">· {{ dv.depKind }}</span>
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger as-child>
-                      <Button size="icon-sm" type="button" aria-label="Choose dependency type" class="border-l border-primary-foreground/20" :disabled="deps.busy.value">
-                        <PhCaretDown />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" class="w-56">
-                      <DropdownMenuLabel class="text-xs text-muted-foreground">This PR…</DropdownMenuLabel>
-                      <DropdownMenuRadioGroup v-model="dv.depDirection">
-                        <DropdownMenuRadioItem value="dependsOn">depends on it</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="blocks">blocks it</DropdownMenuRadioItem>
-                      </DropdownMenuRadioGroup>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel class="text-xs text-muted-foreground">…waits for</DropdownMenuLabel>
-                      <DropdownMenuRadioGroup v-model="dv.depKind">
-                        <DropdownMenuRadioItem value="merge">the merge</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="release">the release</DropdownMenuRadioItem>
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </ButtonGroup>
-              </div>
-              <p class="text-xs text-muted-foreground">
-                <template v-if="deck.overview?.dependencyWrites.description">
-                  Written into the waiting PR’s description as “{{ dv.depKind === 'release' ? 'Requires release of' : 'Depends on' }}: org/repo#12”{{
-                    deck.overview.dependencyWrites.bothSides ? `, and “${dv.depKind === 'release' ? 'Release blocks' : 'Blocks'}: …” into the other one` : ''
-                  }}, so it shows on GitHub too.
-                </template>
-                <template v-else>Kept in Dispatch only (Settings → Dependencies).</template>
-              </p>
-            </form>
           </div>
           </ScrollArea>
           <ResizeHandle

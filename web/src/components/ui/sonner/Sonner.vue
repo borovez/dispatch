@@ -31,6 +31,8 @@ const delegatedProps = reactiveOmit(props, 'class', 'toastOptions')
       '--gray4': 'var(--border)',
       '--gray5': 'var(--border)',
       '--gray12': 'var(--popover-foreground)',
+      // Wider than sonner's 356px so PR references and an action button fit without squeezing
+      '--width': '420px',
     }"
     :toast-options="props.toastOptions ?? {
       classes: {
