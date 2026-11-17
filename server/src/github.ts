@@ -645,3 +645,24 @@ export async function searchPrsMentioning(account: GithubAccount, key: string, o
   }
   return out
 }
+
+/** Link hover card: a pull request or issue */
+export async function githubItemInfo(account: GithubAccount, repo: string, kind: 'pull' | 'issues', number: number) {
+  const it = await request<{
+    title: string
+    body: string | null
+    state: string
+    draft?: boolean
+    merged_at?: string | null
+    user: { login: string } | null
+    updated_at: string
+  }>(account.token, `/repos/${repo}/${kind === 'pull' ? 'pulls' : 'issues'}/${number}`)
+  const state = it.merged_at ? 'merged' : it.draft && it.state === 'open' ? 'draft' : it.state
+  return { title: it.title, body: it.body ?? '', state, author: it.user?.login, updatedAt: it.updated_at }
+}
+
+/** Link hover card: a repository */
+export async function githubRepoInfo(account: GithubAccount, repo: string) {
+  const r = await request<{ full_name: string; description: string | null; private: boolean; pushed_at: string; default_branch: string }>(account.token, `/repos/${repo}`)
+  return { title: r.full_name, description: r.description ?? '', private: r.private, updatedAt: r.pushed_at, defaultBranch: r.default_branch }
+}

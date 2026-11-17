@@ -42,6 +42,7 @@ import { ButtonGroup } from '@/components/ui/button-group'
 import { Toggle } from '@/components/ui/toggle'
 import { Separator } from '@/components/ui/separator'
 import { Toaster } from '@/components/ui/sonner'
+import LinkHoverCard from '@/components/LinkHoverCard.vue'
 import {
   Sidebar,
   SidebarContent,
@@ -213,6 +214,7 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
     <PrWriter />
     <AgentPromptDialog />
     <SetupPromptDialog />
+    <LinkHoverCard />
     <Toaster :theme="theme === 'auto' ? 'system' : theme" position="bottom-right" close-button />
   </TooltipProvider>
 </template>

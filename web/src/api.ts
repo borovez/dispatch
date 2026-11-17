@@ -1,4 +1,4 @@
-import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, LinkedPrs, PrDetail, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
+import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, LinkedPrs, LinkPreview, PrDetail, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
 
 async function call<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -83,6 +83,7 @@ export const api = {
   slackThread: (id: string, ts: string) => call<SlackMessage[]>('GET', `/slack/${encodeURIComponent(id)}/thread-replies?ts=${encodeURIComponent(ts)}`),
   slackReply: (id: string, text: string, threadTs?: string | null) => call<{ ok: boolean }>('POST', `/slack/${encodeURIComponent(id)}/reply`, { text, threadTs }),
   slackUser: (id: string) => call<SlackUserProfile>('GET', `/slack/users/${encodeURIComponent(id)}`),
+  linkPreview: (url: string, signal?: AbortSignal) => call<LinkPreview>('GET', `/link-preview?url=${encodeURIComponent(url)}`, undefined, signal),
   slackPin: (id: string, pinned: boolean) => call<{ ok: boolean }>('PUT', `/slack/${encodeURIComponent(id)}/pin`, { pinned }),
   slackStatus: (id: string, status: SlackStatus) =>
     call<{ ok: boolean; slack: { reaction: string; done: boolean } | null; warning?: string }>('PUT', `/slack/${encodeURIComponent(id)}/status`, { status }),

@@ -803,3 +803,28 @@ export const ACTION_LABELS: Record<ActionKind, string> = {
   none: 'Watching',
   done: 'Done',
 }
+
+/**
+ * What the link hover card shows for a URL beyond what Dispatch already knows: GitHub items through
+ * the GitHub API (private repos work), Jira issues through Jira, anything else from the page's own
+ * <title> / Open Graph tags. `GET /api/link-preview?url=`
+ */
+export interface LinkPreview {
+  url: string
+  /** Where redirects ended, when different */
+  finalUrl?: string
+  source: 'github' | 'jira' | 'page' | 'none'
+  title?: string
+  description?: string
+  siteName?: string
+  image?: string
+  favicon?: string
+  /** GitHub: open / closed / merged / draft; Jira: the status name */
+  state?: string
+  author?: string
+  updatedAt?: string
+  /** e.g. application/pdf when the link isn't a page */
+  contentType?: string
+  /** Why there is no preview (private network, no access, timed out…) */
+  error?: string
+}

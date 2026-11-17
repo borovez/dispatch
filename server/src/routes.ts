@@ -1,6 +1,7 @@
 import { computeReleaseContents } from './releases.ts'
 import { setTodoDoneInSlack } from './slack.ts'
 import { testLaunchDarkly } from './launchdarkly.ts'
+import { linkPreview } from './linkPreview.ts'
 import { editDescription, withBlocks, withDependency, withoutBlocks, withoutDependency } from './bodyDeps.ts'
 import { Hono } from 'hono'
 import { adfToMarkdown } from '../../shared/adf.ts'
@@ -471,6 +472,13 @@ api.get('/jira/:key/linked-prs', async (c) => {
   linkedCache.set(key, { at: Date.now(), value })
   value.catch(() => linkedCache.delete(key))
   return c.json(await value)
+})
+
+// ---------- Link hover card ----------
+api.get('/link-preview', async (c) => {
+  const url = c.req.query('url') ?? ''
+  if (!/^https?:\/\//i.test(url) || url.length > 2048) throw bad('Not a web link')
+  return c.json(await linkPreview(url))
 })
 
 // ---------- Jira transitions ----------
