@@ -261,6 +261,9 @@ export interface PrView extends Omit<PrRecord, 'body'> {
   bucket: Bucket
   note: string | null
   pinned: boolean
+  /** "Mark as done": the action I dismissed (it showed until then) and when; the PR is done while
+   * that is still what it needs, and shows its action again once it needs something else */
+  markedDone: { action: ActionKind; label: string; at: string } | null
   approvals: string[]
   changesRequestedBy: string[]
   flow: PrFlow | null

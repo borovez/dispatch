@@ -4,6 +4,7 @@ import { writeClipboard } from '@/lib/clipboard'
 import {
   PhArrowSquareOut,
   PhArrowsClockwise,
+  PhCheckCircle,
   PhCopy,
   PhGraph,
   PhGitPullRequest,
@@ -142,6 +143,12 @@ export function usePrMenu() {
         icon: pr.pinned ? PhPushPinSlash : PhPushPin,
         run: () => deck.mutate(() => api.setMeta(pr.id, pr.note, !pr.pinned)),
       },
+      // Dismiss what the PR asks for (e.g. a backmerge that isn't needed), with a confirmation; or undo that
+      ...(pr.markedDone
+        ? [{ label: `Undo mark as done (${pr.markedDone.label})`, icon: PhArrowCounterClockwise, run: () => deck.mutate(() => api.setDone(pr.id, null), `${ref}: ${pr.markedDone!.label} again`) }]
+        : pr.action.kind !== 'done' && pr.action.kind !== 'none'
+          ? [{ label: 'Mark as done…', icon: PhCheckCircle, hint: pr.action.label, run: () => (deck.markDonePr = pr.id) }]
+          : []),
       { label: 'Resync from GitHub', icon: PhArrowsClockwise, run: () => deck.mutate(() => api.resyncPr(pr.id), `Resynced ${ref}`) },
       ...(pr.state === 'OPEN' ? [{ label: 'Edit title and description…', icon: PhMagicWand, run: () => (deck.prWriter = pr.id) }] : []),
       ...(deck.overview?.configured.jira ? [{ label: 'Create Jira issue…', icon: PhNotePencil, run: () => (deck.composer = issueSeedFromPr(pr)) }] : []),

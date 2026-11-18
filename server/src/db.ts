@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { LinkedPr,
+  ActionKind,
   DependencyKind,
   JiraIssue,
   PrId,
@@ -90,6 +91,9 @@ db.exec(`
 // Pinned Slack items stay (never pruned, superseded or closed) until unpinned
 if (!(db.prepare('PRAGMA table_info(slack_items)').all() as { name: string }[]).some((c) => c.name === 'pinned'))
   db.exec('ALTER TABLE slack_items ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
+// "Mark as done": the action dismissed (only that action; a different one shows again) and when
+if (!(db.prepare('PRAGMA table_info(pr_meta)').all() as { name: string }[]).some((c) => c.name === 'done_action'))
+  db.exec('ALTER TABLE pr_meta ADD COLUMN done_action TEXT; ALTER TABLE pr_meta ADD COLUMN done_at TEXT')
 
 // ---------- kv ----------
 export function kvGet<T>(key: string, fallback: T): T {
@@ -383,13 +387,22 @@ export function removeManualDep(id: number): boolean {
 }
 
 // ---------- Per-PR meta ----------
-export function listMeta(): Map<PrId, { note: string | null; pinned: boolean }> {
-  const rows = db.prepare('SELECT pr_id, note, pinned FROM pr_meta').all() as {
+export function listMeta(): Map<PrId, { note: string | null; pinned: boolean; doneAction: ActionKind | null; doneAt: string | null }> {
+  const rows = db.prepare('SELECT pr_id, note, pinned, done_action, done_at FROM pr_meta').all() as {
     pr_id: string
     note: string | null
     pinned: number
+    done_action: string | null
+    done_at: string | null
   }[]
-  return new Map(rows.map((r) => [r.pr_id, { note: r.note, pinned: !!r.pinned }]))
+  return new Map(rows.map((r) => [r.pr_id, { note: r.note, pinned: !!r.pinned, doneAction: (r.done_action as ActionKind) ?? null, doneAt: r.done_at }]))
+}
+/** Mark a PR's current action as done (null clears it) */
+export function setDoneAction(id: PrId, action: ActionKind | null) {
+  db.prepare(
+    `INSERT INTO pr_meta (pr_id, done_action, done_at) VALUES (?, ?, ?)
+     ON CONFLICT(pr_id) DO UPDATE SET done_action = excluded.done_action, done_at = excluded.done_at`,
+  ).run(id, action, action ? new Date().toISOString() : null)
 }
 export function setMeta(id: PrId, note: string | null, pinned: boolean) {
   db.prepare(

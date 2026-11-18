@@ -194,6 +194,13 @@ export function buildOverview(): Overview {
     }
 
     const m = meta.get(pr.id)
+    // Marked done by me for this very action: done (until the PR needs something else)
+    let markedDone: PrView['markedDone'] = null
+    if (m?.doneAction && m.doneAction === kind && kind !== 'done' && kind !== 'none') {
+      markedDone = { action: kind, label: ACTION_LABELS[kind], at: m.doneAt ?? '' }
+      detail = `Marked done (was ${ACTION_LABELS[kind]})`
+      ;[kind, bucket] = ['done', 'done']
+    }
     return {
       ...rest,
       threads: rest.threads ?? [], // PRs cached before thread details were synced
@@ -208,6 +215,7 @@ export function buildOverview(): Overview {
       bucket,
       note: m?.note ?? null,
       pinned: m?.pinned ?? false,
+      markedDone,
       approvals,
       changesRequestedBy,
       flow: flows.get(pr.id) ?? null,

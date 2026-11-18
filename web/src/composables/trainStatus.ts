@@ -1,7 +1,7 @@
 import type { ReleaseTrain } from '@shared/types'
 import type { BadgeVariants } from '@/components/ui/badge'
 import { useDeck } from '@/stores/deck'
-import { ACTION_TONE } from '@/utils/format'
+import { actionTone } from '@/utils/format'
 
 export type Tone = NonNullable<BadgeVariants['variant']>
 
@@ -40,6 +40,6 @@ export function useReleaseStatus() {
     if (waiting.length)
       return { tone: 'warning', label: `Waits for ${waiting.length === 1 ? 'an earlier release' : `${waiting.length} earlier releases`}`, title: waiting.join('\n') }
     if (pr.action.kind === 'merge') return { tone: 'success', label: 'Ready to merge' }
-    return { tone: ACTION_TONE[pr.action.kind], label: pr.action.label, title: pr.action.detail ?? undefined }
+    return { tone: actionTone(pr), label: pr.action.label, title: pr.action.detail ?? undefined }
   }
 }

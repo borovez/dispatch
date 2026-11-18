@@ -1,8 +1,9 @@
 import { checkBackmerge, computeReleaseContents } from '../releases.ts'
 import { adfToMarkdown } from '../../../shared/adf.ts'
 import { z } from 'zod'
-import type { GithubAccount, PrRecord } from '../../../shared/types.ts'
-import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTitle, updatePrData, upsertPr, listReleaseContents } from '../db.ts'
+import type { ActionKind, GithubAccount, PrRecord } from '../../../shared/types.ts'
+import { ACTION_LABELS } from '../../../shared/types.ts'
+import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTitle, updatePrData, upsertPr, listReleaseContents, setDoneAction } from '../db.ts'
 import { draftPrText } from '../ai.ts'
 import { keepDeclarations } from '../prWriter.ts'
 import { claudeMdGuide } from '../guides.ts'
@@ -142,6 +143,15 @@ api.post('/releases/refresh', async (c) => {
 })
 
 // ---------- Per-PR notes / pins ----------
+/** Mark a PR's current action as done (with `action`: the one shown, e.g. backmerge), or undo it (`action: null`) */
+api.put('/prs/done', async (c) => {
+  const { id, action } = await c.req.json<{ id: string; action: string | null }>()
+  if (!id) throw bad('id is required')
+  if (action !== null && !(action in ACTION_LABELS)) throw bad('Unknown action')
+  setDoneAction(id, action as ActionKind | null)
+  return c.json({ ok: true })
+})
+
 api.put('/prs/meta', async (c) => {
   const { id, note, pinned } = await c.req.json<{ id: string; note: string | null; pinned: boolean }>()
   setMeta(id, note?.trim() || null, !!pinned)

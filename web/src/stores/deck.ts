@@ -135,6 +135,8 @@ export const useDeck = defineStore('deck', () => {
 
   /** Jira issue composer: a new issue (optionally pre-filled) or an existing one to edit */
   const composer = ref<ComposerTarget | null>(null)
+  /** PR whose "Mark as done" confirmation is open (MarkDoneDialog) */
+  const markDonePr = ref<string | null>(null)
   /** PR whose title and description are open in the PR writer */
   const prWriter = ref<string | null>(null)
   /** Jira issue whose AI-agent prompt is open */
@@ -238,6 +240,6 @@ export const useDeck = defineStore('deck', () => {
     timer = window.setInterval(() => !syncRunning.value && load(), 60_000)
   }
 
-  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, panelJump, replacePanel, currentPanel, recentPanels, reopenPanel, composer, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
+  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, panelJump, replacePanel, currentPanel, recentPanels, reopenPanel, composer, markDonePr, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
     releaseById, selected, jiraByKey, flagByKey, repos, load, sync, mutate, startPolling }
 })

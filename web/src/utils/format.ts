@@ -42,8 +42,12 @@ export const ACTION_TONE: Record<ActionKind, Tone> = {
   awaiting_release: 'info',
   backmerge: 'warning',
   none: 'outline',
-  done: 'muted',
+  done: 'success',
 }
+
+/** A PR's action badge tone: "Done" is green once merged, grey when it was closed without merging */
+export const actionTone = (pr: { state: string; action: { kind: ActionKind } }): Tone =>
+  pr.action.kind === 'done' && pr.state === 'CLOSED' ? 'muted' : ACTION_TONE[pr.action.kind]
 
 export const BUCKETS: { key: Bucket; label: string; hint: string }[] = [
   { key: 'action', label: 'Needs my action', hint: 'Reviews, CI, feedback, merges & releases on you' },

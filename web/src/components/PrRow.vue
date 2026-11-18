@@ -13,7 +13,7 @@ import {
 } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
-import { ACTION_TONE, CHECK_STYLE, timeAgo } from '@/utils/format'
+import { CHECK_STYLE, timeAgo, actionTone } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -121,7 +121,7 @@ const openDeps = computed(() => props.pr.dependsOn.filter((d) => !d.satisfied).l
       />
       <!-- Extra badges from the parent (e.g. "release · 13" in release contents) -->
       <slot name="badges" />
-      <Badge v-if="show('action')" :variant="ACTION_TONE[pr.action.kind]">{{ pr.action.label }}</Badge>
+      <Badge v-if="show('action')" :variant="actionTone(pr)">{{ pr.action.label }}</Badge>
     </div>
   </div>
   </PrHover>

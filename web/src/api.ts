@@ -48,6 +48,8 @@ export const api = {
   resyncPrs: (ids: string[]) => call<{ prs: number; added: number; jira: number; errors: string[] }>('POST', '/prs/resync-many', { ids }),
   refreshRelease: (id: string) => call('POST', '/releases/refresh', { id }),
   setMeta: (id: string, note: string | null, pinned: boolean) => call('PUT', '/prs/meta', { id, note, pinned }),
+  /** Mark the PR's current action done (`null` undoes it) */
+  setDone: (id: string, action: string | null) => call('PUT', '/prs/done', { id, action }),
   prText: (id: string) => call<{ title: string; body: string }>('GET', `/prs/text?id=${encodeURIComponent(id)}`),
   prRewrite: (input: PrRewriteRequest, signal?: AbortSignal) => call<PrRewrite>('POST', '/prs/rewrite', input, signal),
   savePrText: (input: { prId: string; title?: string; body?: string }) => call<{ ok: boolean }>('PUT', '/prs/text', input),

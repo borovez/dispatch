@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { PhFlag } from '@phosphor-icons/vue'
+import { PhFlag, PhWarning } from '@phosphor-icons/vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { useDeck } from '@/stores/deck'
 import { useFlagPrs } from '@/composables/flags'
@@ -13,13 +13,18 @@ import PrListPopover from './PrListPopover.vue'
 /**
  * Feature flags (a PR's, or a release's roll-up) as a small flag icon with a count. Hover card: each flag with its
  * LaunchDarkly link, state per environment and a chip of the PRs that name it.
- * Green: on in the first environment for every flag; amber: some are off there.
+ * Green: on in the first environment for every flag; amber: some are off there; amber warning: one
+ * isn't in LaunchDarkly at all (a typo, or not created yet).
  */
 const props = defineProps<{ keys: string[] }>()
 const deck = useDeck()
 const flagPrs = useFlagPrs()
 const flags = computed(() => props.keys.map((k) => ({ key: k, flag: deck.flagByKey.get(k), prs: flagPrs(k) })))
+/** Some flag LaunchDarkly doesn't have (typo / not created): the icon turns into an amber warning */
+const missing = (f: (typeof flags.value)[number]) => !!f.flag?.error && /not found/i.test(f.flag.error)
+const anyMissing = computed(() => flags.value.some(missing))
 const tone = computed(() => {
+  if (anyMissing.value) return 'text-warning'
   const first = flags.value.map((f) => f.flag?.envs[0]?.on)
   if (first.some((x) => x === undefined)) return 'text-muted-foreground'
   return first.every(Boolean) ? 'text-success' : 'text-warning'
@@ -47,7 +52,7 @@ function onNested(v: boolean) {
         :aria-label="`${keys.length} feature flag${keys.length === 1 ? '' : 's'}`"
         @click.stop="hover = true"
       >
-        <PhFlag :size="15" weight="fill" />{{ keys.length > 1 ? keys.length : '' }}
+        <PhWarning v-if="anyMissing" :size="15" weight="fill" /><PhFlag v-else :size="15" weight="fill" />{{ keys.length > 1 ? keys.length : '' }}
       </button>
     </HoverCardTrigger>
     <HoverCardContent align="end" class="w-96 p-0" @click.stop>
@@ -58,7 +63,8 @@ function onNested(v: boolean) {
       <div class="divide-y">
         <div v-for="f in flags" :key="f.key" class="space-y-1.5 px-3 py-2.5">
           <div class="flex min-w-0 items-start gap-2">
-            <PhFlag :size="14" weight="fill" :class="cn('mt-0.5 shrink-0', iconTone(f.flag?.envs[0]?.on))" />
+            <PhWarning v-if="missing(f)" :size="14" weight="fill" class="mt-0.5 shrink-0 text-warning" />
+            <PhFlag v-else :size="14" weight="fill" :class="cn('mt-0.5 shrink-0', iconTone(f.flag?.envs[0]?.on))" />
             <div class="min-w-0 flex-1">
               <ExternalLink v-if="f.flag?.url" :href="f.flag.url" icon="always" class="flex font-mono text-sm break-all">{{ f.key }}</ExternalLink>
               <span v-else class="font-mono text-sm break-all">{{ f.key }}</span>
@@ -77,6 +83,7 @@ function onNested(v: boolean) {
                 {{ e.key }} · {{ e.on ? 'on' : 'off' }}
               </Badge>
             </template>
+            <Badge v-else-if="missing(f)" variant="warning" :title="`${f.flag?.error}: a typo in the key, or not created yet`">Not in LaunchDarkly</Badge>
             <span v-else class="text-xs text-muted-foreground">{{ unknown(f) }}</span>
             <Badge v-if="f.flag?.temporary" variant="outline">temporary</Badge>
             <Badge v-if="f.flag?.archived" variant="muted">archived</Badge>

@@ -3,7 +3,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { computed, nextTick, ref, watch } from 'vue'
 import type { PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
-import { ACTION_TONE } from '@/utils/format'
+import { actionTone } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import { useListNav } from '@/composables/listNav'
 import { Badge } from '@/components/ui/badge'
@@ -128,7 +128,7 @@ const listStyle = computed(() => {
         <span class="flex w-full min-w-0 items-center gap-2 text-sm">
           <span class="min-w-0 flex-1 truncate">{{ p.title }}</span>
           <Badge v-if="reasonOf(p)" variant="muted" class="shrink-0">{{ reasonOf(p) }}</Badge>
-          <Badge v-else :variant="ACTION_TONE[p.action.kind]" class="shrink-0">{{ p.state === 'OPEN' ? p.action.label : p.state.toLowerCase() }}</Badge>
+          <Badge v-else :variant="actionTone(p)" class="shrink-0">{{ p.state === 'OPEN' ? p.action.label : p.state.toLowerCase() }}</Badge>
         </span>
         <RepoName :id="p.id" class="max-w-full font-mono text-xs text-muted-foreground" />
       </button>

@@ -43,6 +43,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { Separator } from '@/components/ui/separator'
 import { Toaster } from '@/components/ui/sonner'
 import LinkHoverCard from '@/components/LinkHoverCard.vue'
+import MarkDoneDialog from '@/components/MarkDoneDialog.vue'
 import {
   Sidebar,
   SidebarContent,
@@ -215,6 +216,7 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
     <AgentPromptDialog />
     <SetupPromptDialog />
     <LinkHoverCard />
+    <MarkDoneDialog />
     <Toaster :theme="theme === 'auto' ? 'system' : theme" position="bottom-right" close-button />
   </TooltipProvider>
 </template>

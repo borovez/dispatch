@@ -4,7 +4,7 @@ import { computed, type HTMLAttributes } from 'vue'
 import { PhTrain, PhArrowRight, PhCheckCircle, PhCircleNotch, PhCloudSlash, PhGitMerge, PhLightning, PhRocketLaunch, PhXCircle } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
-import { ACTION_TONE, CHECK_STYLE, jiraTone, jiraIcon } from '@/utils/format'
+import { CHECK_STYLE, jiraTone, jiraIcon, actionTone } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -88,7 +88,7 @@ const jira = computed(() => {
         <Badge v-if="trainStatus" :variant="trainStatus.tone" class="h-5 max-w-full gap-1 truncate text-[11px]" :title="[`In a release train: ${trainStatus.label}`, trainStatus.title].filter(Boolean).join('\n')">
           <PhTrain />{{ trainStatus.label }}
         </Badge>
-        <Badge v-else :variant="ACTION_TONE[pr.action.kind]" class="h-5 max-w-full truncate text-[11px]">{{ pr.action.label }}</Badge>
+        <Badge v-else :variant="actionTone(pr)" class="h-5 max-w-full truncate text-[11px]">{{ pr.action.label }}</Badge>
         <!-- Jira issue and its epic/parent, with their statuses -->
         <div v-if="jira" class="space-y-1 border-t pt-1.5 text-[11px]">
           <div class="flex min-w-0 items-center gap-1" :title="jira.issue ? `${jira.key}: ${jira.issue.summary}` : jira.key">

@@ -14,12 +14,12 @@ import { loadPrDetail } from '@/composables/prDetail'
 import { releaseStatus } from '@shared/release'
 import SidePanel from './SidePanel.vue'
 import { computed, ref, watch } from 'vue'
-import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhPlus, PhPushPin, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit } from '@phosphor-icons/vue'
+import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhPlus, PhPushPin, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit, PhArrowCounterClockwise, PhCheck } from '@phosphor-icons/vue'
 import type { DepEdge, PrDetail } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
-import { ACTION_TONE, jiraCardTone, timeAgo, jiraIcon } from '@/utils/format'
+import { jiraCardTone, timeAgo, jiraIcon, actionTone } from '@/utils/format'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -47,7 +47,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 const deck = useDeck()
 /** The action's badge tone, where alerts have a matching one */
 const alertTone = computed(() => {
-  const t = pr.value ? ACTION_TONE[pr.value.action.kind] : 'default'
+  const t = pr.value ? actionTone(pr.value) : 'default'
   return t === 'destructive' || t === 'warning' || t === 'success' || t === 'info' ? t : 'default'
 })
 const dv = useLayout().view('drawer', {
@@ -234,7 +234,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
   <SidePanel v-model:footer-height="footerHeight" :footer-min="footerMin" :open="!!pr" @close="deck.selectedId = null">
     <template v-if="pr" #header>
           <div class="mb-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge :variant="ACTION_TONE[pr.action.kind]">{{ pr.action.label }}</Badge>
+            <Badge :variant="actionTone(pr)">{{ pr.action.label }}</Badge>
             <Badge variant="outline">{{ pr.state }}{{ pr.isDraft ? ' · draft' : '' }}</Badge>
             <Badge v-if="pr.flow" :variant="pr.flow === 'hotfix' ? 'warning' : pr.flow === 'release' ? 'merged' : 'muted'">{{ FLOW_LABEL[pr.flow] }}</Badge>
             <Badge v-for="r in pr.relations" :key="r" variant="muted">{{ r.replace('_', ' ') }}</Badge>
@@ -378,8 +378,15 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                 </template>
               </p>
             </AlertDescription>
-            <AlertAction v-if="pr.flow === 'release' && dv.tab !== 'contents'">
-              <Button size="sm" variant="outline" @click="dv.tab = 'contents'">View contents ({{ contents?.items.length ?? 0 }})</Button>
+            <AlertAction v-if="(pr.flow === 'release' && dv.tab !== 'contents') || pr.markedDone || (pr.action.kind !== 'done' && pr.action.kind !== 'none')" class="flex flex-wrap justify-end gap-2">
+              <Button v-if="pr.flow === 'release' && dv.tab !== 'contents'" size="sm" variant="outline" @click="dv.tab = 'contents'">View contents ({{ contents?.items.length ?? 0 }})</Button>
+              <!-- Dismiss what it asks for (asks to confirm), or undo that -->
+              <Button v-if="pr.markedDone" size="sm" variant="outline" :title="`Show “${pr.markedDone.label}” again`" @click="deck.mutate(() => api.setDone(pr!.id, null), `${pr!.markedDone!.label} again`)">
+                <PhArrowCounterClockwise /> Undo done
+              </Button>
+              <Button v-else-if="pr.action.kind !== 'done' && pr.action.kind !== 'none'" size="sm" variant="outline" :title="`Not needed? Mark “${pr.action.label}” done`" @click="deck.markDonePr = pr.id">
+                <PhCheck /> Mark as done
+              </Button>
             </AlertAction>
           </Alert>
 

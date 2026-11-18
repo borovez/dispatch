@@ -23,7 +23,7 @@ import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useTheme } from '@/composables/theme'
 import { LAYER_OPEN } from '@/composables/escape'
-import { ACTION_TONE, jiraTone, timeAgo } from '@/utils/format'
+import { jiraTone, timeAgo, actionTone } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import { useListNav } from '@/composables/listNav'
 import RepoName from './RepoName.vue'
@@ -125,7 +125,7 @@ const groups = computed<Group[]>(() => {
         key: `pr:${p.id}`,
         label: p.title,
         prId: p.id,
-        badge: { text: p.action.label, variant: ACTION_TONE[p.action.kind] },
+        badge: { text: p.action.label, variant: actionTone(p) },
         run: () => (deck.selectedId = p.id),
       })),
     })
