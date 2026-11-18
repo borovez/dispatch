@@ -173,7 +173,10 @@ export function buildOverview(): Overview {
       else if (pr.reviewDecision === 'CHANGES_REQUESTED') {
         ;[kind, bucket] = ['address_feedback', 'action']
         detail = changesRequestedBy.join(', ')
-      } else if (pr.mergeable === 'CONFLICTING') [kind, bucket] = ['resolve_conflicts', 'action']
+      } else if (pr.mergeable === 'CONFLICTING') {
+        ;[kind, bucket] = ['resolve_conflicts', 'action']
+        detail = `Conflicts with ${pr.baseRef}: merge or rebase ${pr.baseRef} into ${pr.headRef}`
+      }
       else if (checksBad) {
         ;[kind, bucket] = ['fix_ci', 'action']
         detail = pr.checks.failing.map((f) => f.name).slice(0, 3).join(', ')

@@ -2,6 +2,7 @@
 import { prStatus } from '@/composables/prStatus'
 import { externalHint } from '@/lib/external'
 import ShareMenu from '@/components/ShareMenu.vue'
+import ChecksChip from '@/components/ChecksChip.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { useArrowNav } from '@/composables/prNav'
@@ -18,7 +19,7 @@ import type { DepEdge, PrDetail } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
-import { ACTION_TONE, CHECK_STYLE, jiraCardTone, timeAgo, jiraIcon } from '@/utils/format'
+import { ACTION_TONE, jiraCardTone, timeAgo, jiraIcon } from '@/utils/format'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -121,6 +122,8 @@ const banner = computed(() => {
   const p = pr.value
   if (!p) return null
   const lines = p.action.detail ? [p.action.detail] : []
+  // Conflicts behind a more pressing action (changes requested…) still show, once, here
+  if (p.state === 'OPEN' && p.mergeable === 'CONFLICTING' && p.action.kind !== 'resolve_conflicts') lines.push(`Also conflicts with ${p.baseRef}`)
   // The exact tag (releasedIn, shown below) is more precise than "in the latest tag"
   if (p.state === 'MERGED' && p.release && !p.releasedIn) {
     const r = releaseStatus(p.release).long
@@ -394,20 +397,9 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             </div>
             <div>
               <div class="text-xs text-muted-foreground">Checks</div>
-              <div :class="CHECK_STYLE[pr.checks.state].cls">{{ CHECK_STYLE[pr.checks.state].label }} ({{ pr.checks.total }})</div>
+              <ChecksChip :checks="pr.checks" :url="pr.url" class="mt-0.5" />
             </div>
-            <div v-if="pr.mergeable === 'CONFLICTING'" class="col-span-2 text-destructive">Merge conflicts with {{ pr.baseRef }}</div>
           </div>
-
-          <section v-if="pr.checks.failing.length">
-            <h3 class="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Failing checks</h3>
-            <ul class="space-y-1 text-sm">
-              <li v-for="f in pr.checks.failing" :key="f.name" class="flex items-center gap-2">
-                <PhXCircle :size="14" weight="fill" class="text-destructive" />
-                <ExternalLink :href="f.url">{{ f.name }}</ExternalLink>
-              </li>
-            </ul>
-          </section>
 
           <section>
             <h3 class="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Reviews</h3>

@@ -162,7 +162,7 @@ fragment PR on PullRequest {
   } }
   commits(last: 1) { nodes { commit { statusCheckRollup {
     state
-    contexts(first: 60) { totalCount nodes {
+    contexts(first: 100) { totalCount nodes {
       __typename
       ... on CheckRun { name conclusion status detailsUrl startedAt checkSuite { workflowRun { event workflow { name } } } }
       ... on StatusContext { context state targetUrl }
@@ -272,8 +272,8 @@ function mapPr(n: GqlPr, accountId: string): PrRecord {
       }),
     checks: {
       state: checkState(rollup?.state as CheckState | undefined, contexts, failing.length),
-      // Checks as they stand (replaced runs left out); more than the 60 fetched: GitHub's count
-      total: (rollup?.contexts?.totalCount ?? 0) > 60 ? rollup.contexts.totalCount : contexts.length,
+      // Checks as they stand (replaced runs left out); more than the 100 fetched (GitHub's limit per page): its count
+      total: (rollup?.contexts?.totalCount ?? 0) > 100 ? rollup.contexts.totalCount : contexts.length,
       failing,
     },
     accountId,

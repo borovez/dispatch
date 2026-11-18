@@ -101,6 +101,33 @@ export const useDeck = defineStore('deck', () => {
     // Nothing changed (same item): don't let the flag leak into the next change
     void nextTick(() => (historyMode = 'push'))
   }
+  // ---- A reload (browser refresh, the Mac app's ⌘R) keeps the open panel and its back / forward
+  // history: kept per tab in sessionStorage (gone when the tab or app closes), put back once the data
+  // has loaded so a PR isn't taken for an unsynced one meanwhile.
+  const PANEL_KEY = 'dispatch.panel'
+  watch([currentPanel, panelBack, panelForward], ([current, back, forward]) => {
+    try {
+      if (current || back.length || forward.length) sessionStorage.setItem(PANEL_KEY, JSON.stringify({ current, back, forward }))
+      else sessionStorage.removeItem(PANEL_KEY)
+    } catch {}
+  })
+  const restore = watch(overview, (o) => {
+    if (!o) return
+    restore()
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(PANEL_KEY) ?? 'null') as { current: PanelRef | null; back: PanelRef[]; forward: PanelRef[] } | null
+      if (!saved || currentPanel.value) return
+      const valid = (r: PanelRef | null | undefined): r is PanelRef => !!r && panelKinds.includes(r.kind) && typeof r.id === 'string'
+      panelBack.value = (saved.back ?? []).filter(valid).slice(-50)
+      panelForward.value = (saved.forward ?? []).filter(valid).slice(-50)
+      if (valid(saved.current)) {
+        historyMode = 'travel'
+        showPanel(saved.current)
+        void nextTick(() => (historyMode = 'push'))
+      }
+    } catch {}
+  })
+
   /** Jira issue composer: a new issue (optionally pre-filled) or an existing one to edit */
   const composer = ref<ComposerTarget | null>(null)
   /** PR whose title and description are open in the PR writer */
