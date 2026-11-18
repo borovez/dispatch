@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import {
-  PhArrowsClockwise,
   PhCaretDown,
   PhCheck,
   PhCircleNotch,
@@ -34,6 +33,8 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import PrNumberLink from './PrNumberLink.vue'
+import RefreshButton from './RefreshButton.vue'
+import { useListResync } from '@/composables/listResync'
 
 /**
  * Release planner: a left-hand panel (open across pages, beside the PR panel on the right) with one
@@ -66,6 +67,14 @@ watch(() => deck.plannerOpen, (o) => o && load(), { immediate: true })
 watch(() => deck.overview, () => deck.plannerOpen && !busy.value && load())
 
 const plan = computed(() => plans.value?.find((p) => p.repo === v.repo) ?? null)
+/** The repo's open release PRs and the PRs in its plan: what its refresh re-fetches */
+const planIds = computed(() => (plan.value ? [...plan.value.releases.map((r) => r.id), ...plan.value.items.map((i) => i.prId)] : []))
+const listResync = useListResync()
+async function refresh(e: MouseEvent) {
+  if (!e.shiftKey && planIds.value.length) await listResync.resync(planIds.value, e)
+  else if (e.shiftKey) await listResync.resync([], e)
+  await load()
+}
 const short = (repo: string) => repo.split('/')[1] ?? repo
 const todo = (p: ReleasePlan) => p.counts.pick + p.counts.decide
 
@@ -242,9 +251,14 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
           </DropdownMenuContent>
         </DropdownMenu>
         <span class="flex-1" />
-        <Button variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label="Recheck the plan" title="Recheck the plan" :disabled="loading" @click="load">
-          <PhArrowsClockwise :class="loading && 'animate-spin'" />
-        </Button>
+        <!-- Same refresh as the lists: this repo's release PRs and the PRs in its plan from GitHub, then the plan again -->
+        <RefreshButton
+          :label="plan ? `Refresh ${short(plan.repo)}'s releases and plan` : 'Refresh the plan'"
+          full-sync
+          :busy="loading || listResync.resyncing.value || deck.syncRunning"
+          :refreshed-at="planIds.map((id) => deck.byId.get(id)?.fetchedAt)"
+          @click="refresh"
+        />
         <Button variant="ghost" size="icon-sm" aria-label="Close the planner" title="Close" @click="deck.plannerOpen = false"><PhX /></Button>
       </div>
 
