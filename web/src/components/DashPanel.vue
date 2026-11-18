@@ -126,7 +126,7 @@ const LIMITS = [5, 8, 12, 20, 50, 999]
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
-    <div v-show="!panel.collapsed" class="p-1.5">
+    <div v-show="!panel.collapsed" class="p-1.5" data-panel-body>
       <slot />
     </div>
   </Card>

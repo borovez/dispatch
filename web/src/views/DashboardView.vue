@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import ChainStep from '@/components/ChainStep.vue'
 import { modClickHint, wantsExternal } from '@/lib/external'
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useDebounceFn, useResizeObserver } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { PhLinkSimple, PhCaretRight, PhEye, PhPlus, PhRocketLaunch, PhSlidersHorizontal, PhWarning } from '@phosphor-icons/vue'
 import { isUnreleased } from '@/utils/releaseFlow'
@@ -69,6 +70,58 @@ const releaseNav = useReleaseNav()
 const flagsOf = useReleaseFlags()
 const releasesView = layout.view('releases', { tab: 'releases' as string })
 
+/**
+ * Fill empty space: in a row of two columns, the last panel of each column stretches to the row's
+ * height (lg:flex-1), and if that leaves room under its list it shows more rows than its limit, as
+ * many as fit (measured with the tallest row shown, so it never grows the row). Recomputed from
+ * scratch when the layout or the size changes, topped up when the data refreshes. Not on one-column
+ * (narrow) screens.
+ */
+const gridEl = ref<HTMLElement>()
+const fill = reactive<Record<string, number>>({})
+const lim = (p: PanelConfig) => (p.limit >= 999 ? p.limit : p.limit + (fill[p.id] ?? 0))
+function measureFill() {
+  const grid = gridEl.value
+  if (!grid || window.innerWidth < 1024) return
+  let changed = false
+  for (const el of grid.querySelectorAll<HTMLElement>('[data-fill-panel]')) {
+    const id = el.dataset.panelId
+    const p = layout.prefs.panels.find((x) => x.id === id)
+    const body = el.querySelector<HTMLElement>('[data-panel-body]')
+    const header = el.querySelector<HTMLElement>('header')
+    if (!p || !body || !header || p.limit >= 999) continue
+    const free = el.clientHeight - header.offsetHeight - body.offsetHeight - 2
+    const rows = [...body.querySelectorAll<HTMLElement>('[data-pr-id], [data-slack-id], [data-fill-row]')].filter((r) => r.offsetHeight)
+    const tallest = Math.max(0, ...rows.map((r) => r.offsetHeight))
+    const room = itemsFor(p) - lim(p)
+    if (!tallest || room <= 0 || free < tallest) continue
+    fill[p.id] = (fill[p.id] ?? 0) + Math.min(room, Math.floor(free / tallest))
+    changed = true
+  }
+  // Rows added: measure again once they're in (each pass only adds what surely fits)
+  // (nextTick, not a frame later: Vue's update and this measuring all run before the browser paints)
+  if (changed) void nextTick(measureFill)
+}
+function refill() {
+  for (const k of Object.keys(fill)) delete fill[k]
+  void nextTick(measureFill)
+}
+watch(() => [layout.zones, layout.prefs.dense], refill)
+// New data (the minute poll): only top up, so the lists don't shrink and grow back every minute
+watch(() => deck.overview, () => void nextTick(measureFill))
+// Only a new width resets (the grid's height also changes when rows are added, and on the first
+// observation, which would otherwise empty and refill the lists: a visible pop)
+let gridWidth = 0
+const refillOnResize = useDebounceFn(refill, 150)
+useResizeObserver(gridEl, ([e]) => {
+  const w = Math.round(e!.contentRect.width)
+  if (w === gridWidth) return
+  const first = !gridWidth
+  gridWidth = w
+  if (!first) refillOnResize()
+})
+onMounted(refill)
+
 function itemsFor(p: PanelConfig): number {
   if (p.type === 'prs') return prsFor(p).length
   if (p.type === 'slack') return slackNew.value.length
@@ -84,7 +137,6 @@ function itemsFor(p: PanelConfig): number {
  * below the grid counts), then the spot in it; a primary line shows where the panel will land.
  */
 const pageEl = ref<HTMLElement>()
-const gridEl = ref<HTMLElement>()
 const draggingId = ref<string | null>(null)
 interface DropSpot {
   ref: string
@@ -317,9 +369,11 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
         :class="['flex min-w-0 flex-col gap-4', z.col === 'full' && 'lg:col-span-2', !z.panels.length && 'max-lg:hidden']"
       >
       <DashPanel
-        v-for="p in z.panels"
+        v-for="(p, pi) in z.panels"
         :key="p.id"
         :panel="p"
+        :class="z.col !== 'full' && pi === z.panels.length - 1 && !p.collapsed && 'lg:flex-1'"
+        :data-fill-panel="z.col !== 'full' && pi === z.panels.length - 1 && !p.collapsed ? '' : undefined"
         :dragging="draggingId === p.id"
         :count="itemsFor(p)"
         :sort-options="p.type === 'prs' ? PR_SORTS : p.type === 'slack' ? TIME_SORTS : undefined"
@@ -338,10 +392,10 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
         <template #default>
           <!-- PR lists -->
           <template v-if="p.type === 'prs'">
-            <PrRow v-for="pr in prsFor(p).slice(0, p.limit)" :key="pr.id" :pr="pr" :compact="layout.prefs.dense" />
+            <PrRow v-for="pr in prsFor(p).slice(0, lim(p))" :key="pr.id" :pr="pr" :compact="layout.prefs.dense" />
             <div v-if="!prsFor(p).length" class="p-6 text-center text-sm text-muted-foreground">Nothing here 🎉</div>
-            <Button v-else-if="prsFor(p).length > p.limit" variant="ghost" size="xs" class="w-full" as-child>
-              <RouterLink to="/prs">{{ prsFor(p).length - p.limit }} more…</RouterLink>
+            <Button v-else-if="prsFor(p).length > lim(p)" variant="ghost" size="xs" class="w-full" as-child>
+              <RouterLink to="/prs">{{ prsFor(p).length - lim(p) }} more…</RouterLink>
             </Button>
           </template>
 
@@ -350,7 +404,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
             <div v-if="!deck.overview?.configured.slack" class="p-6 text-center text-sm text-muted-foreground">
               Slack isn't connected. <RouterLink to="/settings" class="text-primary hover:underline">Set it up</RouterLink>
             </div>
-            <SlackList :items="slackFor(p).slice(0, p.limit)" class="-m-1.5" />
+            <SlackList :items="slackFor(p).slice(0, lim(p))" class="-m-1.5" />
             <div v-if="deck.overview?.configured.slack && !slackNew.length" class="p-6 text-center text-sm text-muted-foreground">Inbox zero</div>
           </template>
 
@@ -360,8 +414,9 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
               Jira isn't connected. <RouterLink to="/settings" class="text-primary hover:underline">Set it up</RouterLink>
             </div>
             <a
-              v-for="j in myJira.slice(0, p.limit)"
+              v-for="j in myJira.slice(0, lim(p))"
               :key="j.key"
+              data-fill-row
               :href="j.url"
               target="_blank"
               rel="noopener"
@@ -384,7 +439,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
             </div>
             <section v-if="openReleases.length">
               <h4 class="px-3 pt-1 pb-0.5 text-xs font-medium text-muted-foreground">Open releases</h4>
-              <PrRow v-for="r in openReleases.slice(0, p.limit)" :key="r.id" :pr="r" compact :flags="flagsOf(r.id)">
+              <PrRow v-for="r in openReleases.slice(0, lim(p))" :key="r.id" :pr="r" compact :flags="flagsOf(r.id)">
                 <template #badges>
                   <Badge v-if="shipNextIds.has(r.id)" variant="primary">Ship next</Badge>
                   <Badge variant="count" :title="`${deck.releaseById.get(r.id)?.items.length ?? 0} PR(s) in this release`">{{ deck.releaseById.get(r.id)?.items.length ?? 0 }}</Badge>
@@ -393,7 +448,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
             </section>
             <section v-if="needsBackmerge.length">
               <h4 class="flex items-center gap-1.5 px-3 pt-2 pb-0.5 text-xs font-medium text-warning"><PhWarning :size="13" weight="fill" />Hotfixes not back in dev</h4>
-              <PrRow v-for="h in needsBackmerge.slice(0, p.limit)" :key="h.id" :pr="h" compact />
+              <PrRow v-for="h in needsBackmerge.slice(0, lim(p))" :key="h.id" :pr="h" compact />
             </section>
             <button
               v-if="myUnreleased.length"
@@ -415,7 +470,7 @@ const stepDone = (id: string) => stateOf(id)?.state === 'MERGED' && (stateOf(id)
             </div>
             <!-- One block per chain, divided, each headed by a chain icon, its repos and progress -->
             <div class="divide-y">
-              <div v-for="c in openChains.slice(0, p.limit)" :key="c.id" class="space-y-2 px-3 py-3 first:pt-2 last:pb-2">
+              <div v-for="c in openChains.slice(0, lim(p))" :key="c.id" data-fill-row class="space-y-2 px-3 py-3 first:pt-2 last:pb-2">
                 <div class="flex items-center gap-2 text-xs text-muted-foreground">
                   <PhLinkSimple :size="14" class="shrink-0 text-primary" />
                   <span class="min-w-0 truncate">{{ c.repos.join(' · ') }}</span>
