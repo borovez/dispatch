@@ -1,4 +1,4 @@
-import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, LinkedPrs, LinkPreview, PrDetail, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
+import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, LinkedPrs, LinkPreview, PrDetail, ReleasePlan, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
 
 async function call<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -45,6 +45,15 @@ export const api = {
   fetchPr: (id: string) => call<unknown>('POST', '/prs/fetch', { id }),
   resyncPr: (id: string) => call('POST', '/prs/resync', { id }),
   /** Resync just these PRs, the PRs their descriptions now depend on, and their Jira issues */
+  /** Release planner: every repo's plan */
+  releasePlans: () => call<ReleasePlan[]>('GET', '/releases/plan'),
+  /** Where a PR merged into dev goes (decision null clears it) */
+  setReleaseDecision: (prId: string, decision: 'release' | 'hold' | 'skip' | null, releaseId?: string | null, note?: string | null) =>
+    call<{ ok: boolean }>('PUT', '/releases/decision', { prId, decision, releaseId, note }),
+  /** Plan board: these PRs, in this order, go into a release (or are held / skipped) */
+  arrangeRelease: (prIds: string[], decision: 'release' | 'hold' | 'skip', releaseId?: string | null) =>
+    call<{ ok: boolean }>('PUT', '/releases/arrange', { prIds, decision, releaseId }),
+  releasePrompt: (repo: string) => call<{ prompt: string }>('GET', `/releases/plan/prompt?repo=${encodeURIComponent(repo)}`),
   /** Re-read these issues from Jira (the Jira page's refresh) */
   jiraRefreshMany: (keys: string[]) => call<{ issues: number; missing: string[]; moved: number }>('POST', '/jira/refresh-many', { keys }),
   resyncPrs: (ids: string[]) => call<{ prs: number; added: number; jira: number; releases?: number; errors: string[] }>('POST', '/prs/resync-many', { ids }),

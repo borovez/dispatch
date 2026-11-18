@@ -5,7 +5,8 @@ import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
 import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhRobot } from '@phosphor-icons/vue'
-import type { JiraIssueDetail, LinkedPrs } from '@shared/types'
+import type { JiraIssueDetail, JiraSprint, LinkedPrs } from '@shared/types'
+import { currentSprint, sprintBadge } from '@/utils/jiraOrder'
 import LinkedPrRow from './LinkedPrRow.vue'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
@@ -115,6 +116,14 @@ const initials = (name: string) =>
     .join('')
     .slice(0, 2)
     .toUpperCase()
+/** The sprint it's in now, and how many it was carried over from */
+function sprintText(sprints: JiraSprint[] | undefined) {
+  if (!sprints) return '—'
+  const s = currentSprint(sprints)
+  if (!s) return 'None'
+  const earlier = sprints.filter((x) => x.id !== s.id && x.state === 'closed').length
+  return s.name + (earlier ? ` · carried over from ${earlier} earlier` : '')
+}
 const details = computed(() => {
   const i = issue.value
   if (!i) return []
@@ -122,6 +131,7 @@ const details = computed(() => {
     { label: 'Type', value: i.type },
     { label: 'Priority', value: i.priority ?? 'None' },
     { label: 'Parent', value: i.parent ? `${i.parent.key} · ${i.parent.summary}` : '—', open: i.parent?.key },
+    { label: 'Sprint', value: sprintText(i.sprints), badge: sprintBadge(currentSprint(i.sprints)) },
     { label: 'Fix version', value: i.fixVersions.join(', ') || '—' },
     { label: 'Labels', value: i.labels.join(', ') || '—' },
   ]
@@ -186,6 +196,10 @@ const details = computed(() => {
               {{ d.value }}
             </button>
             </ItemContextMenu>
+            <div v-else-if="d.badge" class="flex min-w-0 items-center gap-1.5">
+              <span class="truncate" :title="d.value">{{ d.value }}</span>
+              <Badge :variant="d.badge.variant" class="shrink-0">{{ d.badge.text }}</Badge>
+            </div>
             <div v-else class="truncate" :title="d.value">{{ d.value }}</div>
           </div>
         </div>

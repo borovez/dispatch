@@ -13,6 +13,7 @@ import type {
   JiraIssueTypeMeta,
   JiraLink,
   JiraProjectMeta,
+  JiraSprint,
   JiraValueLabels,
   JiraWriteInput,
 } from '../../shared/types.ts'
@@ -63,7 +64,34 @@ export async function jiraMyself(cfg: JiraConfig) {
   return { accountId: me.accountId, displayName: me.displayName }
 }
 
-function mapIssue(cfg: JiraConfig, raw: any, isMine: boolean): JiraIssue {
+/**
+ * The fields read for every issue, plus the site's sprint field: a custom field whose id differs per
+ * site (customfield_10020…), looked up once from Jira's field list. No sprint field (Jira without
+ * Jira Software) or the lookup fails: issues just have no sprints.
+ */
+async function issueFields(cfg: JiraConfig): Promise<{ list: string[]; sprint: string | null }> {
+  const sprint = await cached(`sprintField:${base(cfg)}`, async () => {
+    const fields = await request<{ id: string; schema?: { custom?: string } }[]>(cfg, '/rest/api/3/field')
+    return fields.find((f) => f.schema?.custom?.endsWith(':gh-sprint'))?.id ?? null
+  }, 6 * 3600_000).catch(() => null)
+  return { list: sprint ? [...FIELDS, sprint] : FIELDS, sprint }
+}
+
+async function getMapped(cfg: JiraConfig, key: string, isMine = false) {
+  const f = await issueFields(cfg)
+  const raw = await request<any>(cfg, `/rest/api/3/issue/${encodeURIComponent(key)}?fields=${f.list.join(',')}`)
+  return { raw, issue: mapIssue(cfg, raw, isMine, f.sprint) }
+}
+
+function mapSprints(value: unknown): JiraSprint[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value
+    .filter((s) => s && typeof s === 'object' && 'name' in s)
+    .map((s: any) => ({ id: s.id, name: s.name, state: s.state, startDate: s.startDate, endDate: s.endDate }))
+    .sort((a, b) => (a.startDate ?? '9').localeCompare(b.startDate ?? '9') || a.id - b.id)
+}
+
+function mapIssue(cfg: JiraConfig, raw: any, isMine: boolean, sprintField: string | null): JiraIssue {
   const f = raw.fields ?? {}
   const links: JiraLink[] = (f.issuelinks ?? []).map((l: any) => {
     const inward = !!l.inwardIssue
@@ -106,6 +134,7 @@ function mapIssue(cfg: JiraConfig, raw: any, isMine: boolean): JiraIssue {
         }
       : null,
     fixVersions: (f.fixVersions ?? []).map((v: any) => v.name),
+    sprints: (sprintField && mapSprints(f[sprintField])) || [],
     labels: f.labels ?? [],
     updated: f.updated,
     links,
@@ -116,13 +145,14 @@ function mapIssue(cfg: JiraConfig, raw: any, isMine: boolean): JiraIssue {
 /** Enhanced JQL search (the old /search endpoint is gone on Jira Cloud). */
 export async function searchJql(cfg: JiraConfig, jql: string, isMine: boolean, max = 200): Promise<JiraIssue[]> {
   const out: JiraIssue[] = []
+  const fields = await issueFields(cfg)
   let nextPageToken: string | undefined
   do {
     const page = await request<{ issues: any[]; nextPageToken?: string; isLast?: boolean }>(cfg, '/rest/api/3/search/jql', {
       method: 'POST',
-      body: JSON.stringify({ jql, fields: FIELDS, maxResults: 100, nextPageToken }),
+      body: JSON.stringify({ jql, fields: fields.list, maxResults: 100, nextPageToken }),
     })
-    out.push(...page.issues.map((i) => mapIssue(cfg, i, isMine)))
+    out.push(...page.issues.map((i) => mapIssue(cfg, i, isMine, fields.sprint)))
     nextPageToken = page.isLast === false || page.nextPageToken ? page.nextPageToken : undefined
   } while (nextPageToken && out.length < max)
   return out
@@ -148,8 +178,7 @@ export async function fetchIssuesByKey(cfg: JiraConfig, keys: string[]): Promise
       if (!(e instanceof JiraError) || e.status !== 400) throw e
       for (const key of chunk) {
         try {
-          const raw = await request<any>(cfg, `/rest/api/3/issue/${key}?fields=${FIELDS.join(',')}`)
-          issues.push(mapIssue(cfg, raw, false))
+          issues.push((await getMapped(cfg, key)).issue)
         } catch (err) {
           if (err instanceof JiraError && (err.status === 404 || err.status === 403)) missing.push(key)
           else throw err
@@ -162,9 +191,9 @@ export async function fetchIssuesByKey(cfg: JiraConfig, keys: string[]): Promise
   const unanswered = keys.filter((k) => !got.has(k) && !missing.includes(k)).slice(0, 40)
   for (const key of unanswered) {
     try {
-      const raw = await request<any>(cfg, `/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS.join(',')}`)
+      const { raw, issue } = await getMapped(cfg, key)
       if (raw.key && raw.key !== key) moved[key] = raw.key
-      if (!got.has(raw.key)) (issues.push(mapIssue(cfg, raw, false)), got.add(raw.key))
+      if (!got.has(raw.key)) (issues.push(issue), got.add(raw.key))
     } catch (err) {
       if (err instanceof JiraError && (err.status === 404 || err.status === 403)) missing.push(key)
       else throw err
@@ -211,8 +240,7 @@ export async function transition(cfg: JiraConfig, key: string, transitionId: str
     method: 'POST',
     body: JSON.stringify({ transition: { id: transitionId } }),
   })
-  const raw = await request<any>(cfg, `/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS.join(',')}`)
-  return mapIssue(cfg, raw, false)
+  return (await getMapped(cfg, key)).issue
 }
 
 
@@ -550,8 +578,7 @@ export async function addComment(cfg: JiraConfig, key: string, markdown: string)
 
 /** Fetch one issue in the list shape (to refresh the cache after a write) */
 export async function getIssue(cfg: JiraConfig, key: string): Promise<JiraIssue> {
-  const raw = await request<any>(cfg, `/rest/api/3/issue/${encodeURIComponent(key)}?fields=${FIELDS.join(',')}`)
-  return mapIssue(cfg, raw, false)
+  return (await getMapped(cfg, key)).issue
 }
 
 /** Create from the composer: exactly the fields it sends (defaults are filled in the composer, not here) */

@@ -12,7 +12,8 @@ import { PhCheck, PhListChecks, PhMinus, PhCircleHalf, PhKanban, PhMagnifyingGla
 import type { LinkedPr, JiraIssueView, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useLayout, type SortDir } from '@/stores/layout'
-import { priorityRank, statusRank } from '@/utils/jiraOrder'
+import { currentSprint, priorityRank, sprintBadge, sprintRank, statusRank } from '@/utils/jiraOrder'
+import { Badge } from '@/components/ui/badge'
 import CollapseAllButton from '@/components/CollapseAllButton.vue'
 import FilterChips from '@/components/FilterChips.vue'
 import GroupCard from '@/components/GroupCard.vue'
@@ -58,7 +59,7 @@ const VIEW_DEFAULTS = {
   project: '',
   category: '',
   showDone: false,
-  group: 'status' as 'none' | 'status' | 'project' | 'parent',
+  group: 'status' as 'none' | 'status' | 'project' | 'parent' | 'sprint',
   sort: 'priority' as 'priority' | 'updated' | 'key',
   dir: 'desc' as SortDir,
 }
@@ -76,6 +77,7 @@ const viewSections = computed<ViewSection[]>(() => [
       { value: 'status', label: 'Status' },
       { value: 'project', label: 'Project' },
       { value: 'parent', label: 'Parent / epic' },
+      { value: 'sprint', label: 'Sprint' },
       { value: 'none', label: 'None' },
     ],
   },
@@ -217,21 +219,36 @@ onEscape(() => {
   selected.clear()
   return true
 })
+/** Group by the sprint the issue is in now; issues read before sprints were fetched count as not loaded */
+function sprintGroup(i: Item): [string, string, string] {
+  if (!i.issue) return ['~unknown', 'Not loaded from Jira', '9']
+  if (!i.issue.sprints) return ['~unread', 'Sprint not read yet (next sync)', '8']
+  const s = currentSprint(i.issue.sprints)
+  return s ? [`sprint:${s.id}`, s.name, sprintRank(s)] : ['~none', 'No sprint', '3']
+}
 const groups = computed(() => {
-  if (v.group === 'none') return [{ key: 'all', label: 'Jira issues', items: filtered.value, category: '' }]
-  const map = new Map<string, { label: string; rank: string; items: Item[]; category: string }>()
+  if (v.group === 'none') return [{ key: 'all', label: 'Jira issues', items: filtered.value, category: '', badge: null }]
+  const map = new Map<string, { label: string; rank: string; items: Item[]; category: string; badge: ReturnType<typeof sprintBadge> }>()
   for (const i of filtered.value) {
     const [key, label, rank] =
       v.group === 'project'
         ? [i.project, i.project, i.project]
-        : v.group === 'parent'
+        : v.group === 'sprint'
+          ? sprintGroup(i)
+          : v.group === 'parent'
           ? i.issue?.parent
             ? [i.issue.parent.key, `${i.issue.parent.key} · ${i.issue.parent.summary}`, `0${i.issue.parent.key}`]
             : ['~none', 'No parent', '1']
           : i.issue
             ? [i.issue.status, i.issue.status, `${statusRank(i.issue.status, i.issue.statusCategory).toFixed(1).padStart(4, '0')}${i.issue.status}`]
             : ['~unknown', 'Not loaded from Jira', '99']
-    const g = map.get(key) ?? { label, rank, items: [], category: v.group === 'status' ? (i.issue?.statusCategory ?? '') : '' }
+    const g = map.get(key) ?? {
+      label,
+      rank,
+      items: [],
+      category: v.group === 'status' ? (i.issue?.statusCategory ?? '') : '',
+      badge: v.group === 'sprint' ? sprintBadge(currentSprint(i.issue?.sprints)) : null,
+    }
     g.items.push(i)
     map.set(key, g)
   }
@@ -312,7 +329,10 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
               <template #default="{ state }"><PhMinus v-if="state === 'indeterminate'" /><PhCheck v-else /></template>
             </Checkbox>
           </template>
-          <template v-if="g.category" #label>
+          <template v-if="g.badge" #label>
+            <span class="flex items-center gap-2">{{ g.label }}<Badge :variant="g.badge.variant">{{ g.badge.text }}</Badge></span>
+          </template>
+          <template v-else-if="g.category" #label>
             <span class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-full" :class="DOT[g.category] ?? 'bg-muted-foreground'" />{{ g.label }}</span>
           </template>
           <div>

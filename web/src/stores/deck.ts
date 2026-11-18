@@ -116,6 +116,8 @@ export const useDeck = defineStore('deck', () => {
       else sessionStorage.removeItem(PANEL_KEY)
     } catch {}
   })
+  /** True while a reload puts the panel back: it appears in place instead of sliding in (SidePanel) */
+  const panelRestoring = ref(false)
   const restore = watch(overview, (o) => {
     if (!o) return
     restore()
@@ -127,14 +129,33 @@ export const useDeck = defineStore('deck', () => {
       panelForward.value = (saved.forward ?? []).filter(valid).slice(-50)
       if (valid(saved.current)) {
         historyMode = 'travel'
+        panelRestoring.value = true
         showPanel(saved.current)
-        void nextTick(() => (historyMode = 'push'))
+        void nextTick(() => {
+          historyMode = 'push'
+          // After the panel has rendered, so only this first appearance skips the slide
+          requestAnimationFrame(() => (panelRestoring.value = false))
+        })
       }
     } catch {}
   })
 
   /** Jira issue composer: a new issue (optionally pre-filled) or an existing one to edit */
   const composer = ref<ComposerTarget | null>(null)
+  /** The release planner (left panel, ReleasePlanner.vue); open across pages until closed, and across a reload (per tab, like the side panel) */
+  const plannerOpen = ref((() => {
+    try {
+      return sessionStorage.getItem('dispatch.planner') === '1'
+    } catch {
+      return false
+    }
+  })())
+  watch(plannerOpen, (o) => {
+    try {
+      if (o) sessionStorage.setItem('dispatch.planner', '1')
+      else sessionStorage.removeItem('dispatch.planner')
+    } catch {}
+  })
   /** PR whose "Mark as done" confirmation is open (MarkDoneDialog) */
   const markDonePr = ref<string | null>(null)
   /** PR whose title and description are open in the PR writer */
@@ -240,6 +261,6 @@ export const useDeck = defineStore('deck', () => {
     timer = window.setInterval(() => !syncRunning.value && load(), 60_000)
   }
 
-  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, panelJump, replacePanel, currentPanel, recentPanels, reopenPanel, composer, markDonePr, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
+  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, panelJump, replacePanel, currentPanel, panelRestoring, recentPanels, reopenPanel, composer, markDonePr, plannerOpen, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
     releaseById, selected, jiraByKey, flagByKey, repos, load, sync, mutate, startPolling }
 })

@@ -6,7 +6,7 @@ import StickyToolbar from '@/components/StickyToolbar.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhArrowsClockwise, PhCheckCircle, PhGitBranch, PhGraph, PhListBullets, PhWarning } from '@phosphor-icons/vue'
+import { PhArrowsClockwise, PhCheckCircle, PhGitBranch, PhGraph, PhListBullets, PhWarning, PhListChecks } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
@@ -188,6 +188,11 @@ async function refresh(id: string) {
         <!-- One repo or all, for the list and the graph (the graph also shows what links to it) -->
         <RepoSelect v-if="repoOptions.length > 1" :model-value="repoKey || 'all'" :tabs="repoOptions" @update:model-value="(r) => (repoState.repo = r === 'all' ? '' : r)" />
         <span class="flex-1" />
+        <!-- Release planner: what's merged into dev and where it goes (cherry-picks, decisions, a prompt for Claude) -->
+        <!-- Opens the planner on the left, beside the PR panel; it stays open across pages -->
+        <Button size="sm" :variant="deck.plannerOpen ? 'secondary' : 'outline'" :aria-pressed="deck.plannerOpen" @click="deck.plannerOpen = !deck.plannerOpen">
+          <PhListChecks /> <span class="@max-3xl:sr-only">Plan</span>
+        </Button>
         <!-- Refresh what this tab shows (list or graph): the PRs, and what open / changed releases ship -->
         <RefreshButton
           :label="`Refresh the ${shownIds.length} ${v.tab === 'hotfixes' ? 'hotfixes' : v.tab === 'trains' ? 'releases in trains' : 'releases and unreleased PRs'} shown`"

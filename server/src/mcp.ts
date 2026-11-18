@@ -3,7 +3,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import type { JiraFieldMeta, JiraFieldValue, JiraValueLabels, Overview, PrView } from '../../shared/types.ts'
-import { addManualDep, getSettings, getSlackItem, listSlack, removeManualDep, setSlackStatus, upsertJira } from './db.ts'
+import { addManualDep, getSettings, getSlackItem, listPrs, listSlack, removeManualDep, setReleaseDecision, setSlackStatus, upsertJira } from './db.ts'
+import { buildReleasePlans, releasePlanFor } from './releasePlan.ts'
+import { buildReleasePrompt } from './releasePrompt.ts'
 import { addComment, choicesFor, composeCreate, composeUpdate, createMeta, editable, resolveFieldInput } from './jira.ts'
 import { claudeMdGuide } from './guides.ts'
 import { buildAgentPrompt } from './agentPrompt.ts'
@@ -239,6 +241,58 @@ server.registerTool(
     inputSchema: { key: z.string().describe('e.g. PROJ-123') },
   },
   async ({ key }) => text(await buildAgentPrompt(key)),
+)
+
+server.registerTool(
+  'release_plan',
+  {
+    title: 'Release plan: PRs merged into dev and which release they go into',
+    description:
+      'For each repo that integrates on a branch like dev: its open release PRs (dev → master ones ship everything in dev; branch ones need cherry-picks) and the PRs merged into dev ' +
+      'not released yet, each with an outcome: shipping (an open release has it), pick (cherry-pick into `target`, in `order`), decide (needs the user: `question`, `options`, `reasons`), ' +
+      'held / skipped (the user decided), waiting (no release open). Never decide a `decide` item yourself: ask the user, then call record_release_decision.',
+    inputSchema: { repo: z.string().optional().describe('owner/name; omit for every repo') },
+  },
+  async ({ repo }) => {
+    const plans = repo ? [releasePlanFor(repo)].filter(Boolean) : buildReleasePlans()
+    return text(plans.length ? JSON.stringify(plans, null, 2) : `No release plan for ${repo}: it doesn't integrate on a branch like dev.`)
+  },
+)
+
+server.registerTool(
+  'release_prompt',
+  {
+    title: 'Brief for carrying out a repo\'s release plan',
+    description:
+      'Markdown brief to carry out one repo\'s release plan in a local checkout: the cherry-picks in order (all of a PR\'s commits, -x), the open questions to ask the user, what never to do, and how to check the result.',
+    inputSchema: { repo: z.string().describe('owner/name') },
+  },
+  async ({ repo }) => text((await buildReleasePrompt(repo)) ?? `No release plan for ${repo}.`),
+)
+
+server.registerTool(
+  'record_release_decision',
+  {
+    title: 'Record where a PR merged into dev goes',
+    description:
+      'Save the user\'s answer to a release plan question, so Dispatch remembers it: decision `release` (with releaseId: an open release PR) to cherry-pick it there, `hold` for a later release, ' +
+      '`skip` to only ship it with the dev → master release (no cherry-pick), or null to clear it. Only call this with an answer the user gave.',
+    inputSchema: {
+      prId: z.string().describe('the PR merged into dev, e.g. owner/repo#12'),
+      decision: z.enum(['release', 'hold', 'skip']).nullable(),
+      releaseId: z.string().optional().describe('decision release: the open release PR, e.g. owner/repo#99'),
+      note: z.string().max(500).optional().describe("the user's reason, short"),
+    },
+  },
+  async ({ prId, decision, releaseId, note }) => {
+    const id = prId.toLowerCase()
+    if (decision === 'release') {
+      const r = listPrs().find((s) => s.pr.id === releaseId?.toLowerCase())?.pr
+      if (!r || r.state !== 'OPEN') return text(`releaseId must be an open release PR (got ${releaseId ?? 'none'})`)
+      setReleaseDecision(id, { decision, releaseId: r.id, note: note ?? null })
+    } else setReleaseDecision(id, decision ? { decision, note: note ?? null } : null)
+    return text(decision ? `Recorded: ${id} → ${decision}${decision === 'release' ? ` ${releaseId}` : ''}` : `Cleared the decision for ${id}`)
+  },
 )
 
 server.registerTool(

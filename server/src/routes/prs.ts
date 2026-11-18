@@ -1,9 +1,11 @@
 import { checkBackmerge, computeReleaseContents } from '../releases.ts'
+import { buildReleasePlans, releasePlanFor } from '../releasePlan.ts'
+import { buildReleasePrompt } from '../releasePrompt.ts'
 import { adfToMarkdown } from '../../../shared/adf.ts'
 import { z } from 'zod'
 import type { ActionKind, GithubAccount, PrRecord } from '../../../shared/types.ts'
 import { ACTION_LABELS } from '../../../shared/types.ts'
-import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTitle, updatePrData, upsertPr, listReleaseContents, setDoneAction } from '../db.ts'
+import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTitle, updatePrData, upsertPr, listReleaseContents, setDoneAction, setReleaseDecision } from '../db.ts'
 import { draftPrText } from '../ai.ts'
 import { keepDeclarations } from '../prWriter.ts'
 import { claudeMdGuide } from '../guides.ts'
@@ -136,6 +138,47 @@ api.post('/prs/resync-many', async (c) => {
       }
   }
   return c.json({ prs: fresh.length, added, jira: jiraCount, releases, errors })
+})
+
+// ---------- Release planner ----------
+/** Every repo's plan, or one (`?repo=owner/name`) */
+api.get('/releases/plan', (c) => {
+  const repo = c.req.query('repo')
+  if (!repo) return c.json(buildReleasePlans())
+  const plan = releasePlanFor(repo)
+  if (!plan) throw bad(`No plan for ${repo}: it doesn't integrate on a branch like dev`)
+  return c.json(plan)
+})
+/** Decide where a PR merged into dev goes (`decision: null` clears it) */
+api.put('/releases/decision', async (c) => {
+  const body = z
+    .object({ prId: z.string().min(1), decision: z.enum(['release', 'hold', 'skip']).nullable(), releaseId: z.string().nullish(), note: z.string().max(500).nullish() })
+    .parse(await c.req.json())
+  if (body.decision === 'release') {
+    const open = listPrs().find((s) => s.pr.id === body.releaseId)?.pr
+    if (!open || open.state !== 'OPEN') throw bad('releaseId must be an open release PR')
+  }
+  setReleaseDecision(body.prId, body.decision ? { decision: body.decision, releaseId: body.decision === 'release' ? body.releaseId : null, note: body.note } : null)
+  return c.json({ ok: true })
+})
+/** The plan board: these PRs, in this order, go into `releaseId` (a release PR), or are held / skipped */
+api.put('/releases/arrange', async (c) => {
+  const body = z
+    .object({ prIds: z.array(z.string().min(1)).max(500), decision: z.enum(['release', 'hold', 'skip']), releaseId: z.string().nullish() })
+    .parse(await c.req.json())
+  if (body.decision === 'release') {
+    const open = listPrs().find((s) => s.pr.id === body.releaseId)?.pr
+    if (!open || open.state !== 'OPEN') throw bad('releaseId must be an open release PR')
+  }
+  body.prIds.forEach((id, i) => setReleaseDecision(id, { decision: body.decision, releaseId: body.decision === 'release' ? body.releaseId : null, position: i + 1 }))
+  return c.json({ ok: true })
+})
+/** Brief for an agent to carry out a repo's plan (`?text=1`: plain text) */
+api.get('/releases/plan/prompt', async (c) => {
+  const repo = c.req.query('repo') ?? ''
+  const prompt = await buildReleasePrompt(repo)
+  if (!prompt) throw bad(`No plan for ${repo}`)
+  return c.req.query('text') ? c.text(prompt) : c.json({ prompt })
 })
 
 // ---------- Release contents ----------

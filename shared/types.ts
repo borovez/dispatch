@@ -228,6 +228,14 @@ export interface JiraLink {
   statusCategory: string
 }
 
+export interface JiraSprint {
+  id: number
+  name: string
+  state: 'active' | 'future' | 'closed' | string
+  startDate?: string
+  endDate?: string
+}
+
 export interface JiraIssue {
   /** When this copy was read from Jira (sync or a refresh) */
   fetchedAt?: string
@@ -244,6 +252,8 @@ export interface JiraIssue {
   /** Epic or parent issue; status and type when Jira includes them */
   parent: { key: string; summary: string; status?: string; statusCategory?: string; type?: string } | null
   fixVersions: string[]
+  /** Sprints it has been in (Jira Software), oldest first; missing on copies stored before sprints were read */
+  sprints?: JiraSprint[]
   labels: string[]
   updated: string
   links: JiraLink[]
@@ -836,4 +846,65 @@ export interface LinkPreview {
   contentType?: string
   /** Why there is no preview (private network, no access, timed out…) */
   error?: string
+}
+
+// ---------- Release planner ----------
+
+/** What I decided for a PR merged into dev: put it in a release, hold it for a later one, or leave it out */
+export interface ReleaseDecision {
+  prId: PrId
+  decision: 'release' | 'hold' | 'skip'
+  /** decision 'release': the release PR it goes into */
+  releaseId: PrId | null
+  note: string | null
+  /** My order within its release (cherry-pick order); null: Dispatch's order */
+  position: number | null
+  at: string
+}
+
+/** An open release PR of the repo, and how work gets into it */
+export interface PlanRelease {
+  id: PrId
+  number: number
+  title: string
+  head: string
+  base: string
+  /** includes: the release is the integration branch itself (dev → master), so whatever is in dev ships; branch: its own branch, work is cherry-picked in */
+  mode: 'includes' | 'branch'
+}
+
+/** One PR merged into the integration branch and not released yet */
+export interface PlanItem {
+  prId: PrId
+  number: number
+  title: string
+  author: string
+  mergedAt: string | null
+  mergeCommitSha: string | null
+  jira: { key: string; status: string | null; category: string | null }[]
+  /**
+   * shipping: an open release ships it already; pick: cherry-pick it into `target` (clear-cut);
+   * decide: needs my answer (`question`, `options`); held / skipped: my decision; waiting: no open
+   * release takes it yet (it goes in the next one)
+   */
+  outcome: 'shipping' | 'pick' | 'decide' | 'held' | 'skipped' | 'waiting'
+  target: PrId | null
+  /** Why it is a decision (hard facts only), or notes worth knowing (Jira still To Do, a flag off) */
+  reasons: string[]
+  notes: string[]
+  question: string | null
+  options: { key: string; label: string; decision: ReleaseDecision['decision']; releaseId: PrId | null }[]
+  decision: ReleaseDecision | null
+  /** The order to cherry-pick in: mine where I set it (dragging in the plan board), else prerequisites first, then merge time */
+  order: number
+  /** Already in a release's contents (picked or found there): it can't be moved */
+  locked: boolean
+}
+
+export interface ReleasePlan {
+  repo: string
+  integration: string
+  releases: PlanRelease[]
+  items: PlanItem[]
+  counts: Record<PlanItem['outcome'], number>
 }

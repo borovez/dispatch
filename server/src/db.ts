@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { LinkedPr,
   ActionKind,
+  ReleaseDecision,
   DependencyKind,
   JiraIssue,
   PrId,
@@ -84,6 +85,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS pr_meta (pr_id TEXT PRIMARY KEY, note TEXT, pinned INTEGER NOT NULL DEFAULT 0);
   CREATE TABLE IF NOT EXISTS release_contents (pr_id TEXT PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS backmerges (pr_id TEXT PRIMARY KEY, data TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS release_decisions (pr_id TEXT PRIMARY KEY, decision TEXT NOT NULL, release_id TEXT, note TEXT, at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS feature_flags (key TEXT PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS tag_contents (id TEXT PRIMARY KEY, repo TEXT NOT NULL, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS linked_prs (key TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL);
@@ -92,6 +94,8 @@ db.exec(`
 if (!(db.prepare('PRAGMA table_info(slack_items)').all() as { name: string }[]).some((c) => c.name === 'pinned'))
   db.exec('ALTER TABLE slack_items ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
 // "Mark as done": the action dismissed (only that action; a different one shows again) and when
+if (!(db.prepare('PRAGMA table_info(release_decisions)').all() as { name: string }[]).some((c) => c.name === 'position'))
+  db.exec('ALTER TABLE release_decisions ADD COLUMN position REAL')
 if (!(db.prepare('PRAGMA table_info(pr_meta)').all() as { name: string }[]).some((c) => c.name === 'done_action'))
   db.exec('ALTER TABLE pr_meta ADD COLUMN done_action TEXT; ALTER TABLE pr_meta ADD COLUMN done_at TEXT')
 
@@ -384,6 +388,30 @@ export function addManualDep(from: PrId, to: PrId, kind: DependencyKind, note: s
 }
 export function removeManualDep(id: number): boolean {
   return db.prepare('DELETE FROM dependencies WHERE id = ?').run(id).changes > 0
+}
+
+// ---------- Release planner decisions ----------
+export function listReleaseDecisions(): Map<PrId, ReleaseDecision> {
+  const rows = db.prepare('SELECT pr_id, decision, release_id, note, position, at FROM release_decisions').all() as {
+    pr_id: string
+    decision: ReleaseDecision['decision']
+    release_id: string | null
+    note: string | null
+    position: number | null
+    at: string
+  }[]
+  return new Map(rows.map((r) => [r.pr_id, { prId: r.pr_id, decision: r.decision, releaseId: r.release_id, note: r.note, position: r.position, at: r.at }]))
+}
+/** Record (or with `decision: null` clear) what I decided for a PR merged into dev */
+export function setReleaseDecision(
+  prId: PrId,
+  d: { decision: ReleaseDecision['decision']; releaseId?: PrId | null; note?: string | null; position?: number | null } | null,
+) {
+  if (!d) return void db.prepare('DELETE FROM release_decisions WHERE pr_id = ?').run(prId)
+  db.prepare(
+    `INSERT INTO release_decisions (pr_id, decision, release_id, note, position, at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(pr_id) DO UPDATE SET decision = excluded.decision, release_id = excluded.release_id, note = excluded.note, position = excluded.position, at = excluded.at`,
+  ).run(prId, d.decision, d.releaseId ?? null, d.note ?? null, d.position ?? null, new Date().toISOString())
 }
 
 // ---------- Per-PR meta ----------

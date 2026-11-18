@@ -3,6 +3,8 @@ import { onBeforeUnmount, ref, watch } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { PhLockSimple, PhLockSimpleOpen, PhX } from '@phosphor-icons/vue'
 import { useLayout } from '@/stores/layout'
+import { useDeck } from '@/stores/deck'
+import { lastPanel, usePanelDock } from '@/composables/panelDock'
 import { LAYER_OPEN, onEscape } from '@/composables/escape'
 import { Button } from '@/components/ui/button'
 import PanelHistoryNav from './PanelHistoryNav.vue'
@@ -19,11 +21,14 @@ const props = defineProps<{ open: boolean; footerMin?: (current: number) => numb
 const footerHeight = defineModel<number>('footerHeight')
 const emit = defineEmits<{ close: [] }>()
 const layout = useLayout()
-onEscape(() => props.open && (emit('close'), true))
+const deck = useDeck()
+// Escape closes this one, unless the release planner on the left was used last (it closes that)
+onEscape(() => props.open && !(deck.plannerOpen && lastPanel.value === 'planner') && (emit('close'), true))
+watch(() => props.open, (o) => o && (lastPanel.value = 'side'))
 
 /** Clicks that shouldn't close it: other items (they switch the panel), and layers on top of it */
 const KEEP_OPEN_TARGETS =
-  '[data-side-panel], [data-pr-id], [data-slack-id], [data-jira-id], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="tooltip"], [data-sonner-toaster], [data-reka-popper-content-wrapper]'
+  '[data-side-panel], [data-planner], [data-pr-id], [data-slack-id], [data-jira-id], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="tooltip"], [data-sonner-toaster], [data-reka-popper-content-wrapper]'
 useEventListener(
   document,
   'pointerdown',
@@ -43,10 +48,12 @@ function toggleWidth() {
   const w = layout.prefs.drawerWidth
   layout.prefs.drawerWidth = w < (MIN_W + maxW()) / 2 ? maxW() : MIN_W
 }
+// Docked with the release planner on the left: they share the window (composables/panelDock.ts)
+const dock = usePanelDock()
 function startResize(ev: MouseEvent) {
   const startX = ev.clientX
-  const startW = layout.prefs.drawerWidth
-  const onMove = (e: MouseEvent) => (layout.prefs.drawerWidth = Math.min(maxW(), Math.max(MIN_W, startW + startX - e.clientX)))
+  const startW = dock.drawerW.value
+  const onMove = (e: MouseEvent) => dock.setDrawerWidth(startW + startX - e.clientX, maxW())
   const onUp = () => (window.removeEventListener('mousemove', onMove), window.removeEventListener('mouseup', onUp))
   window.addEventListener('mousemove', onMove)
   window.addEventListener('mouseup', onUp)
@@ -108,12 +115,15 @@ function startFooterResize(ev: PointerEvent) {
 </script>
 
 <template>
-  <Transition name="slide">
+  <!-- A panel put back after a reload appears in place; only opening one slides it in -->
+  <Transition name="slide" :css="!deck.panelRestoring">
     <aside
       v-if="open"
       data-side-panel
-      class="fixed inset-y-0 overscroll-contain right-0 z-40 flex w-full max-w-full flex-col border-l bg-background shadow-2xl sm:w-(--panel-w)"
-      :style="{ '--panel-w': layout.prefs.drawerWidth + 'px' }"
+      :class="['fixed inset-y-0 overscroll-contain right-0 z-40 flex w-full max-w-full flex-col border-l bg-background sm:w-(--panel-w)', dock.snapped.value ? 'shadow-none' : 'shadow-2xl']"
+      :style="{ '--panel-w': dock.drawerW.value + 'px' }"
+      @pointerdown.capture="lastPanel = 'side'"
+      @focusin="lastPanel = 'side'"
       @wheel="onWheel"
     >
       <!-- z-30: the body's scroll area is positioned and would otherwise cover the handle below the header -->
