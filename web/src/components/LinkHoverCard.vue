@@ -40,7 +40,12 @@ let hideTimer: ReturnType<typeof setTimeout> | undefined
 let stashedTitle: string | null = null
 
 const WIDTH = 360
-const isWebLink = (a: HTMLAnchorElement) => /^https?:\/\//i.test(a.href) && !a.closest('[data-no-link-preview]') && !card.value?.contains(a)
+/**
+ * Only links that leave Dispatch: the written href is an absolute http(s) URL on another origin. In-app
+ * links (sidebar, router links: relative hrefs that the browser resolves to this origin) never get a card.
+ */
+const isWebLink = (a: HTMLAnchorElement) =>
+  /^https?:\/\//i.test(a.getAttribute('href') ?? '') && a.origin !== location.origin && !a.closest('[data-no-link-preview]') && !card.value?.contains(a)
 
 function restoreTitle() {
   if (anchor.value && stashedTitle != null) anchor.value.setAttribute('title', stashedTitle)
