@@ -78,6 +78,9 @@ api.post('/prs/resync-many', async (c) => {
     if (acc) byAccount.set(acc, [...(byAccount.get(acc) ?? []), pr.nodeId])
   }
   const fresh: PrRecord[] = []
+  // Release PRs: what they ship is recomputed too when open or changed (the Releases page refresh)
+  const releaseIds = new Set(listReleaseContents().map((r) => r.prId))
+  let releases = 0
   await Promise.all(
     [...byAccount].map(async ([acc, nodeIds]) => {
       const r = await fetchPrsByNodeId(acc, nodeIds)
@@ -85,6 +88,12 @@ api.post('/prs/resync-many', async (c) => {
       errors.push(...r.errors.map((e) => `[${acc.label}] ${e}`))
       for (const pr of r.prs) updatePrData(pr)
       for (const pr of r.prs) await checkBackmerge(acc, pr) // merged hotfixes: in dev yet?
+      for (const pr of r.prs)
+        if (releaseIds.has(pr.id) && (pr.state === 'OPEN' || stored.get(pr.id)?.updatedAt !== pr.updatedAt)) {
+          const rc = await computeReleaseContents(acc, pr)
+          if (rc.error) errors.push(`${pr.id}: ${rc.error}`)
+          else releases++
+        }
     }),
   )
 
@@ -126,7 +135,7 @@ api.post('/prs/resync-many', async (c) => {
         errors.push(`Jira: ${(e as Error).message}`)
       }
   }
-  return c.json({ prs: fresh.length, added, jira: jiraCount, errors })
+  return c.json({ prs: fresh.length, added, jira: jiraCount, releases, errors })
 })
 
 // ---------- Release contents ----------

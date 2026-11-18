@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import RefreshButton from '@/components/RefreshButton.vue'
 import ShareMenu from '@/components/ShareMenu.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { externalHint } from '@/lib/external'
 import { computed, nextTick, ref, watch } from 'vue'
-import { PhCaretRight, PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowsClockwise, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhPushPin, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
+import { PhCaretRight, PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhPushPin, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
 import type { SlackContext, SlackMessage } from '@shared/types'
 import { toast } from 'vue-sonner'
 import { api } from '@/api'
@@ -224,14 +225,7 @@ watch(
         </TooltipTrigger>
         <TooltipContent>Copy the conversation as an AI prompt</TooltipContent>
       </Tooltip>
-      <Tooltip>
-        <TooltipTrigger as-child>
-          <Button variant="ghost" size="icon-sm" aria-label="Reload from Slack" :disabled="resyncing" @click="resync">
-            <PhArrowsClockwise :class="{ 'animate-spin': resyncing }" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Reload the conversation from Slack</TooltipContent>
-      </Tooltip>
+      <RefreshButton label="Refresh the conversation from Slack" :busy="resyncing" @click="resync" />
       <!-- To the release this message is about -->
       <template v-if="releaseId">
         <Tooltip>

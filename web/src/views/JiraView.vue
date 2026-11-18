@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import RefreshButton from '@/components/RefreshButton.vue'
 import JiraBulkStatus from '@/components/JiraBulkStatus.vue'
 import StickyToolbar from '@/components/StickyToolbar.vue'
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { toast } from 'vue-sonner'
+import { api } from '@/api'
 import { onEscape } from '@/composables/escape'
 import ActionBar from '@/components/ActionBar.vue'
 import Kbd from '@/components/Kbd.vue'
@@ -157,6 +160,29 @@ const filtered = computed(() => {
   return base.value.filter(scope.match).sort((a, b) => cmp(a, b) * sign)
 })
 
+/** Refresh button: re-read the issues the list shows from Jira (all of them, 500 at a time) */
+const refreshing = ref(false)
+async function refreshShown(e: MouseEvent) {
+  if (e.shiftKey) return void deck.sync()
+  const keys = filtered.value.map((i) => i.key)
+  if (!keys.length || refreshing.value) return
+  refreshing.value = true
+  try {
+    let total = 0
+    const missing: string[] = []
+    for (let i = 0; i < keys.length; i += 500) {
+      let r: Awaited<ReturnType<typeof api.jiraRefreshMany>> | undefined
+      if (!(await deck.mutate(async () => void (r = await api.jiraRefreshMany(keys.slice(i, i + 500)))))) return
+      total += r!.issues
+      missing.push(...r!.missing)
+    }
+    if (missing.length) toast.warning(`Refreshed ${total} issues`, { description: `Not found in Jira: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}` })
+    else toast.success('List refreshed', { description: `${total} issues` })
+  } finally {
+    refreshing.value = false
+  }
+}
+
 /** Issues loaded from Jira (keys only seen in PRs have no workflow to move) */
 const bulkKeys = (list: Item[]) => list.filter((i) => i.issue).map((i) => i.key)
 
@@ -248,6 +274,16 @@ const DOT: Record<string, string> = { new: 'bg-muted-foreground', indeterminate:
         </Tabs>
         <FilterChips :chips="chips" />
         <span class="flex-1" />
+        <!-- Re-read the issues shown from Jira; Shift-click: full sync -->
+        <RefreshButton
+          v-if="deck.overview?.configured.jira"
+          :label="`Refresh the ${filtered.length} issues shown`"
+          full-sync
+          :busy="refreshing || deck.syncRunning"
+          :disabled="!filtered.length"
+          :refreshed-at="filtered.map((i) => i.issue?.fetchedAt)"
+          @click="refreshShown"
+        />
         <CollapseAllButton v-if="groups.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
         <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
         <Button v-if="deck.overview?.configured.jira" size="sm" @click="deck.composer = { mode: 'create' }"><PhNotePencil /> <span class="@max-3xl:sr-only">New issue</span></Button>

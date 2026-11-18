@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RefreshButton from '@/components/RefreshButton.vue'
 import { prStatus } from '@/composables/prStatus'
 import { externalHint } from '@/lib/external'
 import ShareMenu from '@/components/ShareMenu.vue'
@@ -260,14 +261,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             <TooltipContent>Show in the release graph</TooltipContent>
           </Tooltip>
         </template>
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Button variant="ghost" size="icon-sm" aria-label="Resync from GitHub" :disabled="resyncing" @click="resync">
-              <PhArrowsClockwise :class="{ 'animate-spin': resyncing }" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Resync this PR from GitHub{{ pr.jiraKeys.length && deck.overview?.configured.jira ? ' and its Jira issues' : '' }}</TooltipContent>
-        </Tooltip>
+        <RefreshButton :label="`Refresh this PR${pr.jiraKeys.length && deck.overview?.configured.jira ? ' and its Jira issues' : ''}`" :refreshed-at="pr.fetchedAt ?? null" :busy="resyncing" @click="resync" />
         <Tooltip v-if="pr.state === 'OPEN'">
           <TooltipTrigger as-child>
             <Button variant="ghost" size="icon-sm" aria-label="Edit title and description" class="text-primary" @click="deck.prWriter = pr.id"><PhMagicWand weight="fill" /></Button>

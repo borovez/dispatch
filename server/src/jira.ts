@@ -79,6 +79,7 @@ function mapIssue(cfg: JiraConfig, raw: any, isMine: boolean): JiraIssue {
     }
   })
   return {
+    fetchedAt: new Date().toISOString(),
     key: raw.key,
     url: `${base(cfg)}/browse/${raw.key}`,
     summary: f.summary ?? '',

@@ -45,7 +45,9 @@ export const api = {
   fetchPr: (id: string) => call<unknown>('POST', '/prs/fetch', { id }),
   resyncPr: (id: string) => call('POST', '/prs/resync', { id }),
   /** Resync just these PRs, the PRs their descriptions now depend on, and their Jira issues */
-  resyncPrs: (ids: string[]) => call<{ prs: number; added: number; jira: number; errors: string[] }>('POST', '/prs/resync-many', { ids }),
+  /** Re-read these issues from Jira (the Jira page's refresh) */
+  jiraRefreshMany: (keys: string[]) => call<{ issues: number; missing: string[]; moved: number }>('POST', '/jira/refresh-many', { keys }),
+  resyncPrs: (ids: string[]) => call<{ prs: number; added: number; jira: number; releases?: number; errors: string[] }>('POST', '/prs/resync-many', { ids }),
   refreshRelease: (id: string) => call('POST', '/releases/refresh', { id }),
   setMeta: (id: string, note: string | null, pinned: boolean) => call('PUT', '/prs/meta', { id, note, pinned }),
   /** Mark the PR's current action done (`null` undoes it) */

@@ -18,6 +18,7 @@ import { addJiraMoved,
   saveSyncState,
   setRelease,
   upsertPr,
+  kvSet,
 } from './db.ts'
 import { syncReleaseFlow, syncTags } from './releases.ts'
 import { syncLinkedPrs } from './linkedPrs.ts'
@@ -49,6 +50,7 @@ export async function syncSlack(slack: NonNullable<Settings['slack']>, errors: s
   closeStaleSlack(r.completeKinds, new Set(r.items.filter((i) => r.completeKinds.includes(i.item.kind)).map((i) => i.item.id)))
   pruneSlack(new Date(Date.now() - slack.lookbackDays * 2 * 86400_000).toISOString())
   errors.push(...r.errors.map((e) => `[slack] ${e}`))
+  kvSet('slackFetchedAt', new Date().toISOString())
   return r.items.length
 }
 

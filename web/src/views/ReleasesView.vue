@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import RefreshButton from '@/components/RefreshButton.vue'
+import { useListResync } from '@/composables/listResync'
 import { useReleaseStatus } from '@/composables/trainStatus'
 import StickyToolbar from '@/components/StickyToolbar.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
@@ -108,6 +110,16 @@ const trains = computed(() =>
   }),
 )
 
+/** What the current tab shows, for its refresh button */
+const listResync = useListResync()
+const shownIds = computed(() =>
+  v.tab === 'hotfixes'
+    ? hotfixes.value.map((p) => p.id)
+    : v.tab === 'trains'
+      ? [...new Set(trains.value.flatMap((t) => t.releases))]
+      : [...releases.value.map((p) => p.id), ...unreleased.value.flatMap((u) => u.prs.map((p) => p.id))],
+)
+
 /** Merged releases and finished hotfixes start collapsed */
 const isCollapsed = (key: string, byDefault = false) => v.collapsed[key] ?? byDefault
 /** A section's cards (key, collapsed by default), for its heading's collapse / expand button */
@@ -176,6 +188,15 @@ async function refresh(id: string) {
         <!-- One repo or all, for the list and the graph (the graph also shows what links to it) -->
         <RepoSelect v-if="repoOptions.length > 1" :model-value="repoKey || 'all'" :tabs="repoOptions" @update:model-value="(r) => (repoState.repo = r === 'all' ? '' : r)" />
         <span class="flex-1" />
+        <!-- Refresh what this tab shows (list or graph): the PRs, and what open / changed releases ship -->
+        <RefreshButton
+          :label="`Refresh the ${shownIds.length} ${v.tab === 'hotfixes' ? 'hotfixes' : v.tab === 'trains' ? 'releases in trains' : 'releases and unreleased PRs'} shown`"
+          full-sync
+          :busy="listResync.resyncing.value || deck.syncRunning"
+          :disabled="!shownIds.length"
+          :refreshed-at="shownIds.map((id) => deck.byId.get(id)?.fetchedAt)"
+          @click="(e) => listResync.resync(shownIds, e)"
+        />
         <ExpandingSearch v-if="!graph" v-model="v.query" placeholder="Search PRs, branches, Jira keys…" />
         <div id="releases-toolbar" class="flex items-center gap-2 empty:hidden" />
         <!-- List or graph, for whichever tab is picked -->

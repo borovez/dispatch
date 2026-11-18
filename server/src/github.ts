@@ -212,6 +212,7 @@ function mapPr(n: GqlPr, accountId: string): PrRecord {
     .filter((c) => (c.__typename === 'CheckRun' ? FAILING.has(c.conclusion) : FAILING.has(c.state)))
     .map((c) => ({ name: c.name ?? c.context, url: c.detailsUrl ?? c.targetUrl ?? null }))
   return {
+    fetchedAt: new Date().toISOString(),
     id: prId(repo, n.number),
     nodeId: n.id,
     owner: n.repository.owner.login,

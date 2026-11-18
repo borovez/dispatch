@@ -46,6 +46,8 @@ export interface UserRef {
 
 /** Raw PR snapshot as synced from GitHub. */
 export interface PrRecord {
+  /** When this copy was read from GitHub (sync or a refresh); missing on PRs stored before it existed */
+  fetchedAt?: string
   id: PrId
   nodeId: string
   owner: string
@@ -227,6 +229,8 @@ export interface JiraLink {
 }
 
 export interface JiraIssue {
+  /** When this copy was read from Jira (sync or a refresh) */
+  fetchedAt?: string
   key: string
   url: string
   summary: string
@@ -312,6 +316,8 @@ export interface Overview {
   trains: ReleaseTrain[]
   /** LaunchDarkly state of the flags PRs mention */
   flags: FeatureFlag[]
+  /** When the Slack inbox was last fetched (sync or the Slack page's refresh) */
+  slackFetchedAt: string | null
   /** Latest tags of tag-based repos, newest first, with what each shipped */
   tags: TagRelease[]
   jira: JiraIssueView[]

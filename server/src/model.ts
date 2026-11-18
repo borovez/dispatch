@@ -32,6 +32,7 @@ import {
   listJiraMoved,
   listFeatureFlags,
   type StoredPr,
+  kvGet,
 } from './db.ts'
 import { integrationBranches, prFlow, releaseBranches, releaseRefFor } from './flow.ts'
 import { extractJiraKeys, parseBodyBlocks, parseBodyDependencies, parseFeatureFlags } from './refs.ts'
@@ -260,6 +261,7 @@ export function buildOverview(): Overview {
     releases,
     trains: buildTrains(prs, edges, releases),
     flags: listFeatureFlags(),
+    slackFetchedAt: kvGet<string | null>('slackFetchedAt', null),
     tags,
     jira: jiraViews,
     jiraMoved: listJiraMoved(),

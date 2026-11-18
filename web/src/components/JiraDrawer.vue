@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import RefreshButton from '@/components/RefreshButton.vue'
 import ShareMenu from '@/components/ShareMenu.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
-import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhArrowsClockwise, PhRobot } from '@phosphor-icons/vue'
+import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhRobot } from '@phosphor-icons/vue'
 import type { JiraIssueDetail, LinkedPrs } from '@shared/types'
 import LinkedPrRow from './LinkedPrRow.vue'
 import { api } from '@/api'
@@ -272,14 +273,7 @@ const details = computed(() => {
         <TooltipContent>Show in the release graph</TooltipContent>
       </Tooltip>
       </template>
-      <Tooltip v-if="deck.overview?.configured.jira">
-        <TooltipTrigger as-child>
-          <Button variant="ghost" size="icon-sm" aria-label="Reload from Jira" :disabled="reloading" @click="reload">
-            <PhArrowsClockwise :class="{ 'animate-spin': reloading }" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Reload from Jira</TooltipContent>
-      </Tooltip>
+      <RefreshButton v-if="deck.overview?.configured.jira" label="Refresh this issue from Jira" :refreshed-at="deck.jiraByKey.get(key)?.fetchedAt ?? null" :busy="reloading" @click="reload" />
     </template>
 
     <template v-if="key && (issue || url)" #footer>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RefreshButton from '@/components/RefreshButton.vue'
 import StickyToolbar from '@/components/StickyToolbar.vue'
 import { computed, ref } from 'vue'
 import {
@@ -21,6 +22,7 @@ import {
 } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
+import { useListResync } from '@/composables/listResync'
 import { filterPrs, sortPrs, useLayout, type SortDir } from '@/stores/layout'
 import { BUCKETS } from '@/utils/format'
 import { PR_FOCUS, type PrFocus } from '@/utils/prFocus'
@@ -40,6 +42,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 const deck = useDeck()
+const listResync = useListResync()
 const layout = useLayout()
 const filterMenu = ref<InstanceType<typeof FilterMenu> | null>(null)
 type Scope = 'all' | 'mine' | 'review' | 'team'
@@ -273,9 +276,17 @@ const toggleAll = () => {
             <TabsTrigger v-for="s in SCOPES" :key="s.value" :value="s.value" :count="scopeCount(s)">{{ s.label }}</TabsTrigger>
           </TabsList>
         </Tabs>
-        <!-- Filter / Collapse / Display stay together on the right; the search box shrinks before they wrap -->
+        <!-- Refresh / Collapse / Display stay together on the right; the search box shrinks before they wrap -->
         <div class="ml-auto flex shrink-0 items-center gap-1">
-        <FilterMenu ref="filterMenu" v-model="v.filters" :fields="fields" />
+        <!-- Refresh what the list shows (after filters) from GitHub; Shift-click: full sync -->
+        <RefreshButton
+          :label="`Refresh the ${filtered.length} PRs shown`"
+          :refreshed-at="filtered.map((p) => p.fetchedAt)"
+          full-sync
+          :busy="listResync.resyncing.value || deck.syncRunning"
+          :disabled="!filtered.length"
+          @click="(e) => listResync.resync(filtered.map((p) => p.id), e)"
+        />
         <CollapseAllButton v-if="v.display === 'list' && groups.length > 1" :collapsed="allCollapsed" @toggle="toggleAll" />
         <DisplayMenu
           :state="v"
@@ -289,8 +300,9 @@ const toggleAll = () => {
         />
         </div>
       </div>
-      <!-- Active filters, under the toolbar so it never wraps -->
-      <div v-if="chips.length || Object.keys(v.filters).length" class="flex flex-wrap items-center gap-1.5">
+      <!-- Filter and what's applied: the button first, its chips after it, so the row reads left to right -->
+      <div class="flex flex-wrap items-center gap-1.5">
+        <FilterMenu ref="filterMenu" v-model="v.filters" :fields="fields" />
         <FilterChips :chips="chips" />
         <ActiveFilters v-model="v.filters" :fields="fields" @open="(k) => filterMenu?.openOn(k)" />
         <Button v-if="Object.keys(v.filters).length > 1" variant="ghost" size="sm" class="h-7 text-xs text-muted-foreground" @click="v.filters = {}">Clear all</Button>

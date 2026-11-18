@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RefreshButton from '@/components/RefreshButton.vue'
 import { onEscape } from '@/composables/escape'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -11,7 +12,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@/components/flowTheme.css'
-import { PhArrowArcLeft, PhArrowArcRight, PhArrowsClockwise, PhFrameCorners, PhArrowsDownUp, PhCheckCircle, PhClock, PhCircleNotch, PhPlus, PhBuildings, PhGraph, PhHandGrabbing, PhTrash, PhX } from '@phosphor-icons/vue'
+import { PhArrowArcLeft, PhArrowArcRight, PhFrameCorners, PhArrowsDownUp, PhCheckCircle, PhClock, PhCircleNotch, PhPlus, PhBuildings, PhGraph, PhHandGrabbing, PhTrash, PhX } from '@phosphor-icons/vue'
 import type { DepEdge, DependencyKind, PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { api } from '@/api'
@@ -506,20 +507,13 @@ const hasAnyEdges = computed(() => allEdges.value.length > 0)
       <FilterChips :chips="chips" />
       <span class="flex-1" />
       <div class="flex shrink-0 items-center">
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Button variant="ghost" size="icon-sm" aria-label="Resync the PRs on the graph" :disabled="resyncing || deck.syncRunning" @click="(e: MouseEvent) => (e.shiftKey ? deck.sync() : resyncShown())">
-              <PhArrowsClockwise :class="{ 'animate-spin': resyncing || deck.syncRunning }" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent class="max-w-72">
-            <template v-if="resyncing || deck.syncRunning">Syncing…</template>
-            <template v-else>
-              Resync the {{ nodeIds.length }} PRs on the graph: descriptions, the PRs they now depend on, and their Jira links.
-              <span class="opacity-70">Shift-click for a full sync.</span>
-            </template>
-          </TooltipContent>
-        </Tooltip>
+        <RefreshButton
+          :label="`Refresh the ${nodeIds.length} PRs on the graph`"
+          :refreshed-at="nodeIds.map((id) => deck.byId.get(id)?.fetchedAt)"
+          full-sync
+          :busy="resyncing || deck.syncRunning"
+          @click="(e) => (e.shiftKey ? deck.sync() : resyncShown())"
+        />
         <span class="mx-1 h-4 w-px bg-border" aria-hidden="true" />
         <Tooltip>
           <TooltipTrigger as-child>

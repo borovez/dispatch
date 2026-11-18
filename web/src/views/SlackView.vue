@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import RefreshButton from '@/components/RefreshButton.vue'
 import StickyToolbar from '@/components/StickyToolbar.vue'
 import { computed, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { api } from '@/api'
-import { PhArrowsClockwise, PhFunnel, PhMagnifyingGlass, PhSlackLogo } from '@phosphor-icons/vue'
+import { PhFunnel, PhMagnifyingGlass, PhSlackLogo } from '@phosphor-icons/vue'
 import type { SlackItem, SlackKind, SlackStatus } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useLayout, type SortDir } from '@/stores/layout'
@@ -15,7 +16,6 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const deck = useDeck()
 
@@ -95,14 +95,7 @@ const chips = computed(() =>
         </div>
         <FilterChips :chips="chips" />
         <span class="flex-1" />
-        <Tooltip v-if="deck.overview?.configured.slack">
-          <TooltipTrigger as-child>
-            <Button variant="outline" size="icon-sm" aria-label="Refresh the Slack inbox" :disabled="refreshing" @click="refresh">
-              <PhArrowsClockwise :class="refreshing && 'animate-spin'" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Refresh the Slack inbox (only Slack, not a full sync)</TooltipContent>
-        </Tooltip>
+        <RefreshButton v-if="deck.overview?.configured.slack" label="Refresh the Slack inbox (only Slack)" :refreshed-at="deck.overview?.slackFetchedAt ?? null" :busy="refreshing" @click="refresh" />
         <ViewMenu :state="v" :sections="viewSections" :defaults="VIEW_DEFAULTS" />
       </div>
     </StickyToolbar>

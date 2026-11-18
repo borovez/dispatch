@@ -2,7 +2,7 @@
 import ItemContextMenu from './ItemContextMenu.vue'
 import { usePrMenu } from '@/composables/itemMenus'
 import { computed } from 'vue'
-import { PhArrowBendDownRight, PhLinkSimple, PhTrain, PhWarning } from '@phosphor-icons/vue'
+import { PhArrowBendDownRight, PhArrowsDownUp, PhCheck, PhLinkSimple, PhTrain, PhWarning } from '@phosphor-icons/vue'
 import type { ReleaseTrain } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { Badge } from '@/components/ui/badge'
@@ -71,9 +71,12 @@ const other = (l: ReleaseTrain['links'][number], id: string) => (l.from === id ?
         <span
           class="mt-2 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums"
           :class="train.next === s.id && s.pr?.state === 'OPEN' ? 'bg-primary text-primary-foreground' : (STATUS_SOFT[status(s.id).tone] ?? 'bg-muted text-muted-foreground')"
-          :title="`${train.next === s.id && s.pr?.state === 'OPEN' ? 'Ship this next' : hasOrder ? `Step ${s.n}` : 'No order set'} · ${status(s.id).label}`"
+          :title="`${train.next === s.id && s.pr?.state === 'OPEN' ? 'Ship this next' : hasOrder ? `Step ${s.n}` : s.pr?.state === 'MERGED' ? 'Merged' : 'No shipping order set yet'} · ${status(s.id).label}`"
         >
-          {{ hasOrder ? s.n : '·' }}
+          <template v-if="hasOrder">{{ s.n }}</template>
+          <!-- No order yet: merged ones are done, the rest can still ship in any order -->
+          <PhCheck v-else-if="s.pr?.state === 'MERGED'" :size="13" weight="bold" />
+          <PhArrowsDownUp v-else :size="13" weight="bold" />
         </span>
         <div class="min-w-0 flex-1">
           <PrRow v-if="s.pr" :pr="s.pr" compact class="min-w-0" :flags="flagsOf(s.id)">

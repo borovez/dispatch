@@ -7,7 +7,7 @@ import { buildAgentPrompt } from '../agentPrompt.ts'
 import { claudeMdGuide } from '../guides.ts'
 import { replyInThread, threadContext } from '../slack.ts'
 import { prFileNames } from '../github.ts'
-import { addAttachments, addComment, hasAttachmentRefs, resolveAttachmentRefs, composeCreate, composeUpdate, createMeta, editable, fieldOptions, getIssue, getIssueDetail, getTransitions, jiraMyself, listProjects, transition } from '../jira.ts'
+import { addAttachments, addComment, hasAttachmentRefs, resolveAttachmentRefs, composeCreate, composeUpdate, createMeta, editable, fieldOptions, getIssue, getIssueDetail, getTransitions, jiraMyself, listProjects, transition, fetchIssuesByKey } from '../jira.ts'
 import { findLinkedPrs } from '../linkedPrs.ts'
 import { accountForOwner } from '../sync.ts'
 import { api, bad, jiraCfg, Images } from './shared.ts'
@@ -23,6 +23,15 @@ api.post('/jira/:key/refresh', async (c) => {
   // Moved issue (Jira answers the old key with the new one): remember it, so the old key resolves
   if (issue.key !== asked) addJiraMoved({ [asked]: issue.key })
   return c.json(issue)
+})
+
+/** Re-read the issues a list shows (Jira page refresh button): fields only, mine / parent-only kept from the last sync */
+api.post('/jira/refresh-many', async (c) => {
+  const { keys } = z.object({ keys: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*-\d+$/)).max(500) }).parse(await c.req.json())
+  const { issues, missing, moved } = await fetchIssuesByKey(jiraCfg(), [...new Set(keys.map((k) => k.toUpperCase()))])
+  for (const i of issues) upsertJira(i)
+  if (Object.keys(moved).length) addJiraMoved(moved)
+  return c.json({ issues: issues.length, missing, moved: Object.keys(moved).length })
 })
 
 api.get('/jira/:key/detail', async (c) => {
