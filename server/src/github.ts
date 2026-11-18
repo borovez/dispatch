@@ -164,7 +164,7 @@ fragment PR on PullRequest {
     state
     contexts(first: 60) { totalCount nodes {
       __typename
-      ... on CheckRun { name conclusion status detailsUrl }
+      ... on CheckRun { name conclusion status detailsUrl startedAt checkSuite { workflowRun { event workflow { name } } } }
       ... on StatusContext { context state targetUrl }
     } }
   } } } }
@@ -174,10 +174,40 @@ type GqlPr = any // shape of PR_FRAGMENT – mapped immediately below
 
 const FAILING = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'])
 
+/**
+ * The commit keeps every run, including ones a newer run replaced: a run cancelled by a re-run or a
+ * new push (concurrency cancel-in-progress) still counts in GitHub's rollup state, so a PR whose
+ * checks all pass now would read as failing. Keep only the latest run of each check (per workflow,
+ * job name and event), as GitHub's checks list does.
+ */
+function latestChecks(nodes: any[]): any[] {
+  const latest = new Map<string, any>()
+  const rest: any[] = []
+  for (const c of nodes) {
+    if (c.__typename !== 'CheckRun') {
+      rest.push(c)
+      continue
+    }
+    const run = c.checkSuite?.workflowRun
+    const key = `${run?.workflow?.name ?? ''}\u0000${c.name}\u0000${run?.event ?? ''}`
+    const prev = latest.get(key)
+    if (!prev || (c.startedAt ?? '') > (prev.startedAt ?? '')) latest.set(key, c)
+  }
+  return [...latest.values(), ...rest]
+}
+
+/** GitHub's rollup state, corrected when the only failures were in replaced runs */
+function checkState(rollup: CheckState | undefined, latest: any[], failing: number): CheckState {
+  if (!rollup) return 'NONE'
+  if (failing || (rollup !== 'FAILURE' && rollup !== 'ERROR')) return failing && rollup === 'SUCCESS' ? 'FAILURE' : rollup
+  const pending = latest.some((c) => (c.__typename === 'CheckRun' ? c.status !== 'COMPLETED' : c.state === 'PENDING' || c.state === 'EXPECTED'))
+  return pending ? 'PENDING' : 'SUCCESS'
+}
+
 function mapPr(n: GqlPr, accountId: string): PrRecord {
   const repo: string = n.repository.nameWithOwner
   const rollup = n.commits?.nodes?.[0]?.commit?.statusCheckRollup
-  const contexts: any[] = rollup?.contexts?.nodes ?? []
+  const contexts = latestChecks(rollup?.contexts?.nodes ?? [])
   const failing = contexts
     .filter((c) => (c.__typename === 'CheckRun' ? FAILING.has(c.conclusion) : FAILING.has(c.state)))
     .map((c) => ({ name: c.name ?? c.context, url: c.detailsUrl ?? c.targetUrl ?? null }))
@@ -241,8 +271,9 @@ function mapPr(n: GqlPr, accountId: string): PrRecord {
         }
       }),
     checks: {
-      state: (rollup?.state as CheckState) ?? 'NONE',
-      total: rollup?.contexts?.totalCount ?? 0,
+      state: checkState(rollup?.state as CheckState | undefined, contexts, failing.length),
+      // Checks as they stand (replaced runs left out); more than the 60 fetched: GitHub's count
+      total: (rollup?.contexts?.totalCount ?? 0) > 60 ? rollup.contexts.totalCount : contexts.length,
       failing,
     },
     accountId,
