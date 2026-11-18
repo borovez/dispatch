@@ -862,15 +862,31 @@ export interface ReleaseDecision {
   at: string
 }
 
-/** An open release PR of the repo, and how work gets into it */
+/** A release I planned in Dispatch that isn't a PR yet (its branch is created and filled by the agent, or I open the PR once it's pushed) */
+export interface PlannedRelease {
+  /** `planned:<uuid>`, used as a releaseId in decisions */
+  id: string
+  repo: string
+  branch: string
+  base: string
+  title: string
+  createdAt: string
+}
+
+/** An open release PR of the repo (or one I planned), and how work gets into it */
 export interface PlanRelease {
-  id: PrId
+  /** The release PR's id, or `planned:<uuid>` */
+  id: string
+  /** 0 while planned */
   number: number
   title: string
   head: string
   base: string
-  /** includes: the release is the integration branch itself (dev → master), so whatever is in dev ships; branch: its own branch, work is cherry-picked in */
-  mode: 'includes' | 'branch'
+  /**
+   * includes: the release is the integration branch itself (dev → master), so whatever is in dev ships;
+   * branch: its own branch, work is cherry-picked in; planned: a branch that doesn't have a PR yet
+   */
+  mode: 'includes' | 'branch' | 'planned'
 }
 
 /** One PR merged into the integration branch and not released yet */

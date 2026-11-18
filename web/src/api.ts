@@ -53,6 +53,11 @@ export const api = {
   /** Plan board: these PRs, in this order, go into a release (or are held / skipped) */
   arrangeRelease: (prIds: string[], decision: 'release' | 'hold' | 'skip', releaseId?: string | null) =>
     call<{ ok: boolean }>('PUT', '/releases/arrange', { prIds, decision, releaseId }),
+  /** Planned releases (a branch Claude creates, or I open the PR for once it's pushed) */
+  plannedCreate: (p: { repo: string; branch: string; base: string; title: string }) => call<{ id: string }>('POST', '/releases/planned', p),
+  plannedUpdate: (p: { id: string; branch: string; base: string; title: string }) => call<{ ok: boolean }>('PUT', '/releases/planned', p),
+  plannedDelete: (id: string) => call<{ ok: boolean }>('DELETE', '/releases/planned', { id }),
+  plannedOpenPr: (id: string) => call<{ number: number; url: string }>('POST', '/releases/planned/open-pr', { id }),
   releasePrompt: (repo: string) => call<{ prompt: string }>('GET', `/releases/plan/prompt?repo=${encodeURIComponent(repo)}`),
   /** Re-read these issues from Jira (the Jira page's refresh) */
   jiraRefreshMany: (keys: string[]) => call<{ issues: number; missing: string[]; moved: number }>('POST', '/jira/refresh-many', { keys }),

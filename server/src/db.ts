@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { LinkedPr,
   ActionKind,
   ReleaseDecision,
+  PlannedRelease,
   DependencyKind,
   JiraIssue,
   PrId,
@@ -86,6 +87,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS release_contents (pr_id TEXT PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS backmerges (pr_id TEXT PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS release_decisions (pr_id TEXT PRIMARY KEY, decision TEXT NOT NULL, release_id TEXT, note TEXT, at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS planned_releases (id TEXT PRIMARY KEY, repo TEXT NOT NULL, branch TEXT NOT NULL, base TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS feature_flags (key TEXT PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS tag_contents (id TEXT PRIMARY KEY, repo TEXT NOT NULL, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS linked_prs (key TEXT PRIMARY KEY, data TEXT NOT NULL, fetched_at TEXT NOT NULL);
@@ -412,6 +414,33 @@ export function setReleaseDecision(
     `INSERT INTO release_decisions (pr_id, decision, release_id, note, position, at) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(pr_id) DO UPDATE SET decision = excluded.decision, release_id = excluded.release_id, note = excluded.note, position = excluded.position, at = excluded.at`,
   ).run(prId, d.decision, d.releaseId ?? null, d.note ?? null, d.position ?? null, new Date().toISOString())
+}
+
+/** Releases planned in Dispatch, not PRs yet */
+export function listPlannedReleases(): PlannedRelease[] {
+  return (db.prepare('SELECT id, repo, branch, base, title, created_at FROM planned_releases ORDER BY created_at').all() as {
+    id: string
+    repo: string
+    branch: string
+    base: string
+    title: string
+    created_at: string
+  }[]).map((r) => ({ id: r.id, repo: r.repo, branch: r.branch, base: r.base, title: r.title, createdAt: r.created_at }))
+}
+export function savePlannedRelease(r: PlannedRelease) {
+  db.prepare(
+    `INSERT INTO planned_releases (id, repo, branch, base, title, created_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET branch = excluded.branch, base = excluded.base, title = excluded.title`,
+  ).run(r.id, r.repo, r.branch, r.base, r.title, r.createdAt)
+}
+/** Remove a planned release; PRs I put in it go back to undecided */
+export function deletePlannedRelease(id: string) {
+  db.prepare('DELETE FROM planned_releases WHERE id = ?').run(id)
+  db.prepare('DELETE FROM release_decisions WHERE release_id = ?').run(id)
+}
+/** A planned release became a real PR: decisions follow it */
+export function movePlannedDecisions(from: string, to: string) {
+  db.prepare('UPDATE release_decisions SET release_id = ? WHERE release_id = ?').run(to, from)
 }
 
 // ---------- Per-PR meta ----------

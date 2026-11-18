@@ -17,8 +17,16 @@ import {
   PhRobot,
   PhWarning,
   PhX,
+  PhArrowSquareOut,
+  PhDotsThree,
+  PhGitPullRequest,
+  PhMagicWand,
+  PhPencilSimple,
+  PhPlus,
+  PhSidebarSimple,
+  PhTrash,
 } from '@phosphor-icons/vue'
-import type { PlanItem, ReleasePlan } from '@shared/types'
+import type { PlanItem, PlanRelease, ReleasePlan } from '@shared/types'
 import { api } from '@/api'
 import { writeClipboard } from '@/lib/clipboard'
 import { useDeck } from '@/stores/deck'
@@ -32,6 +40,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Input } from '@/components/ui/input'
 import PrNumberLink from './PrNumberLink.vue'
 import RefreshButton from './RefreshButton.vue'
 import { useListResync } from '@/composables/listResync'
@@ -81,6 +90,8 @@ const todo = (p: ReleasePlan) => p.counts.pick + p.counts.decide
 /** Buckets: drop targets, each with what it means as a decision */
 interface Bucket {
   key: string
+  /** The release behind it (menu: open, edit, open the PR…), if any */
+  release: PlanRelease | null
   title: string
   sub: string
   tone: 'primary' | 'muted' | 'warning'
@@ -94,11 +105,12 @@ const buckets = computed<Bucket[]>(() => {
   if (!p) return []
   const includes = p.releases.find((r) => r.mode === 'includes')
   const out: Bucket[] = p.releases
-    .filter((r) => r.mode === 'branch')
+    .filter((r) => r.mode !== 'includes')
     .map((r) => ({
       key: `release:${r.id}`,
-      title: `Cherry-pick into ${r.head}`,
-      sub: `#${r.number} → ${r.base}`,
+      release: r,
+      title: r.mode === 'planned' ? `New release: ${r.head}` : `Cherry-pick into ${r.head}`,
+      sub: r.mode === 'planned' ? `planned · from ${r.base} · not on GitHub yet` : `#${r.number} → ${r.base}`,
       tone: 'primary',
       decision: 'release',
       releaseId: r.id,
@@ -108,6 +120,7 @@ const buckets = computed<Bucket[]>(() => {
   if (includes)
     out.push({
       key: 'skip',
+      release: includes,
       title: `Only with ${includes.head} → ${includes.base}`,
       sub: `#${includes.number}: ships everything in ${p.integration}, no cherry-pick`,
       tone: 'muted',
@@ -116,14 +129,58 @@ const buckets = computed<Bucket[]>(() => {
       items: p.items.filter((i) => i.outcome === 'skipped' || (i.outcome === 'shipping' && i.target === includes.id)),
       ordered: false,
     })
-  if (p.releases.some((r) => r.mode === 'branch'))
-    out.push({ key: 'hold', title: 'Hold', sub: 'For a later release', tone: 'muted', decision: 'hold', releaseId: null, items: p.items.filter((i) => i.outcome === 'held'), ordered: false })
+  const picking = p.releases.some((r) => r.mode !== 'includes')
+  if (picking)
+    out.push({ key: 'hold', release: null, title: 'Hold', sub: 'For a later release', tone: 'muted', decision: 'hold', releaseId: null, items: p.items.filter((i) => i.outcome === 'held'), ordered: false })
   const undecided = p.items.filter((i) => i.outcome === 'decide')
-  if (undecided.length || p.releases.some((r) => r.mode === 'branch'))
-    out.push({ key: 'decide', title: 'To decide', sub: 'Drag each one where it goes', tone: 'warning', decision: null, releaseId: null, items: undecided, ordered: false })
+  if (undecided.length || picking)
+    out.push({ key: 'decide', release: null, title: 'To decide', sub: 'Drag each one where it goes', tone: 'warning', decision: null, releaseId: null, items: undecided, ordered: false })
   return out
 })
 const waiting = computed(() => plan.value?.items.filter((i) => i.outcome === 'waiting') ?? [])
+
+// ---- Releases: plan a separate one, open its PR, edit / delete; manage open release PRs
+const form = ref<{ id: string | null; branch: string; base: string; title: string } | null>(null)
+function newRelease() {
+  const p = plan.value
+  if (!p) return
+  const base = p.releases.find((r) => r.mode !== 'planned')?.base ?? 'master'
+  const day = new Date().toISOString().slice(0, 10)
+  form.value = { id: null, branch: `release/${day}`, base, title: `release: ${short(p.repo)} ${day}` }
+}
+function editRelease(r: PlanRelease) {
+  form.value = { id: r.id, branch: r.head, base: r.base, title: r.title }
+}
+async function saveRelease() {
+  const f = form.value
+  const p = plan.value
+  if (!f || !p) return
+  const ok = await deck.mutate(
+    () => (f.id ? api.plannedUpdate({ id: f.id, branch: f.branch.trim(), base: f.base.trim(), title: f.title.trim() }) : api.plannedCreate({ repo: p.repo, branch: f.branch.trim(), base: f.base.trim(), title: f.title.trim() })),
+    f.id ? 'Release updated' : 'Release planned: drag PRs into it',
+  )
+  if (ok) {
+    form.value = null
+    await load()
+  }
+}
+async function deleteRelease(r: PlanRelease) {
+  if (await deck.mutate(() => api.plannedDelete(r.id), `Removed ${r.head}; its PRs are undecided again`)) await load()
+}
+const opening = ref<string | null>(null)
+async function openPr(r: PlanRelease) {
+  opening.value = r.id
+  try {
+    let res: { number: number; url: string } | undefined
+    if (await deck.mutate(async () => void (res = await api.plannedOpenPr(r.id)), `Opened release PR for ${r.head}`)) {
+      await load()
+      if (res) deck.selectedId = `${plan.value?.repo.toLowerCase()}#${res.number}`
+    }
+  } finally {
+    opening.value = null
+  }
+}
+const prUrl = (id: string) => deck.byId.get(id)?.url
 
 // ---- Moving: drag and drop, or the card's Move to… menu
 const busy = ref(false)
@@ -272,6 +329,21 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
               <span class="font-mono text-foreground">{{ plan.repo }}</span> · merged into {{ plan.integration }}, not released.
               <template v-if="buckets.length">Drag a PR to where it goes, or within a release to set the cherry-pick order.</template>
             </p>
+            <!-- A separate release: a branch off the base, filled by cherry-picks (Claude creates it from the prompt) -->
+            <form v-if="form" class="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3" @submit.prevent="saveRelease">
+              <p class="text-xs font-medium">{{ form.id ? 'Edit the planned release' : 'New release' }}</p>
+              <div class="grid grid-cols-[1fr_8rem] gap-2">
+                <Input v-model="form.branch" class="h-8 font-mono text-xs" placeholder="release/plat-332" required />
+                <Input v-model="form.base" class="h-8 font-mono text-xs" placeholder="master" required />
+              </div>
+              <Input v-model="form.title" class="h-8 text-xs" placeholder="release: …" required />
+              <p class="text-[11px] text-muted-foreground">Branch, then the branch it's cut from and merges into. Claude creates it from the prompt; once it's pushed you can open the PR from here.</p>
+              <div class="flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" @click="form = null">Cancel</Button>
+                <Button size="sm" type="submit">{{ form.id ? 'Save' : 'Plan it' }}</Button>
+              </div>
+            </form>
+            <Button v-else variant="outline" size="sm" class="w-full border-dashed" @click="newRelease"><PhPlus /> New release (ship some PRs separately)</Button>
 
             <!-- Buckets -->
             <section
@@ -288,6 +360,26 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
                 <span :class="cn('text-xs font-semibold', TONE[b.tone])">{{ b.title }}</span>
                 <span class="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{{ b.sub }}</span>
                 <Badge variant="count">{{ b.items.length }}</Badge>
+                <!-- The release itself: open / edit it, or for a planned one open its PR, edit, remove -->
+                <DropdownMenu v-if="b.release">
+                  <DropdownMenuTrigger as-child>
+                    <Button variant="ghost" size="icon-xs" class="text-muted-foreground" :aria-label="`Release ${b.release.head}`"><PhDotsThree /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" class="w-64">
+                    <template v-if="b.release.mode === 'planned'">
+                      <DropdownMenuItem :disabled="opening === b.release.id" @select="openPr(b.release)"><PhGitPullRequest /> Open the release PR (branch pushed)</DropdownMenuItem>
+                      <DropdownMenuItem @select="editRelease(b.release)"><PhPencilSimple /> Edit branch / title…</DropdownMenuItem>
+                      <DropdownMenuItem variant="destructive" @select="deleteRelease(b.release)"><PhTrash /> Remove this release</DropdownMenuItem>
+                    </template>
+                    <template v-else>
+                      <DropdownMenuItem @select="deck.selectedId = b.release.id"><PhSidebarSimple /> Open #{{ b.release.number }}</DropdownMenuItem>
+                      <DropdownMenuItem v-if="prUrl(b.release.id)" as-child>
+                        <a :href="prUrl(b.release.id)" target="_blank" rel="noopener"><PhArrowSquareOut /> Open on GitHub</a>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem @select="deck.prWriter = b.release.id"><PhMagicWand /> Edit title and description…</DropdownMenuItem>
+                    </template>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </header>
               <div class="space-y-1">
                 <div

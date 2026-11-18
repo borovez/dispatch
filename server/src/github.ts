@@ -698,3 +698,24 @@ export async function githubRepoInfo(account: GithubAccount, repo: string) {
   const r = await request<{ full_name: string; description: string | null; private: boolean; pushed_at: string; default_branch: string }>(account.token, `/repos/${repo}`)
   return { title: r.full_name, description: r.description ?? '', private: r.private, updatedAt: r.pushed_at, defaultBranch: r.default_branch }
 }
+
+/** Whether a branch exists on GitHub (planned releases: is it pushed yet?) */
+export async function branchExists(account: GithubAccount, repo: string, branch: string): Promise<boolean> {
+  try {
+    await request(account.token, `/repos/${repo}/branches/${encodeURIComponent(branch)}`)
+    return true
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) return false
+    throw e
+  }
+}
+
+/** Open a pull request (a planned release whose branch is pushed); returns its number and URL */
+export async function createPull(
+  account: GithubAccount,
+  repo: string,
+  p: { head: string; base: string; title: string; body: string; draft?: boolean },
+): Promise<{ number: number; url: string }> {
+  const r = await request<{ number: number; html_url: string }>(account.token, `/repos/${repo}/pulls`, { method: 'POST', body: JSON.stringify(p) })
+  return { number: r.number, url: r.html_url }
+}

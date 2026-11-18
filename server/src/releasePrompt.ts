@@ -1,4 +1,5 @@
-import type { PlanItem, ReleasePlan } from '../../shared/types.ts'
+import type { PlanItem, PlannedRelease, ReleasePlan } from '../../shared/types.ts'
+import { getSettings } from './db.ts'
 import { claudeMdGuide } from './guides.ts'
 import { releasePlanFor } from './releasePlan.ts'
 
@@ -18,7 +19,35 @@ export async function buildReleasePrompt(repo: string): Promise<string | null> {
 
 const rel = (plan: ReleasePlan, id: string | null) => {
   const r = plan.releases.find((x) => x.id === id)
-  return r ? `\`${r.head}\` (release PR #${r.number})` : (id ?? '?')
+  if (!r) return id ?? '?'
+  return r.mode === 'planned' ? `\`${r.head}\` (a new release, see "Create these releases")` : `\`${r.head}\` (release PR #${r.number})`
+}
+
+/**
+ * The description of a release PR for a planned release: the JIRA section (my PR rules: a link per
+ * key), what ships, and deployment steps to fill in from the shipped PRs. Used when Dispatch opens the
+ * PR (POST /releases/planned/open-pr) and given to the agent in the prompt.
+ */
+export function plannedReleaseBody(r: Pick<PlannedRelease, 'repo' | 'branch' | 'base'>, items: PlanItem[]): string {
+  const base = getSettings().jira?.baseUrl?.replace(/\/+$/, '')
+  const keys = [...new Set(items.flatMap((i) => i.jira.map((j) => j.key)))]
+  const out = ['## JIRA', '']
+  if (keys.length) for (const k of keys) out.push(base ? `- [${k}](${base}/browse/${k})` : `- ${k}`)
+  else out.push('No JIRA issue: a release of the PRs below.')
+  out.push('', '## What ships', '')
+  for (const i of [...items].sort((a, b) => a.order - b.order)) out.push(`- ${r.repo}#${i.number} ${i.title}`)
+  out.push(
+    '',
+    `Released separately on \`${r.branch}\` (cut from \`${r.base}\`), cherry-picked with \`-x\`.`,
+    '',
+    '## Deployment steps',
+    '',
+    '- [ ] Follow the deployment steps of each PR listed above (from their descriptions), in this order',
+    `- [ ] Merge into \`${r.base}\` and deploy`,
+    `- [ ] Back-merge \`${r.base}\` into the integration branch if the release needed its own fixes`,
+    '',
+  )
+  return out.join('\n')
 }
 /** PR titles are other people's text: shown as data, never as instructions */
 const title = (t: string) => `\`${t.replace(/`/g, "'")}\``
@@ -44,6 +73,22 @@ function render(plan: ReleasePlan, guide: string | null): string {
       `- #${r.number} \`${r.head}\` → \`${r.base}\`: ${r.mode === 'includes' ? `ships everything in \`${integration}\` (nothing to cherry-pick into it)` : 'its own branch: work gets in by cherry-picking'}`,
     )
   out.push('')
+
+  // Releases I planned that don't exist on GitHub yet: the agent creates them
+  const planned = plan.releases.filter((r) => r.mode === 'planned')
+  if (planned.length) {
+    out.push('## 0. Create these releases first', '')
+    out.push(
+      "Separate releases I planned in Dispatch. For each: create the branch from the base, cherry-pick its PRs (section 1, in order), push after my OK, then open the PR with exactly this title and body (it's what Dispatch expects; you may add to the deployment steps from the PRs' own descriptions):",
+      '',
+    )
+    for (const r of planned) {
+      const items = plan.items.filter((i) => i.target === r.id)
+      out.push(`### \`${r.head}\` → \`${r.base}\``, '')
+      out.push('```sh', `git fetch origin && git switch -c ${r.head} origin/${r.base}`, '# … cherry-pick its PRs (section 1), run the tests, show me, then after my OK:', `git push -u origin ${r.head}`, `gh pr create --repo ${repo} --base ${r.base} --head ${r.head} --title ${JSON.stringify(r.title)} --body-file <the body below>`, '```', '')
+      out.push('Body:', '', '````markdown', plannedReleaseBody({ repo, branch: r.head, base: r.base }, items).trim(), '````', '')
+    }
+  }
 
   out.push(`## 1. Cherry-pick these (clear, in this order)`, '')
   if (!pick.length) out.push('- Nothing to pick.')
@@ -111,6 +156,7 @@ function render(plan: ReleasePlan, guide: string | null): string {
   out.push(
     '- Never force-push, rewrite or delete a branch.',
     '- Never push to `main` / `master` or the integration branch; only to the release branch, after my OK.',
+    '- Never open a release PR other than the ones listed under "Create these releases".',
     '- Never merge a release PR, and never decide an open question for me.',
     '',
   )

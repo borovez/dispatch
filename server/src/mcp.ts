@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import type { JiraFieldMeta, JiraFieldValue, JiraValueLabels, Overview, PrView } from '../../shared/types.ts'
-import { addManualDep, getSettings, getSlackItem, listPrs, listSlack, removeManualDep, setReleaseDecision, setSlackStatus, upsertJira } from './db.ts'
+import { addManualDep, getSettings, getSlackItem, listPlannedReleases, listPrs, listSlack, removeManualDep, setReleaseDecision, setSlackStatus, upsertJira } from './db.ts'
 import { buildReleasePlans, releasePlanFor } from './releasePlan.ts'
 import { buildReleasePrompt } from './releasePrompt.ts'
 import { addComment, choicesFor, composeCreate, composeUpdate, createMeta, editable, resolveFieldInput } from './jira.ts'
@@ -280,15 +280,18 @@ server.registerTool(
     inputSchema: {
       prId: z.string().describe('the PR merged into dev, e.g. owner/repo#12'),
       decision: z.enum(['release', 'hold', 'skip']).nullable(),
-      releaseId: z.string().optional().describe('decision release: the open release PR, e.g. owner/repo#99'),
+      releaseId: z.string().optional().describe('decision release: the open release PR (owner/repo#99) or a planned release (planned:…)'),
       note: z.string().max(500).optional().describe("the user's reason, short"),
     },
   },
   async ({ prId, decision, releaseId, note }) => {
     const id = prId.toLowerCase()
-    if (decision === 'release') {
+    if (decision === 'release' && releaseId?.startsWith('planned:')) {
+      if (!listPlannedReleases().some((r) => r.id === releaseId)) return text(`No planned release ${releaseId}`)
+      setReleaseDecision(id, { decision, releaseId, note: note ?? null })
+    } else if (decision === 'release') {
       const r = listPrs().find((s) => s.pr.id === releaseId?.toLowerCase())?.pr
-      if (!r || r.state !== 'OPEN') return text(`releaseId must be an open release PR (got ${releaseId ?? 'none'})`)
+      if (!r || r.state !== 'OPEN') return text(`releaseId must be an open release PR or a planned release (got ${releaseId ?? 'none'})`)
       setReleaseDecision(id, { decision, releaseId: r.id, note: note ?? null })
     } else setReleaseDecision(id, decision ? { decision, note: note ?? null } : null)
     return text(decision ? `Recorded: ${id} → ${decision}${decision === 'release' ? ` ${releaseId}` : ''}` : `Cleared the decision for ${id}`)

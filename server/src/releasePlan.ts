@@ -1,5 +1,5 @@
 import type { Overview, PlanItem, PlanRelease, ReleasePlan } from '../../shared/types.ts'
-import { listPrs, listReleaseDecisions } from './db.ts'
+import { deletePlannedRelease, listPlannedReleases, listPrs, listReleaseDecisions, movePlannedDecisions } from './db.ts'
 import { integrationBranches } from './flow.ts'
 import { buildOverview } from './model.ts'
 
@@ -18,7 +18,7 @@ import { buildOverview } from './model.ts'
  */
 export function buildReleasePlans(overview: Overview = buildOverview()): ReleasePlan[] {
   const integration = integrationBranches(listPrs().map((s) => s.pr))
-  const decisions = listReleaseDecisions()
+  const plannedAll = listPlannedReleases()
   const jiraByKey = new Map(overview.jira.map((j) => [j.key, j]))
   const flagByKey = new Map(overview.flags.map((f) => [f.key, f]))
   const byId = new Map(overview.prs.map((p) => [p.id, p]))
@@ -27,12 +27,24 @@ export function buildReleasePlans(overview: Overview = buildOverview()): Release
   for (const [repoLower, integ] of integration) {
     const repoPrs = overview.prs.filter((p) => p.repo.toLowerCase() === repoLower)
     if (!repoPrs.length) continue
-    const releases: PlanRelease[] = repoPrs
-      .filter((p) => p.flow === 'release' && p.state === 'OPEN')
-      .map((p) => ({ id: p.id, number: p.number, title: p.title, head: p.headRef, base: p.baseRef, mode: p.headRef.toLowerCase() === integ.toLowerCase() ? 'includes' : 'branch' }))
+    const open = repoPrs.filter((p) => p.flow === 'release' && p.state === 'OPEN')
+    // A planned release whose PR now exists (same branch) becomes that PR: my decisions follow it
+    const planned = plannedAll.filter((r) => r.repo.toLowerCase() === repoLower)
+    for (const r of planned) {
+      const pr = repoPrs.find((p) => p.state !== 'CLOSED' && p.headRef === r.branch)
+      if (pr) (movePlannedDecisions(r.id, pr.id), deletePlannedRelease(r.id))
+    }
+    const decisions = listReleaseDecisions()
+    const releases: PlanRelease[] = [
+      ...open.map((p): PlanRelease => ({ id: p.id, number: p.number, title: p.title, head: p.headRef, base: p.baseRef, mode: p.headRef.toLowerCase() === integ.toLowerCase() ? 'includes' : 'branch' })),
+      ...planned
+        .filter((r) => !repoPrs.some((p) => p.state !== 'CLOSED' && p.headRef === r.branch))
+        .map((r): PlanRelease => ({ id: r.id, number: 0, title: r.title, head: r.branch, base: r.base, mode: 'planned' })),
+    ]
     const includes = releases.filter((r) => r.mode === 'includes')
-    const branches = releases.filter((r) => r.mode === 'branch')
-    const ref = (r: PlanRelease) => `\`${r.head}\` (#${r.number})`
+    // Releases work is cherry-picked into: open release branches and the ones I planned
+    const branches = releases.filter((r) => r.mode !== 'includes')
+    const ref = (r: PlanRelease) => (r.mode === 'planned' ? `\`${r.head}\` (planned)` : `\`${r.head}\` (#${r.number})`)
 
     const merged = repoPrs.filter((p) => p.state === 'MERGED' && !p.flow && p.baseRef.toLowerCase() === integ.toLowerCase() && !p.release?.released)
     if (!merged.length && !releases.length) continue
@@ -67,8 +79,13 @@ export function buildReleasePlans(overview: Overview = buildOverview()): Release
         order: 0,
         locked: false,
       }
+      // Already in a release branch's contents (picked there): fixed. In a dev → master release's: it ships
+      // with that one, but it can still go out earlier on its own branch (my decision moves it)
       const openShip = p.shipsIn.find((s) => s.state !== 'CLOSED')
-      if (openShip) return { ...base, outcome: 'shipping', target: openShip.id, locked: true }
+      const shipRel = openShip && byId.get(openShip.id)
+      if (openShip && (openShip.state === 'MERGED' || (shipRel && shipRel.headRef.toLowerCase() !== integ.toLowerCase())))
+        return { ...base, outcome: 'shipping', target: openShip.id, locked: true }
+      if (openShip && (!live || live.decision !== 'release')) return { ...base, outcome: 'shipping', target: openShip.id, decision: null }
       if (live?.decision === 'hold') return { ...base, outcome: 'held' }
       if (live?.decision === 'skip') return { ...base, outcome: 'skipped', target: includes[0]?.id ?? null }
       if (live?.decision === 'release') {

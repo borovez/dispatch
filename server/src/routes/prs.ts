@@ -1,15 +1,16 @@
+import { randomUUID } from 'node:crypto'
 import { checkBackmerge, computeReleaseContents } from '../releases.ts'
 import { buildReleasePlans, releasePlanFor } from '../releasePlan.ts'
-import { buildReleasePrompt } from '../releasePrompt.ts'
+import { buildReleasePrompt, plannedReleaseBody } from '../releasePrompt.ts'
 import { adfToMarkdown } from '../../../shared/adf.ts'
 import { z } from 'zod'
 import type { ActionKind, GithubAccount, PrRecord } from '../../../shared/types.ts'
 import { ACTION_LABELS } from '../../../shared/types.ts'
-import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTitle, updatePrData, upsertPr, listReleaseContents, setDoneAction, setReleaseDecision } from '../db.ts'
+import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTitle, updatePrData, upsertPr, listReleaseContents, setDoneAction, setReleaseDecision, listPlannedReleases, savePlannedRelease, deletePlannedRelease } from '../db.ts'
 import { draftPrText } from '../ai.ts'
 import { keepDeclarations } from '../prWriter.ts'
 import { claudeMdGuide } from '../guides.ts'
-import { fetchPrsByNodeId, fetchPrsByRef, getPrText, prCommits, prDetail, prTemplate, updatePrText } from '../github.ts'
+import { fetchPrsByNodeId, fetchPrsByRef, getPrText, prCommits, prDetail, prTemplate, updatePrText, branchExists, createPull } from '../github.ts'
 import { getIssueDetail, fetchIssuesByKey } from '../jira.ts'
 import { buildOverview } from '../model.ts'
 import { extractJiraKeys, parseBodyDependencies, parsePrId } from '../refs.ts'
@@ -141,6 +142,61 @@ api.post('/prs/resync-many', async (c) => {
 })
 
 // ---------- Release planner ----------
+/** A decision's release: an open release PR, or a release I planned */
+function checkReleaseTarget(id: string | null | undefined) {
+  if (id?.startsWith('planned:')) {
+    if (!listPlannedReleases().some((r) => r.id === id)) throw bad('That planned release no longer exists')
+    return
+  }
+  const open = listPrs().find((s) => s.pr.id === id)?.pr
+  if (!open || open.state !== 'OPEN') throw bad('releaseId must be an open release PR or a planned release')
+}
+const BRANCH = z.string().min(1).max(200).regex(/^(?!\/)(?!.*\.\.)(?!.*\/\/)[A-Za-z0-9._\/-]+(?<![./])$/, 'Not a valid branch name')
+
+/** Plan a separate release (a branch off `base` that the agent creates and fills) */
+api.post('/releases/planned', async (c) => {
+  const body = z.object({ repo: z.string().min(3), branch: BRANCH, base: BRANCH, title: z.string().min(1).max(200) }).parse(await c.req.json())
+  const repo = listPrs().find((s) => s.pr.repo.toLowerCase() === body.repo.toLowerCase())?.pr.repo
+  if (!repo) throw bad(`Unknown repo ${body.repo}`)
+  if (listPrs().some((s) => s.pr.repo === repo && s.pr.state === 'OPEN' && s.pr.headRef === body.branch)) throw bad(`A PR from ${body.branch} is already open`)
+  if (listPlannedReleases().some((r) => r.repo === repo && r.branch === body.branch)) throw bad(`${body.branch} is already planned`)
+  const r = { id: `planned:${randomUUID()}`, repo, branch: body.branch, base: body.base, title: body.title, createdAt: new Date().toISOString() }
+  savePlannedRelease(r)
+  return c.json(r)
+})
+/** Rename a planned release (branch, base, title) */
+api.put('/releases/planned', async (c) => {
+  const body = z.object({ id: z.string().startsWith('planned:'), branch: BRANCH, base: BRANCH, title: z.string().min(1).max(200) }).parse(await c.req.json())
+  const r = listPlannedReleases().find((x) => x.id === body.id)
+  if (!r) throw bad('That planned release no longer exists')
+  savePlannedRelease({ ...r, branch: body.branch, base: body.base, title: body.title })
+  return c.json({ ok: true })
+})
+/** Drop a planned release (the PRs in it go back to undecided) */
+api.delete('/releases/planned', async (c) => {
+  const { id } = z.object({ id: z.string().startsWith('planned:') }).parse(await c.req.json())
+  deletePlannedRelease(id)
+  return c.json({ ok: true })
+})
+/** Open the release PR for a planned release whose branch is pushed: title, and a body listing what ships */
+api.post('/releases/planned/open-pr', async (c) => {
+  const { id } = z.object({ id: z.string().startsWith('planned:') }).parse(await c.req.json())
+  const r = listPlannedReleases().find((x) => x.id === id)
+  if (!r) throw bad('That planned release no longer exists')
+  const accounts = getSettings().github.accounts.filter((a) => a.token)
+  const acc = accountForOwner(accounts, r.repo.split('/')[0]!)
+  if (!acc) throw bad(`No GitHub account for ${r.repo}`)
+  if (!(await branchExists(acc, r.repo, r.branch)))
+    throw bad(`${r.branch} isn't on GitHub yet: let Claude create and push it (Copy prompt), then open the PR`)
+  const plan = releasePlanFor(r.repo)
+  const items = plan?.items.filter((i) => i.target === r.id) ?? []
+  const created = await createPull(acc, r.repo, { head: r.branch, base: r.base, title: r.title, body: plannedReleaseBody(r, items) })
+  // Pull it in now, so the plan shows the real PR (and my decisions move to it)
+  const prs = await fetchPrsByRef(acc, [{ owner: r.repo.split('/')[0]!, name: r.repo.split('/')[1]!, number: created.number }])
+  for (const pr of prs) upsertPr(pr, ['authored'], new Date().toISOString())
+  return c.json(created)
+})
+
 /** Every repo's plan, or one (`?repo=owner/name`) */
 api.get('/releases/plan', (c) => {
   const repo = c.req.query('repo')
@@ -154,10 +210,7 @@ api.put('/releases/decision', async (c) => {
   const body = z
     .object({ prId: z.string().min(1), decision: z.enum(['release', 'hold', 'skip']).nullable(), releaseId: z.string().nullish(), note: z.string().max(500).nullish() })
     .parse(await c.req.json())
-  if (body.decision === 'release') {
-    const open = listPrs().find((s) => s.pr.id === body.releaseId)?.pr
-    if (!open || open.state !== 'OPEN') throw bad('releaseId must be an open release PR')
-  }
+  if (body.decision === 'release') checkReleaseTarget(body.releaseId)
   setReleaseDecision(body.prId, body.decision ? { decision: body.decision, releaseId: body.decision === 'release' ? body.releaseId : null, note: body.note } : null)
   return c.json({ ok: true })
 })
@@ -166,10 +219,7 @@ api.put('/releases/arrange', async (c) => {
   const body = z
     .object({ prIds: z.array(z.string().min(1)).max(500), decision: z.enum(['release', 'hold', 'skip']), releaseId: z.string().nullish() })
     .parse(await c.req.json())
-  if (body.decision === 'release') {
-    const open = listPrs().find((s) => s.pr.id === body.releaseId)?.pr
-    if (!open || open.state !== 'OPEN') throw bad('releaseId must be an open release PR')
-  }
+  if (body.decision === 'release') checkReleaseTarget(body.releaseId)
   body.prIds.forEach((id, i) => setReleaseDecision(id, { decision: body.decision, releaseId: body.decision === 'release' ? body.releaseId : null, position: i + 1 }))
   return c.json({ ok: true })
 })
