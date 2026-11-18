@@ -68,16 +68,24 @@ export async function syncReleaseFlow(accounts: GithubAccount[], errors: string[
 
   const checked = listBackmerges()
   for (const pr of prs) {
-    if (prFlow(pr, integration) !== 'hotfix' || pr.state !== 'MERGED' || !pr.mergeCommitSha) continue
     if (checked.get(pr.id)?.backmerged) continue
-    const into = integration.get(pr.repo.toLowerCase())
     const acc = accountFor(accounts, pr)
-    if (!into || !acc) continue
-    try {
-      setBackmerge(pr.id, { backmerged: await isCommitIn(acc, pr.repo, pr.mergeCommitSha, into), into, checkedAt: new Date().toISOString() })
-    } catch (e) {
-      setBackmerge(pr.id, { backmerged: false, into, checkedAt: new Date().toISOString(), error: (e as Error).message })
-    }
+    if (acc) await checkBackmerge(acc, pr, integration)
+  }
+}
+
+/**
+ * For a merged hotfix: is its merge commit in the integration branch (dev) yet? Cached per PR; the
+ * sync step runs it for every unchecked hotfix, the PR resync routes for the PRs they refetch.
+ */
+export async function checkBackmerge(acc: GithubAccount, pr: PrRecord, integration = integrationBranches(listPrs().map((s) => s.pr))) {
+  if (prFlow(pr, integration) !== 'hotfix' || pr.state !== 'MERGED' || !pr.mergeCommitSha) return
+  const into = integration.get(pr.repo.toLowerCase())
+  if (!into) return
+  try {
+    setBackmerge(pr.id, { backmerged: await isCommitIn(acc, pr.repo, pr.mergeCommitSha, into), into, checkedAt: new Date().toISOString() })
+  } catch (e) {
+    setBackmerge(pr.id, { backmerged: false, into, checkedAt: new Date().toISOString(), error: (e as Error).message })
   }
 }
 

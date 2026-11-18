@@ -1,4 +1,4 @@
-import { computeReleaseContents } from '../releases.ts'
+import { checkBackmerge, computeReleaseContents } from '../releases.ts'
 import { adfToMarkdown } from '../../../shared/adf.ts'
 import { z } from 'zod'
 import type { GithubAccount, PrRecord } from '../../../shared/types.ts'
@@ -37,6 +37,7 @@ api.post('/prs/resync', async (c) => {
   if (!prs[0]) throw bad(errors[0] ?? 'GitHub returned nothing for this PR')
   updatePrData(prs[0])
   if (listReleaseContents().some((r) => r.prId === id)) await computeReleaseContents(acc, prs[0])
+  await checkBackmerge(acc, prs[0])
   return c.json(prs[0])
 })
 
@@ -81,9 +82,10 @@ api.post('/prs/resync-many', async (c) => {
       const r = await fetchPrsByNodeId(acc, nodeIds)
       fresh.push(...r.prs)
       errors.push(...r.errors.map((e) => `[${acc.label}] ${e}`))
+      for (const pr of r.prs) updatePrData(pr)
+      for (const pr of r.prs) await checkBackmerge(acc, pr) // merged hotfixes: in dev yet?
     }),
   )
-  for (const pr of fresh) updatePrData(pr)
 
   // Dependency targets the descriptions now name that Dispatch doesn't have yet
   const missing = [...new Set(fresh.flatMap((pr) => parseBodyDependencies(pr.body, pr.repo, pr.id).map((d) => d.to)))].filter((id) => !stored.has(id))
