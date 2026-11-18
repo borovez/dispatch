@@ -7,14 +7,13 @@ import ExternalLink from '@/components/ExternalLink.vue'
 import { useArrowNav } from '@/composables/prNav'
 import { useDependencies } from '@/composables/dependencies'
 import { useReleaseNav } from '@/composables/releaseNav'
-import { followBeside, openBeside } from '@/composables/besideWindow'
 import { issueSeedFromPr, removeDependencyEntry, useJiraMenu, usePrMenu } from '@/composables/itemMenus'
 import ItemContextMenu from './ItemContextMenu.vue'
 import { loadPrDetail } from '@/composables/prDetail'
 import { releaseStatus } from '@shared/release'
 import SidePanel from './SidePanel.vue'
 import { computed, ref, watch } from 'vue'
-import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhPlus, PhPushPin, PhSquareSplitHorizontal, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit } from '@phosphor-icons/vue'
+import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhPlus, PhPushPin, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit } from '@phosphor-icons/vue'
 import type { DepEdge, PrDetail } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
@@ -206,8 +205,6 @@ async function resync() {
   await deck.mutate(() => Promise.all([api.resyncPr(id), ...keys.map((k) => api.jiraRefresh(k))]))
   resyncing.value = false
 }
-// The beside window follows the PR shown here
-watch(() => pr.value?.url, (url) => url && followBeside(url))
 
 const note = ref('')
 watch(pr, (p) => (note.value = p?.note ?? ''), { immediate: true })
@@ -272,12 +269,6 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             <Button variant="ghost" size="icon-sm" aria-label="Edit title and description" class="text-primary" @click="deck.prWriter = pr.id"><PhMagicWand weight="fill" /></Button>
           </TooltipTrigger>
           <TooltipContent>Edit title and description, with Claude</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Button variant="ghost" size="icon-sm" aria-label="Open beside" @click="openBeside(pr.url)"><PhSquareSplitHorizontal /></Button>
-          </TooltipTrigger>
-          <TooltipContent>Open on GitHub in a window beside this one (follows the PR you select)</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger as-child>

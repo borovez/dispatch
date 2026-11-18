@@ -2,10 +2,9 @@
 import type { PrView } from '@shared/types'
 import PrPreview from './PrPreview.vue'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
-import { modKey } from '@/lib/external'
 
 /**
- * Wraps a PR row or card (default slot) with a hover preview: description start and changed files.
+ * Wraps a PR row or card (default slot) with a hover preview: status, what it does, branch and size, Open / GitHub / Copy (`PrPreview`).
  * Loads on first open (shared cache). `disabled` renders the slot alone.
  */
 withDefaults(defineProps<{ pr: PrView; side?: 'right' | 'bottom'; disabled?: boolean }>(), { side: 'right' })
@@ -15,9 +14,9 @@ withDefaults(defineProps<{ pr: PrView; side?: 'right' | 'bottom'; disabled?: boo
   <slot v-if="disabled" />
   <HoverCard v-else :open-delay="600" :close-delay="100">
     <HoverCardTrigger as-child><slot /></HoverCardTrigger>
-    <HoverCardContent :side="side" align="start" class="w-96">
+    <!-- Same size and padding as the link hover card -->
+    <HoverCardContent :side="side" align="start" class="w-[360px] p-3" data-no-link-preview>
       <PrPreview :pr="pr" />
-      <p class="mt-3 border-t pt-2 text-[11px] text-muted-foreground">Click opens it here · {{ modKey }}-click opens GitHub ↗</p>
     </HoverCardContent>
   </HoverCard>
 </template>

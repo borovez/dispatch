@@ -3,14 +3,13 @@ import ShareMenu from '@/components/ShareMenu.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, ref, watch } from 'vue'
-import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhArrowsClockwise, PhSquareSplitHorizontal, PhRobot } from '@phosphor-icons/vue'
+import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhArrowsClockwise, PhRobot } from '@phosphor-icons/vue'
 import type { JiraIssueDetail, LinkedPrs } from '@shared/types'
 import LinkedPrRow from './LinkedPrRow.vue'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useArrowNav } from '@/composables/prNav'
 import { useReleaseNav } from '@/composables/releaseNav'
-import { followBeside, openBeside } from '@/composables/besideWindow'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { jiraTone, timeAgo, fullDate, jiraIcon } from '@/utils/format'
 import AdfView from './AdfView.vue'
@@ -48,7 +47,6 @@ const depPrs = computed(() => prs.value.map((p) => p.id).filter(nav.hasDeps))
 /** Flags named by this issue's PRs */
 const flags = computed(() => [...new Set(prs.value.flatMap((p) => p.flags))])
 const url = computed(() => issue.value?.url ?? (deck.overview?.jiraBaseUrl && key.value ? `${deck.overview.jiraBaseUrl}/browse/${key.value}` : undefined))
-watch(url, (u) => u && followBeside(u))
 useArrowNav('jira', () => deck.selectedJiraKey, (k) => (deck.selectedJiraKey = k))
 
 /** Description and comments, fetched once per issue for this page session */
@@ -281,12 +279,6 @@ const details = computed(() => {
           </Button>
         </TooltipTrigger>
         <TooltipContent>Reload from Jira</TooltipContent>
-      </Tooltip>
-      <Tooltip v-if="url">
-        <TooltipTrigger as-child>
-          <Button variant="ghost" size="icon-sm" aria-label="Open beside" @click="openBeside(url!)"><PhSquareSplitHorizontal /></Button>
-        </TooltipTrigger>
-        <TooltipContent>Open in Jira in a window beside this one (follows the issue you select)</TooltipContent>
       </Tooltip>
     </template>
 

@@ -1,3 +1,5 @@
+> **Status (Nov 2026):** the popup "Open beside" window (`besideWindow.ts`) this spec builds on was removed; GitHub and Jira open in the browser. Bring back a side window together with this pane.
+
 # Task: Native desktop app with an embedded browser pane
 
 Status: not started (deferred)

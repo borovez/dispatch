@@ -15,7 +15,6 @@ import {
   PhRobot,
   PhRocketLaunch,
   PhSidebarSimple,
-  PhSquareSplitHorizontal,
   PhSwap,
   PhTrash,
   PhArrowCounterClockwise,
@@ -27,7 +26,6 @@ import type { DepEdge, JiraIssueView, PrView, SlackItem } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useReleaseNav } from '@/composables/releaseNav'
-import { openBeside } from '@/composables/besideWindow'
 import { transitionsFor } from '@/composables/jiraTransitions'
 
 /**
@@ -114,7 +112,6 @@ export function usePrMenu() {
     const url = `https://github.com/${repo}/pull/${n}`
     return [
       { label: 'Open on GitHub', icon: PhArrowSquareOut, href: url },
-      { label: 'Open beside', icon: PhSquareSplitHorizontal, run: () => openBeside(url) },
       'separator',
       { label: 'Copy link', icon: PhCopy, run: () => copyText(url, 'link') },
       ...(extra.length ? (['separator', ...extra] as MenuEntry[]) : []),
@@ -127,7 +124,6 @@ export function usePrMenu() {
     return [
       ...openEntry(deck, deck.selectedId === pr.id, () => (deck.selectedId = pr.id)),
       { label: 'Open on GitHub', icon: PhArrowSquareOut, href: pr.url },
-      { label: 'Open beside', icon: PhSquareSplitHorizontal, run: () => openBeside(pr.url) },
       'separator',
       {
         label: 'Copy',
@@ -189,7 +185,6 @@ export function useJiraMenu() {
       ...(url
         ? [
             { label: 'Open in Jira', icon: PhArrowSquareOut, href: url },
-            { label: 'Open beside', icon: PhSquareSplitHorizontal, run: () => openBeside(url) },
           ]
         : []),
       'separator',
