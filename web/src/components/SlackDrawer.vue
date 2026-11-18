@@ -69,18 +69,8 @@ async function load(id: string, opts: { reveal?: boolean } = {}) {
     if (item.value?.id === id) error.value = (e as Error).message
   }
 }
-watch(
-  () => item.value?.id,
-  (id) => {
-    ctx.value = null
-    error.value = ''
-    threads.value = {}
-    counts.value = { before: 2, after: 2 }
-    closeReply()
-    if (id) load(id, { reveal: true })
-  },
-  { immediate: true },
-)
+/** Threads expanded under conversation messages (by the parent's ts) */
+const threads = ref<Record<string, { open: boolean; loading: boolean; replies: SlackMessage[] | null; error?: string }>>({})
 /** Keeps what's shown while the wider window loads */
 async function more(side: 'before' | 'after') {
   if (!item.value || loading.value) return
@@ -169,8 +159,6 @@ function messageLink(m: SlackMessage, parentTs?: string): string | null {
   return thread && m.ts !== thread ? `${url}?thread_ts=${thread}&cid=${i.channelId}` : url
 }
 
-/** Threads expanded under conversation messages (by the parent's ts) */
-const threads = ref<Record<string, { open: boolean; loading: boolean; replies: SlackMessage[] | null; error?: string }>>({})
 async function toggleThread(m: SlackMessage, force = false) {
   const i = item.value
   if (!i) return
@@ -198,6 +186,19 @@ async function copyPrompt() {
   await copySlackPrompt(item.value, counts.value.before, counts.value.after)
   copying.value = false
 }
+// Last in setup: it runs at once (immediate) and touches refs declared above
+watch(
+  () => item.value?.id,
+  (id) => {
+    ctx.value = null
+    error.value = ''
+    threads.value = {}
+    counts.value = { before: 2, after: 2 }
+    closeReply()
+    if (id) load(id, { reveal: true })
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

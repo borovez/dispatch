@@ -125,7 +125,8 @@ const banner = computed(() => {
   // Conflicts behind a more pressing action (changes requested…) still show, once, here
   if (p.state === 'OPEN' && p.mergeable === 'CONFLICTING' && p.action.kind !== 'resolve_conflicts') lines.push(`Also conflicts with ${p.baseRef}`)
   // The exact tag (releasedIn, shown below) is more precise than "in the latest tag"
-  if (p.state === 'MERGED' && p.release && !p.releasedIn) {
+  // A hotfix waiting on its backmerge: that's the story; its release line only repeats where it was merged
+  if (p.state === 'MERGED' && p.release && !p.releasedIn && p.action.kind !== 'backmerge') {
     const r = releaseStatus(p.release).long
     if (!lines.includes(r)) lines.push(r)
   }
@@ -363,17 +364,17 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                 </template>
                 <template v-if="train.with.length">
                   · with
-                  <button v-for="w in train.with" :key="w" class="font-mono text-primary hover:underline" @click="deck.selectedId = w"><RepoName :id="w" /></button>
+                  <ItemContextMenu v-for="w in train.with" :key="w" as="span" :entries="() => prMenu.byId(w)"><button class="font-mono text-primary hover:underline" @click="deck.selectedId = w"><RepoName :id="w" /></button></ItemContextMenu>
                 </template>
               </p>
               <p v-if="pr.releasedIn" class="flex items-center gap-1.5">
                 <PhRocketLaunch :size="14" />Released in
                 <ExternalLink :href="pr.releasedIn.url" class="font-mono text-primary">{{ pr.releasedIn.tag }}</ExternalLink>
               </p>
-              <p v-if="pr.backmerge && pr.state === 'MERGED'">
+              <p v-if="pr.backmerge && pr.state === 'MERGED' && (pr.backmerge.backmerged || pr.backmergePr)">
                 <template v-if="pr.backmerge.backmerged">Back in {{ pr.backmerge.into }}.</template>
                 <template v-else-if="pr.backmergePr">
-                  Backmerge <button class="font-mono text-primary hover:underline" @click="deck.selectedId = pr.backmergePr"><RepoName :id="pr.backmergePr" /></button> is open.
+                  Backmerge <ItemContextMenu as="span" :entries="() => prMenu.byId(pr?.backmergePr ?? '')"><button class="font-mono text-primary hover:underline" @click="deck.selectedId = pr.backmergePr"><RepoName :id="pr.backmergePr" /></button></ItemContextMenu> is open.
                 </template>
               </p>
             </AlertDescription>

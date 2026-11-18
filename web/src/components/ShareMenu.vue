@@ -63,36 +63,39 @@ async function share() {
 </script>
 
 <template>
-  <DropdownMenu>
-    <Tooltip>
-      <TooltipTrigger as-child>
-        <DropdownMenuTrigger as-child>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            :class="copied && 'bg-success/15 text-success hover:bg-success/20 hover:text-success'"
-            :aria-label="copied ? 'Copied' : `Share this ${what}`"
-          >
-            <PhCheck v-if="copied" weight="bold" />
-            <PhExport v-else />
-          </Button>
-        </DropdownMenuTrigger>
-      </TooltipTrigger>
-      <TooltipContent>{{ copied ? 'Copied' : `Share: copy the link to this ${what}` }}</TooltipContent>
-    </Tooltip>
-    <DropdownMenuContent align="end" class="w-64">
-      <DropdownMenuItem @select="copy(url, 'Link')"><PhLink /> Copy link</DropdownMenuItem>
-      <DropdownMenuItem @select="copyRich"><PhTextAa /> Copy link with title</DropdownMenuItem>
-      <DropdownMenuItem @select="copy(`[${label()}](${url})`, 'Markdown link')"><PhMarkdownLogo /> Copy as Markdown</DropdownMenuItem>
-      <DropdownMenuItem v-if="refLabel" @select="copy(refLabel!, refLabel!)">
-        <PhHash /> Copy {{ refLabel.includes('#') ? 'reference' : 'key' }}
-        <DropdownMenuShortcut class="max-w-28 truncate font-mono">{{ refLabel }}</DropdownMenuShortcut>
-      </DropdownMenuItem>
-      <DropdownMenuItem v-if="title" @select="copy(title!, 'Title')"><PhCopy /> Copy title</DropdownMenuItem>
-      <template v-if="canShare">
-        <DropdownMenuSeparator />
-        <DropdownMenuItem @select="share"><PhExport /> Share…</DropdownMenuItem>
-      </template>
-    </DropdownMenuContent>
-  </DropdownMenu>
+  <!-- Tooltip around the whole menu: nested inside it, the menu's trigger anchored to the tooltip and the menu was never positioned -->
+  <Tooltip>
+    <TooltipTrigger as-child>
+      <span class="inline-flex">
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              :class="copied && 'bg-success/15 text-success hover:bg-success/20 hover:text-success'"
+              :aria-label="copied ? 'Copied' : `Share this ${what}`"
+            >
+              <PhCheck v-if="copied" weight="bold" />
+              <PhExport v-else />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" class="w-64">
+            <DropdownMenuItem @select="copy(url, 'Link')"><PhLink /> Copy link</DropdownMenuItem>
+            <DropdownMenuItem @select="copyRich"><PhTextAa /> Copy link with title</DropdownMenuItem>
+            <DropdownMenuItem @select="copy(`[${label()}](${url})`, 'Markdown link')"><PhMarkdownLogo /> Copy as Markdown</DropdownMenuItem>
+            <DropdownMenuItem v-if="refLabel" @select="copy(refLabel!, refLabel!)">
+              <PhHash /> Copy {{ refLabel.includes('#') ? 'reference' : 'key' }}
+              <DropdownMenuShortcut class="max-w-28 truncate font-mono">{{ refLabel }}</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem v-if="title" @select="copy(title!, 'Title')"><PhCopy /> Copy title</DropdownMenuItem>
+            <template v-if="canShare">
+              <DropdownMenuSeparator />
+              <DropdownMenuItem @select="share"><PhExport /> Share…</DropdownMenuItem>
+            </template>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </span>
+    </TooltipTrigger>
+    <TooltipContent>{{ copied ? 'Copied' : `Share: copy the link to this ${what}` }}</TooltipContent>
+  </Tooltip>
 </template>

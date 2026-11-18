@@ -86,20 +86,23 @@ defineExpose({ focus })
       @keydown="onKeydown"
     >
       <template #toolbar>
-        <DropdownMenu v-if="people.length">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <DropdownMenuTrigger as-child>
-                <Button type="button" variant="ghost" size="icon-xs" aria-label="Mention someone" @mousedown.prevent><PhAt /></Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>Mention someone</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent align="start" @close-auto-focus.prevent="editor?.el()?.focus()">
-            <DropdownMenuLabel class="text-xs text-muted-foreground">In this conversation</DropdownMenuLabel>
-            <DropdownMenuItem v-for="p in people" :key="p.id" @select="mention(p.name)">@{{ p.name }}</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <!-- Tooltip around the whole menu: nested inside it, the menu's trigger anchored to the tooltip and the menu was never positioned -->
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <span class="inline-flex">
+              <DropdownMenu v-if="people.length">
+                <DropdownMenuTrigger as-child>
+                  <Button type="button" variant="ghost" size="icon-xs" aria-label="Mention someone" @mousedown.prevent><PhAt /></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" @close-auto-focus.prevent="editor?.el()?.focus()">
+                  <DropdownMenuLabel class="text-xs text-muted-foreground">In this conversation</DropdownMenuLabel>
+                  <DropdownMenuItem v-for="p in people" :key="p.id" @select="mention(p.name)">@{{ p.name }}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Mention someone</TooltipContent>
+        </Tooltip>
       </template>
       <template #preview="{ value }">
         <SlackText v-if="value.trim()" :text="asSlack(value)" :rich="asSlack(value)" />

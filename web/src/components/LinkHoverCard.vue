@@ -10,6 +10,8 @@ import { externalHint, siteName } from '@/lib/external'
 import { writeClipboard } from '@/lib/clipboard'
 import { prStatus, type StatusTone } from '@/composables/prStatus'
 import { timeAgo } from '@/utils/format'
+import { useOneHoverCard } from '@/composables/oneHoverCard'
+import { linkCardTarget } from '@/lib/hoverTargets'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -44,8 +46,7 @@ const WIDTH = 360
  * Only links that leave Dispatch: the written href is an absolute http(s) URL on another origin. In-app
  * links (sidebar, router links: relative hrefs that the browser resolves to this origin) never get a card.
  */
-const isWebLink = (a: HTMLAnchorElement) =>
-  /^https?:\/\//i.test(a.getAttribute('href') ?? '') && a.origin !== location.origin && !a.closest('[data-no-link-preview]') && !card.value?.contains(a)
+const isWebLink = (a: HTMLAnchorElement) => linkCardTarget(a) && !card.value?.contains(a)
 
 function restoreTitle() {
   if (anchor.value && stashedTitle != null) anchor.value.setAttribute('title', stashedTitle)
@@ -56,7 +57,10 @@ function hide() {
   restoreTitle()
   open.value = false
   anchor.value = null
+  one.release()
 }
+// One hover card at a time: another card opening closes this one, and this one opening closes theirs
+const one = useOneHoverCard(() => open.value && hide())
 const scheduleHide = () => {
   clearTimeout(hideTimer)
   hideTimer = setTimeout(hide, 180)
@@ -83,6 +87,8 @@ async function show(a: HTMLAnchorElement) {
   copied.value = false
   place(a)
   open.value = true
+  // A link inside another hover card's content is that card's child: leave the card open
+  if (!a.closest('[data-slot=hover-card-content]')) one.claim()
   if (local.value.complete) return
   loading.value = true
   let p = answers.get(a.href)

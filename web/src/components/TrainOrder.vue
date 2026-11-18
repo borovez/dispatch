@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ItemContextMenu from './ItemContextMenu.vue'
+import { usePrMenu } from '@/composables/itemMenus'
 import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { PhCircleNotch, PhDotsSixVertical, PhGraph, PhTrash } from '@phosphor-icons/vue'
@@ -25,6 +27,7 @@ import { STATUS_BAR as BAR, useReleaseStatus } from '@/composables/trainStatus'
  */
 const props = defineProps<{ train: ReleaseTrain; releaseId: string }>()
 const deck = useDeck()
+const prMenu = usePrMenu()
 const deps = useDependencies()
 const busy = deps.busy
 const nav = useReleaseNav()
@@ -205,9 +208,11 @@ const canEdit = computed(() => props.train.releases.filter(isOpen).length > 1)
         <span v-if="ordered" class="mt-0.5 w-4 shrink-0 text-xs font-semibold text-muted-foreground tabular-nums">{{ i + 1 }}.</span>
         <div class="min-w-0 flex-1 space-y-1">
           <div class="flex min-w-0 items-center gap-2">
-            <button class="min-w-0 font-mono text-xs text-primary hover:underline" :title="`Open ${r.id}`" @click="deck.selectedId = r.id">
-              <RepoName :id="r.id" no-title />
-            </button>
+            <ItemContextMenu as="span" :entries="() => prMenu.byId(r.id)">
+              <button class="min-w-0 font-mono text-xs text-primary hover:underline" :title="`Open ${r.id}`" @click="deck.selectedId = r.id">
+                <RepoName :id="r.id" no-title />
+              </button>
+            </ItemContextMenu>
             <FlagStatus :keys="flagsOf(r.id)" class="[&_svg]:size-3" />
             <Badge v-if="r.self" variant="outline" class="h-4 px-1 text-[10px]">this release</Badge>
             <Badge v-if="train.next === r.id && !draft" variant="primary" class="h-4 px-1 text-[10px]">ship next</Badge>

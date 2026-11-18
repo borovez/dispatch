@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ItemContextMenu from './ItemContextMenu.vue'
+import { usePrMenu } from '@/composables/itemMenus'
 import { computed, ref } from 'vue'
 import { PhArrowsClockwise, PhArrowSquareOut, PhCircleNotch, PhWarningCircle } from '@phosphor-icons/vue'
 import { api } from '@/api'
@@ -15,6 +17,7 @@ import SidePanel from './SidePanel.vue'
  * on GitHub. Open while a PR id is selected that isn't in the store.
  */
 const deck = useDeck()
+const prMenu = usePrMenu()
 const id = computed(() => (deck.selectedId && !deck.selected ? deck.selectedId : null))
 const ref_ = computed(() => (id.value ? parsePrRef(id.value) : null))
 const url = computed(() => (ref_.value ? `https://github.com/${ref_.value.owner}/${ref_.value.name}/pull/${ref_.value.number}` : undefined))
@@ -60,11 +63,11 @@ async function sync() {
         <h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Linked</h3>
         <p v-for="t in waitsFor" :key="`w${t}`" class="flex items-center gap-1.5 text-xs">
           <span class="text-muted-foreground">Waits for</span>
-          <button class="min-w-0 font-mono text-primary hover:underline" @click="deck.selectedId = t"><RepoName :id="t" /></button>
+          <ItemContextMenu as="span" :entries="() => prMenu.byId(t)"><button class="min-w-0 font-mono text-primary hover:underline" @click="deck.selectedId = t"><RepoName :id="t" /></button></ItemContextMenu>
         </p>
         <p v-for="b in blocks" :key="`b${b}`" class="flex items-center gap-1.5 text-xs">
           <span class="text-muted-foreground">Blocks</span>
-          <button class="min-w-0 font-mono text-primary hover:underline" @click="deck.selectedId = b"><RepoName :id="b" /></button>
+          <ItemContextMenu as="span" :entries="() => prMenu.byId(b)"><button class="min-w-0 font-mono text-primary hover:underline" @click="deck.selectedId = b"><RepoName :id="b" /></button></ItemContextMenu>
         </p>
       </section>
     </div>

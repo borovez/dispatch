@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ItemContextMenu from './ItemContextMenu.vue'
+import { usePrMenu } from '@/composables/itemMenus'
 import { computed } from 'vue'
 import { PhArrowBendDownRight, PhLinkSimple, PhTrain, PhWarning } from '@phosphor-icons/vue'
 import type { ReleaseTrain } from '@shared/types'
@@ -21,6 +23,7 @@ const releaseStatus = useReleaseStatus()
 /** Colour of the step number: ready to merge green, waiting amber, merged purple… */
 const status = (id: string) => releaseStatus(props.train, id)
 const deck = useDeck()
+const prMenu = usePrMenu()
 
 const flagsOf = useReleaseFlags()
 /** Every flag the train's releases name */
@@ -80,12 +83,12 @@ const other = (l: ReleaseTrain['links'][number], id: string) => (l.from === id ?
           <ul class="mt-0.5 space-y-0.5 pl-3 text-xs text-muted-foreground">
             <li v-for="l in s.after" :key="`a${l.from}`" class="flex items-center gap-1.5">
               <PhArrowBendDownRight :size="12" class="shrink-0" />after
-              <button class="min-w-0 shrink font-mono text-primary hover:underline" @click="deck.selectedId = l.from"><RepoName :id="l.from" /></button>
+              <ItemContextMenu as="span" :entries="() => prMenu.byId(l.from)"><button class="min-w-0 shrink font-mono text-primary hover:underline" @click="deck.selectedId = l.from"><RepoName :id="l.from" /></button></ItemContextMenu>
               <span class="truncate">: {{ l.reasons.join('; ') }}</span>
             </li>
             <li v-for="l in s.shares" :key="`j${other(l, s.id)}`" class="flex items-center gap-1.5">
               <PhLinkSimple :size="12" class="shrink-0" />with
-              <button class="min-w-0 shrink font-mono text-primary hover:underline" @click="deck.selectedId = other(l, s.id)"><RepoName :id="other(l, s.id)" /></button>
+              <ItemContextMenu as="span" :entries="() => prMenu.byId(other(l, s.id))"><button class="min-w-0 shrink font-mono text-primary hover:underline" @click="deck.selectedId = other(l, s.id)"><RepoName :id="other(l, s.id)" /></button></ItemContextMenu>
               <span class="truncate">: {{ l.reasons.join('; ') }}</span>
             </li>
           </ul>

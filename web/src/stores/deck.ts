@@ -94,6 +94,11 @@ export const useDeck = defineStore('deck', () => {
     showPanel(target)
     void nextTick(() => (historyMode = 'push'))
   }
+  /** Jump several steps back (-) or forward (+) at once (the history menu) */
+  function panelJump(steps: number) {
+    const dir = steps < 0 ? -1 : 1
+    for (let i = 0; i < Math.abs(steps); i++) panelGo(dir)
+  }
   /** Open something in the panel without a history entry (moving through a list) */
   function replacePanel(fn: () => void) {
     historyMode = 'replace'
@@ -233,6 +238,6 @@ export const useDeck = defineStore('deck', () => {
     timer = window.setInterval(() => !syncRunning.value && load(), 60_000)
   }
 
-  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, replacePanel, currentPanel, recentPanels, reopenPanel, composer, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
+  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, panelJump, replacePanel, currentPanel, recentPanels, reopenPanel, composer, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
     releaseById, selected, jiraByKey, flagByKey, repos, load, sync, mutate, startPolling }
 })

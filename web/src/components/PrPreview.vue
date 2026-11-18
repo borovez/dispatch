@@ -19,7 +19,7 @@ import RepoName from './RepoName.vue'
  * dependency and deployment sections), branch, size of the change with its biggest files, and
  * Open in Dispatch / GitHub / Copy.
  */
-const props = defineProps<{ pr: PrView }>()
+const props = withDefaults(defineProps<{ pr: PrView; /** Open / GitHub / Copy row (off for a look-only preview) */ actions?: boolean }>(), { actions: true })
 const deck = useDeck()
 const detail = ref<PrDetail | null>(null)
 const error = ref('')
@@ -102,7 +102,7 @@ async function copy() {
       </ul>
     </div>
 
-    <div class="mt-2 flex items-center gap-1 select-none">
+    <div v-if="actions" class="mt-2 flex items-center gap-1 select-none">
       <span class="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{{ modKey }}-click opens GitHub</span>
       <Button variant="ghost" size="xs" class="h-6 text-xs" @click="deck.selectedId = pr.id"><PhSidebarSimple /> Open</Button>
       <Button variant="ghost" size="xs" class="h-6 text-xs" :title="externalHint(pr.url)" @click="openExternal(pr.url)"><PhArrowSquareOut /> GitHub</Button>
