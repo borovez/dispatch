@@ -5,6 +5,7 @@ import type { PrId, PrView, ReleaseItem } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
+import { useListNav } from '@/composables/listNav'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -35,6 +36,7 @@ const open = ref(false)
 watch(open, (v) => emit('open', v))
 const q = ref('')
 const active = ref(0)
+const listEl = ref<HTMLElement | null>(null)
 
 const items = computed(() =>
   props.ids.map((id, i) => {
@@ -59,14 +61,10 @@ function go(id: PrId) {
   open.value = false
   q.value = ''
 }
+const nav = useListNav({ items: () => shown.value, active, container: () => listEl.value })
 function onKey(e: KeyboardEvent) {
-  const n = shown.value.length
-  if (!n) return
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault()
-    active.value = (active.value + (e.key === 'ArrowDown' ? 1 : n - 1)) % n
-    document.getElementById(`prlist-${active.value}`)?.scrollIntoView({ block: 'nearest' })
-  } else if (e.key === 'Enter') {
+  if (nav.onArrow(e)) return
+  if (e.key === 'Enter' && shown.value[active.value]) {
     e.preventDefault()
     go(shown.value[active.value].id)
   }
@@ -103,11 +101,11 @@ const stateLabel = (pr: PrView) =>
         autofocus
       />
       <ScrollArea class="[&>[data-slot=scroll-area-viewport]]:max-h-96">
-        <div class="p-1">
+        <div ref="listEl" class="p-1">
           <p v-if="!shown.length" class="px-2 py-3 text-center text-xs text-muted-foreground">No matching PRs</p>
           <button
             v-for="(it, i) in shown"
-            :id="`prlist-${i}`"
+            :data-active="i === active || undefined"
             :key="it.id"
             type="button"
             :data-pr-id="it.id"

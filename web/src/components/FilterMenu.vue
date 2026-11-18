@@ -4,6 +4,7 @@ import { computed, nextTick, ref, watch, type Component } from 'vue'
 import { PhCaretLeft, PhCaretRight, PhCheck, PhFunnelSimple, PhX } from '@phosphor-icons/vue'
 import { onKeyStroke } from '@vueuse/core'
 import { cn } from '@/lib/utils'
+import { useListNav } from '@/composables/listNav'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
@@ -123,11 +124,10 @@ watch(open, (o) => {
   }
 })
 
+const nav = useListNav({ items: () => rows.value, active })
 function onKey(e: KeyboardEvent) {
-  const n = rows.value.length
-  if (e.key === 'ArrowDown') active.value = (active.value + 1) % n
-  else if (e.key === 'ArrowUp') active.value = (active.value - 1 + n) % n
-  else if (e.key === 'Enter' && rows.value[active.value]) activate(rows.value[active.value])
+  if (nav.onArrow(e)) return
+  if (e.key === 'Enter' && rows.value[active.value]) activate(rows.value[active.value])
   else if (e.key === 'ArrowRight' && rows.value[active.value]?.kind === 'field') enter((rows.value[active.value] as { field: FilterField }).field)
   else if ((e.key === 'ArrowLeft' || (e.key === 'Backspace' && !query.value)) && field.value) back()
   else return

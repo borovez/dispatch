@@ -4,8 +4,8 @@ A local dashboard for the pull requests you care about across several GitHub org
 around them: cross-repo dependencies, Jira status, and a Slack inbox. It also runs an MCP server, so
 Claude Code can query and edit the same data.
 
-It runs on your machine only. The API binds to `127.0.0.1`, tokens stay in a local SQLite file, and
-nothing is hosted.
+It runs on your machine only. The API binds to `127.0.0.1`, tokens stay in the macOS Keychain (in the
+local database elsewhere), and nothing is hosted.
 
 ![Dispatch overview: stat tiles, the "Needs my action" list, the Slack inbox and dependency chains (demo data)](docs/screenshot.png)
 
@@ -195,7 +195,8 @@ Settings → MCP shows the exact `claude mcp add` command for your machine. It r
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DISPATCH_DATA_DIR` | `~/.dispatch` | Where the SQLite database lives (settings, tokens, cache) |
+| `DISPATCH_DATA_DIR` | `~/.dispatch` | Where the SQLite database lives (settings, cache; tokens too when the Keychain isn't used) |
+| `DISPATCH_KEYCHAIN` | `1` on macOS | `0` keeps tokens in the database instead of the macOS Keychain |
 | `DISPATCH_PORT` | `4317` | API port |
 | `CLAUDE_BIN` | found on `PATH` | Path to the `claude` CLI, if it isn't found |
 | `ANTHROPIC_API_KEY` | | Used for drafting when no key is stored in Settings |

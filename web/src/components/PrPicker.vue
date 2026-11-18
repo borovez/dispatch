@@ -5,6 +5,7 @@ import type { PrView } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { ACTION_TONE } from '@/utils/format'
 import { cn } from '@/lib/utils'
+import { useListNav } from '@/composables/listNav'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import RepoName from './RepoName.vue'
@@ -28,6 +29,7 @@ const deck = useDeck()
 const input = ref<InstanceType<typeof Input> | null>(null)
 const open = ref(false)
 const active = ref(0)
+const listEl = ref<HTMLElement | null>(null)
 const rect = ref<DOMRect | null>(null)
 
 const terms = computed(() => model.value.toLowerCase().split(/\s+/).filter(Boolean))
@@ -58,17 +60,12 @@ function pick(p: PrView) {
   open.value = false
   nextTick(() => el()?.focus())
 }
+const nav = useListNav({ items: () => matches.value, active, disabled: (p) => !!reasonOf(p), container: () => listEl.value })
 function onKey(e: KeyboardEvent) {
   if (!open.value || !matches.value.length) return
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault()
-    const n = matches.value.length
-    // Skip suggestions that can't be picked
-    for (let step = 0; step < n; step++) {
-      active.value = (active.value + (e.key === 'ArrowDown' ? 1 : n - 1)) % n
-      if (!reasonOf(matches.value[active.value])) break
-    }
-  } else if (e.key === 'Enter' && model.value !== matches.value[active.value]?.id && !reasonOf(matches.value[active.value])) {
+  // Arrows skip suggestions that can't be picked
+  if (nav.onArrow(e)) return
+  if (e.key === 'Enter' && model.value !== matches.value[active.value]?.id && !reasonOf(matches.value[active.value])) {
     // First Enter picks the suggestion; Enter again submits the form
     e.preventDefault()
     pick(matches.value[active.value])
@@ -114,13 +111,14 @@ const listStyle = computed(() => {
       @mousedown.prevent
     >
       <ScrollArea class="[&>[data-slot=scroll-area-viewport]]:max-h-80">
-      <div class="p-1">
+      <div ref="listEl" class="p-1">
       <button
         v-for="(p, i) in matches"
         :key="p.id"
         type="button"
         role="option"
         :aria-selected="i === active"
+        :data-active="i === active || undefined"
         :aria-disabled="!!reasonOf(p)"
         :class="cn('flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left', reasonOf(p) ? 'cursor-not-allowed opacity-50' : i === active && 'bg-accent')"
         :title="reasonOf(p) ?? undefined"

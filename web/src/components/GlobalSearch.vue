@@ -25,6 +25,7 @@ import { useTheme } from '@/composables/theme'
 import { LAYER_OPEN } from '@/composables/escape'
 import { ACTION_TONE, jiraTone, timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
+import { useListNav } from '@/composables/listNav'
 import RepoName from './RepoName.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -198,14 +199,10 @@ function pick(r: Result) {
   open.value = false
   r.run()
 }
+const nav = useListNav({ items: () => flat.value, active, container: () => list.value })
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault()
-    const n = flat.value.length
-    if (!n) return
-    active.value = (active.value + (e.key === 'ArrowDown' ? 1 : n - 1)) % n
-    nextTick(() => list.value?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }))
-  } else if (e.key === 'Enter') {
+  if (nav.onArrow(e)) return
+  if (e.key === 'Enter') {
     e.preventDefault()
     const r = flat.value[active.value]
     if (r) pick(r)

@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { PhCaretUpDown, PhCheck, PhCircleNotch, PhX } from '@phosphor-icons/vue'
 import { cn } from '@/lib/utils'
+import { useListNav } from '@/composables/listNav'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -26,6 +27,7 @@ const model = defineModel<string[]>({ required: true })
 const open = ref(false)
 const query = ref('')
 const active = ref(0)
+const listEl = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
 
 const rows = computed(() => {
@@ -47,11 +49,10 @@ watch(open, async (o) => {
   input.value?.focus()
 })
 watch(query, () => (active.value = 0))
+const nav = useListNav({ items: () => rows.value, active, container: () => listEl.value })
 function onKey(e: KeyboardEvent) {
-  const n = rows.value.length
-  if (e.key === 'ArrowDown') active.value = (active.value + 1) % Math.max(n, 1)
-  else if (e.key === 'ArrowUp') active.value = (active.value - 1 + n) % Math.max(n, 1)
-  else if (e.key === 'Enter' && rows.value[active.value]) toggle(rows.value[active.value].value)
+  if (nav.onArrow(e)) return
+  if (e.key === 'Enter' && rows.value[active.value]) toggle(rows.value[active.value].value)
   else return
   e.preventDefault()
 }
@@ -79,12 +80,13 @@ function onKey(e: KeyboardEvent) {
     <PopoverContent align="start" class="w-(--reka-popover-trigger-width) min-w-72 gap-0 p-0">
       <input ref="input" v-model="query" :placeholder="create ? 'Search or type to add…' : 'Search…'" class="h-9 border-b bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground" @keydown="onKey" />
       <ScrollArea class="[&>[data-slot=scroll-area-viewport]]:max-h-72">
-        <div class="p-1" role="listbox" aria-multiselectable="true">
+        <div ref="listEl" class="p-1" role="listbox" aria-multiselectable="true">
           <div
             v-for="(o, i) in rows"
             :key="o.value"
             role="option"
             :aria-selected="model.includes(o.value)"
+            :data-active="i === active || undefined"
             :class="cn('flex h-8 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm select-none', i === active && 'bg-accent')"
             @mousemove="active = i"
             @click="toggle(o.value)"

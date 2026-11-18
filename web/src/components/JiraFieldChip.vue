@@ -20,6 +20,7 @@ import {
 import type { JiraFieldMeta, JiraFieldOption, JiraFieldValue } from '@shared/types'
 import { api } from '@/api'
 import { cn } from '@/lib/utils'
+import { useListNav } from '@/composables/listNav'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -51,6 +52,7 @@ const query = ref('')
 const found = ref<JiraFieldOption[]>([])
 const loading = ref(false)
 const active = ref(0)
+const listEl = ref<HTMLElement | null>(null)
 const draft = ref('')
 const input = ref<HTMLInputElement | null>(null)
 
@@ -150,12 +152,10 @@ function applyDraft() {
   model.value = !v ? null : kind.value === 'number' ? Number(v) : draft.value
   open.value = false
 }
+const nav = useListNav({ items: () => rows.value, active, container: () => listEl.value })
 function onKey(e: KeyboardEvent) {
-  const n = rows.value.length
-  if (!n) return
-  if (e.key === 'ArrowDown') active.value = (active.value + 1) % n
-  else if (e.key === 'ArrowUp') active.value = (active.value - 1 + n) % n
-  else if (e.key === 'Enter') pick(rows.value[active.value])
+  if (nav.onArrow(e)) return
+  if (e.key === 'Enter' && rows.value[active.value]) pick(rows.value[active.value])
   else return
   e.preventDefault()
 }
@@ -197,12 +197,13 @@ function onKey(e: KeyboardEvent) {
           <PhCircleNotch v-if="loading" class="size-3.5 animate-spin text-muted-foreground" />
         </div>
         <ScrollArea class="[&>[data-slot=scroll-area-viewport]]:max-h-72">
-          <div class="p-1" role="listbox">
+          <div ref="listEl" class="p-1" role="listbox">
             <div
               v-for="(o, i) in rows"
               :key="o.id"
               role="option"
               :aria-selected="selected.includes(o.id)"
+              :data-active="i === active || undefined"
               :class="cn('flex min-h-8 cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-sm select-none', i === active && 'bg-accent')"
               @mousemove="active = i"
               @click="pick(o)"
