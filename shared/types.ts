@@ -250,7 +250,7 @@ export interface JiraIssue {
   priorityIconUrl: string | null
   assignee: { displayName: string; accountId: string; avatarUrl: string | null } | null
   /** Epic or parent issue; status and type when Jira includes them */
-  parent: { key: string; summary: string; status?: string; statusCategory?: string; type?: string } | null
+  parent: { key: string; summary: string; status?: string; statusCategory?: string; type?: string; typeIconUrl?: string } | null
   fixVersions: string[]
   /** Sprints it has been in (Jira Software), oldest first; missing on copies stored before sprints were read */
   sprints?: JiraSprint[]

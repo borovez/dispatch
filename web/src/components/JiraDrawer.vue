@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PanelItemCard from './PanelItemCard.vue'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import RefreshButton from '@/components/RefreshButton.vue'
 import ShareMenu from '@/components/ShareMenu.vue'
 import KindIcon from '@/components/KindIcon.vue'
@@ -124,13 +126,14 @@ function sprintText(sprints: JiraSprint[] | undefined) {
   const earlier = sprints.filter((x) => x.id !== s.id && x.state === 'closed').length
   return s.name + (earlier ? ` · carried over from ${earlier} earlier` : '')
 }
+/** The parent's type icon (an epic's purple bolt…), sharp size */
+const parentIcon = computed(() => (issue.value?.parent?.typeIconUrl ? jiraIcon(issue.value.parent.typeIconUrl) : null))
 const details = computed(() => {
   const i = issue.value
   if (!i) return []
   return [
     { label: 'Type', value: i.type },
     { label: 'Priority', value: i.priority ?? 'None' },
-    { label: 'Parent', value: i.parent ? `${i.parent.key} · ${i.parent.summary}` : '—', open: i.parent?.key },
     { label: 'Sprint', value: sprintText(i.sprints), badge: sprintBadge(currentSprint(i.sprints)) },
     { label: 'Fix version', value: i.fixVersions.join(', ') || '—' },
     { label: 'Labels', value: i.labels.join(', ') || '—' },
@@ -184,19 +187,38 @@ const details = computed(() => {
             <div class="text-xs text-muted-foreground">Updated</div>
             <div :title="fullDate(issue.updated)">{{ timeAgo(issue.updated) }}</div>
           </div>
+          <!-- Parent: its type (epic icon), key, summary and status; hover for the issue card -->
+          <div v-if="issue.parent" class="col-span-2 min-w-0">
+            <div class="text-xs text-muted-foreground">Parent{{ issue.parent.type ? ` ${issue.parent.type.toLowerCase()}` : '' }}</div>
+            <ItemContextMenu :entries="() => jiraMenu(issue!.parent!.key, deck.jiraByKey.get(issue!.parent!.key) ?? null)">
+              <HoverCard :open-delay="400" :close-delay="100">
+                <HoverCardTrigger as-child>
+                  <button type="button" class="flex max-w-full min-w-0 items-center gap-1.5 text-left hover:text-primary" @click="deck.selectedJiraKey = issue!.parent!.key">
+                    <img v-if="parentIcon" :src="parentIcon" :alt="issue.parent.type ?? ''" class="size-4 shrink-0" />
+                    <span class="shrink-0 font-mono text-primary">{{ issue.parent.key }}</span>
+                    <span class="min-w-0 truncate">{{ issue.parent.summary }}</span>
+                    <Badge v-if="issue.parent.status" :variant="jiraTone(issue.parent.statusCategory ?? '')" class="shrink-0">{{ issue.parent.status }}</Badge>
+                  </button>
+                </HoverCardTrigger>
+                <HoverCardContent align="start" class="w-[360px] p-3" data-no-link-preview>
+                  <PanelItemCard v-if="deck.jiraByKey.get(issue.parent.key)" :item="{ kind: 'jira', id: issue.parent.key }" />
+                  <div v-else class="text-xs">
+                    <div class="flex items-center gap-1.5 text-muted-foreground">
+                      <img v-if="parentIcon" :src="parentIcon" alt="" class="size-3.5" />
+                      <span>Jira · {{ issue.parent.type ?? 'Parent' }}</span>
+                      <span class="flex-1" />
+                      <Badge v-if="issue.parent.status" :variant="jiraTone(issue.parent.statusCategory ?? '')">{{ issue.parent.status }}</Badge>
+                    </div>
+                    <p class="mt-1.5 text-sm leading-snug font-medium">{{ issue.parent.summary }}</p>
+                    <p class="mt-1 font-mono text-muted-foreground">{{ issue.parent.key }}</p>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            </ItemContextMenu>
+          </div>
           <div v-for="d in details" :key="d.label" class="min-w-0">
             <div class="text-xs text-muted-foreground">{{ d.label }}</div>
-            <ItemContextMenu v-if="d.open" :entries="() => jiraMenu(d.open!, deck.jiraByKey.get(d.open!) ?? null)">
-            <button
-              type="button"
-              class="block max-w-full truncate text-left text-primary hover:underline"
-              :title="`Open ${d.value}`"
-              @click="deck.selectedJiraKey = d.open"
-            >
-              {{ d.value }}
-            </button>
-            </ItemContextMenu>
-            <div v-else-if="d.badge" class="flex min-w-0 items-center gap-1.5">
+            <div v-if="d.badge" class="flex min-w-0 items-center gap-1.5">
               <span class="truncate" :title="d.value">{{ d.value }}</span>
               <Badge :variant="d.badge.variant" class="shrink-0">{{ d.badge.text }}</Badge>
             </div>

@@ -131,6 +131,7 @@ function mapIssue(cfg: JiraConfig, raw: any, isMine: boolean, sprintField: strin
           status: f.parent.fields?.status?.name,
           statusCategory: f.parent.fields?.status?.statusCategory?.key,
           type: f.parent.fields?.issuetype?.name,
+          typeIconUrl: f.parent.fields?.issuetype?.iconUrl ?? undefined,
         }
       : null,
     fixVersions: (f.fixVersions ?? []).map((v: any) => v.name),
