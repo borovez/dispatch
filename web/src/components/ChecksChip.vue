@@ -30,6 +30,8 @@ const checksUrl = computed(() => `${props.url.replace(/\/$/, '')}/checks`)
 <template>
   <Popover>
     <PopoverTrigger as-child>
+      <!-- `trigger` slot: another look for the same popover (the PR panel's status box cell); one element -->
+      <slot name="trigger" :text="look.text" :state="look.icon === PhXCircle ? 'failing' : look.icon === PhCircleNotch ? 'running' : look.icon === PhCheckCircle ? 'passing' : 'none'">
       <button
         type="button"
         :class="cn('inline-flex h-6 shrink-0 items-center gap-1 rounded-full border bg-background px-2 text-xs font-medium hover:bg-accent data-[state=open]:bg-accent', look.border)"
@@ -38,6 +40,7 @@ const checksUrl = computed(() => `${props.url.replace(/\/$/, '')}/checks`)
         <component :is="look.icon" :size="13" :weight="look.icon === PhCircleNotch ? 'bold' : 'fill'" :class="cn(look.tone, look.icon === PhCircleNotch && 'animate-spin')" />
         <span :class="look.tone">{{ look.text }}</span>
       </button>
+      </slot>
     </PopoverTrigger>
     <PopoverContent align="start" class="w-80 gap-0 p-0" @open-auto-focus.prevent>
       <div class="flex items-center gap-1.5 border-b px-3 py-2 text-xs font-medium">

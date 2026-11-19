@@ -89,7 +89,7 @@ export async function buildSetupPrompt(origin: string): Promise<string> {
     'Two ways; the first is easiest:',
     '',
     `- **gh CLI login**: \`gh\` is ${gh.ok ? 'installed' : gh.out === 'not installed' ? 'not installed (`brew install gh`)' : 'installed but not logged in'}.${gh.ok ? '' : ' Run `gh auth login` (HTTPS, browser).'} It needs the \`repo\` and \`read:org\` scopes: \`gh auth refresh -s repo,read:org\`. Then Settings → GitHub → **Use my gh CLI login** (or the \`connect_github_gh_cli\` MCP tool).`,
-    '- **Personal access token**: github.com → Settings → Developer settings → Personal access tokens. Classic: scopes `repo` and `read:org`. Fine-grained: the orgs\' repositories with Pull requests, Contents, Metadata (read) and Pull requests (write, to add dependency lines to descriptions). For orgs with SAML SSO, click **Configure SSO → Authorize** for each org. Then Settings → GitHub → **Add token**.',
+    '- **Personal access token**: github.com → Settings → Developer settings → Personal access tokens. Classic: scopes `repo` and `read:org`. Fine-grained: the orgs\' repositories with Pull requests, Contents, Metadata (read) and Pull requests (write, to add dependency lines to descriptions and to mark PRs ready, draft, closed or reopened). For orgs with SAML SSO, click **Configure SSO → Authorize** for each org. Then Settings → GitHub → **Add token**.',
     '- Optionally limit an account to some orgs, and pick **Tracked repos** (every open PR in them, not only mine). Then press **Sync** in the header and check PRs appear.',
     '',
     '### 2. Jira (optional)',

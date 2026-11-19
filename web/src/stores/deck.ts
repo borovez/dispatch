@@ -158,6 +158,8 @@ export const useDeck = defineStore('deck', () => {
   })
   /** PR whose "Mark as done" confirmation is open (MarkDoneDialog) */
   const markDonePr = ref<string | null>(null)
+  /** PR whose "Close" confirmation is open (ClosePrDialog) */
+  const closePr = ref<string | null>(null)
   /** PR whose title and description are open in the PR writer */
   const prWriter = ref<string | null>(null)
   /** Jira issue whose AI-agent prompt is open */
@@ -261,6 +263,6 @@ export const useDeck = defineStore('deck', () => {
     timer = window.setInterval(() => !syncRunning.value && load(), 60_000)
   }
 
-  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, panelJump, replacePanel, currentPanel, panelRestoring, recentPanels, reopenPanel, composer, markDonePr, plannerOpen, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
+  return { overview, loading, syncing, syncStatus, syncRunning, error, selectedId, selectedSlackId, selectedSlack, selectedJiraKey, panelBack, panelForward, panelGo, panelJump, replacePanel, currentPanel, panelRestoring, recentPanels, reopenPanel, composer, markDonePr, closePr, plannerOpen, prWriter, agentPromptKey, setupPromptOpen, prs, byId,
     releaseById, selected, jiraByKey, flagByKey, repos, load, sync, mutate, startPolling }
 })

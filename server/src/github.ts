@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { CheckState, GithubAccount, LinkedPr, PrRecord, PrDetail } from '../../shared/types.ts'
+import type { CheckState, GithubAccount, LinkedPr, PrRecord, PrDetail, PrStateTarget } from '../../shared/types.ts'
 import { descriptionContentRefs, prId } from './refs.ts'
 
 const API = 'https://api.github.com'
@@ -567,6 +567,16 @@ export async function getPrText(account: GithubAccount, repo: string, number: nu
 
 export async function updatePrText(account: GithubAccount, repo: string, number: number, text: { title?: string; body?: string }): Promise<void> {
   await request(account.token, `/repos/${repo}/pulls/${number}`, { method: 'PATCH', body: JSON.stringify(text) })
+}
+
+/**
+ * Change a PR's state: ready for review / back to draft (GraphQL only; REST can't) or close / reopen (REST).
+ * GitHub's own message comes back for what it refuses (a reopen whose branch is gone, drafts off in the repo).
+ */
+export async function setPrState(account: GithubAccount, pr: { nodeId: string; repo: string; number: number }, to: PrStateTarget): Promise<void> {
+  if (to === 'ready') await graphql(account.token, 'mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { clientMutationId } }', { id: pr.nodeId })
+  else if (to === 'draft') await graphql(account.token, 'mutation($id: ID!) { convertPullRequestToDraft(input: { pullRequestId: $id }) { clientMutationId } }', { id: pr.nodeId })
+  else await request(account.token, `/repos/${pr.repo}/pulls/${pr.number}`, { method: 'PATCH', body: JSON.stringify({ state: to === 'closed' ? 'closed' : 'open' }) })
 }
 
 /** Changed file paths of a PR (first 100), for context */

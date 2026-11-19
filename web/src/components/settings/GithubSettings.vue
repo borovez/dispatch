@@ -185,7 +185,7 @@ function addOverride() {
     <FormDialog
       v-model:open="dialogOpen"
       :title="draft?.id ? `Edit ${draft.label}` : 'Add GitHub token'"
-      description="Classic or fine-grained token with repo and read:org access."
+      description="Classic token with repo and read:org, or fine-grained with Pull requests: Read and write (to change PR descriptions and states)."
       :submit-label="draft?.id ? 'Save' : 'Add account'"
       :on-test="draft?.source === 'pat' ? testDraft : undefined"
       :on-submit="submitAccount"

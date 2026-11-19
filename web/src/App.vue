@@ -44,6 +44,7 @@ import { Separator } from '@/components/ui/separator'
 import { Toaster } from '@/components/ui/sonner'
 import LinkHoverCard from '@/components/LinkHoverCard.vue'
 import MarkDoneDialog from '@/components/MarkDoneDialog.vue'
+import ClosePrDialog from '@/components/ClosePrDialog.vue'
 import ReleasePlanner from '@/components/ReleasePlanner.vue'
 import {
   Sidebar,
@@ -218,6 +219,7 @@ const needsSetup = computed(() => !!deck.overview && !deck.overview.configured.g
     <SetupPromptDialog />
     <LinkHoverCard />
     <MarkDoneDialog />
+    <ClosePrDialog />
     <ReleasePlanner />
     <Toaster :theme="theme === 'auto' ? 'system' : theme" position="bottom-right" close-button />
   </TooltipProvider>

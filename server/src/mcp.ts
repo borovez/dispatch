@@ -13,6 +13,7 @@ import { replyInThread, threadContext } from './slack.ts'
 import { buildOverview } from './model.ts'
 import { normaliseRef } from './refs.ts'
 import { runSync } from './sync.ts'
+import { changePrState } from './prState.ts'
 import { buildSetupPrompt } from './setupPrompt.ts'
 import { connectGhCli, maskSettings, SettingsPatch, updateSettings } from './settingsPatch.ts'
 
@@ -110,6 +111,25 @@ server.registerTool(
     if (!p) return text(`${pr} is not in the cache. Add it as a dependency or track its repo, then sync.`)
     const jira = o.jira.filter((j) => p.jiraKeys.includes(j.key))
     return text(JSON.stringify({ ...p, jira }, null, 2))
+  },
+)
+
+server.registerTool(
+  'set_pr_state',
+  {
+    title: 'Change a PR state',
+    description:
+      "Change a PR's state on GitHub: 'ready' (ready for review, from a draft), 'draft' (back to draft), 'closed' or 'open' (reopen). Merging is not offered. Returns warnings such as an unmerged prerequisite; they don't block the change.",
+    inputSchema: {
+      pr: z.string().describe('owner/repo#123 or GitHub PR URL'),
+      to: z.enum(['ready', 'draft', 'closed', 'open']),
+    },
+  },
+  async ({ pr, to }) => {
+    const id = normaliseRef(pr)
+    if (!id) return text(`${pr} is not a PR reference (owner/repo#123 or a GitHub PR URL).`)
+    const r = await changePrState(id, to).catch((e: Error) => ({ message: e.message, warnings: [] as string[] }))
+    return text([r.message, ...r.warnings.map((w) => `Warning: ${w}`)].join('\n'))
   },
 )
 

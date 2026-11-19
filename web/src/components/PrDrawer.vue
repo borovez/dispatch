@@ -15,13 +15,14 @@ import { loadPrDetail } from '@/composables/prDetail'
 import { releaseStatus } from '@shared/release'
 import SidePanel from './SidePanel.vue'
 import { computed, ref, watch } from 'vue'
-import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhPlus, PhPushPin, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit, PhArrowCounterClockwise, PhCheck } from '@phosphor-icons/vue'
-import type { DepEdge, PrDetail } from '@shared/types'
+import { PhCircleDashed, PhArrowSquareOut, PhArrowsClockwise, PhCircleNotch, PhGraph, PhTrain, PhInfo, PhWarning, PhCheckCircle, PhGitBranch, PhPlus, PhPushPin, PhRocketLaunch, PhTrash, PhXCircle, PhNotePencil, PhPencilSimple, PhMagicWand, PhRobot, PhChatCircle, PhProhibit, PhArrowCounterClockwise, PhCheck, PhCaretDown, PhCaretRight, PhEye } from '@phosphor-icons/vue'
+import type { ActionKind, DepEdge, PrDetail, PrView } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useLayout } from '@/stores/layout'
 import { jiraCardTone, timeAgo, jiraIcon, actionTone } from '@/utils/format'
-import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { usePrState } from '@/composables/prState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -46,6 +47,7 @@ import { FLOW_LABEL } from '@/utils/releaseFlow'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const deck = useDeck()
+const prState = usePrState()
 /** The action's badge tone, where alerts have a matching one */
 const alertTone = computed(() => {
   const t = pr.value ? actionTone(pr.value) : 'default'
@@ -138,6 +140,66 @@ const banner = computed(() => {
   if (!hasContext && (p.action.kind === 'none' || p.action.kind === 'done')) return null
   return { title: p.action.label, lines }
 })
+/** Status box (GitHub's merge box): the icon circle's colours by tone */
+const TONE_CIRCLE = {
+  success: 'bg-success/15 text-success',
+  warning: 'bg-warning/15 text-warning',
+  destructive: 'bg-destructive/15 text-destructive',
+  info: 'bg-info/15 text-info',
+  default: 'bg-muted text-muted-foreground',
+} as const
+const BAR = { success: 'bg-success', warning: 'bg-warning', destructive: 'bg-destructive', muted: 'bg-muted-foreground/30' } as const
+type BarTone = keyof typeof BAR
+const SUBTITLE: Partial<Record<ActionKind, (p: PrView) => string>> = {
+  merge: () => 'All requirements are met: merge it on GitHub.',
+  wait_review: () => 'Waiting for reviewers.',
+  review: () => 'Your review is requested.',
+  fix_ci: () => 'Some checks are failing.',
+  resolve_conflicts: (p) => `Conflicts with ${p.baseRef} must be resolved.`,
+  finish_draft: () => 'A draft: mark it ready for review when it is.',
+  address_feedback: () => 'Changes were requested.',
+  wait_deps: () => 'Waits for other PRs to go first.',
+}
+/** The status box shows for every open PR (and for others with something to say) */
+const box = computed(() => {
+  const p = pr.value
+  if (!p) return null
+  if (!banner.value && p.state !== 'OPEN') return null
+  const lines = banner.value?.lines ?? []
+  // No detail line: a short subtitle like GitHub's ("All requirements are met…")
+  const sub = p.state === 'OPEN' && !lines.length ? SUBTITLE[p.action.kind]?.(p) : undefined
+  return { title: banner.value?.title ?? p.action.label, lines: sub ? [sub] : lines }
+})
+/** Open PRs: the three cells under the box header, each with a bar like GitHub's */
+const cells = computed(() => {
+  const p = pr.value
+  if (!p || p.state !== 'OPEN') return null
+  const c = p.checks
+  const checks: { tone: BarTone; meta: string } =
+    c.failing.length || c.state === 'FAILURE' || c.state === 'ERROR'
+      ? { tone: 'destructive', meta: c.failing.length ? `${c.failing.length} failing` : 'failing' }
+      : c.state === 'PENDING' || c.state === 'EXPECTED'
+        ? { tone: 'warning', meta: 'running' }
+        : c.state === 'SUCCESS'
+          ? { tone: 'success', meta: `${c.total} passing` }
+          : { tone: 'muted', meta: 'none' }
+  const conv: { tone: BarTone; meta: string } = p.unresolvedThreads
+    ? { tone: 'warning', meta: `${p.unresolvedThreads} unresolved` }
+    : { tone: 'success', meta: p.comments ? 'all resolved' : 'none' }
+  const approved = new Set(p.reviews.filter((r) => r.state === 'APPROVED').map((r) => r.login.toLowerCase()))
+  // Requested and not given yet (asked again after a review counts as pending too)
+  const pending = p.requestedReviewers.length
+  const counts = [approved.size && `${approved.size} approved`, pending && `${pending} pending`].filter(Boolean).join(' · ')
+  const approvals: { tone: BarTone; meta: string } =
+    p.reviewDecision === 'CHANGES_REQUESTED'
+      ? { tone: 'destructive', meta: 'changes requested' }
+      : p.reviewDecision === 'APPROVED'
+        ? { tone: 'success', meta: counts }
+        : { tone: 'muted', meta: counts || (p.isDraft ? 'draft' : 'none requested') }
+  return { checks, conv, approvals }
+})
+const reviewsEl = ref<HTMLElement | null>(null)
+
 /** New Jira issue pre-filled from this PR: title without its Jira keys, and a link back */
 function createIssueFromPr() {
   const p = pr.value
@@ -236,7 +298,31 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
     <template v-if="pr" #header>
           <div class="mb-1.5 flex flex-wrap items-center gap-1.5">
             <Badge :variant="actionTone(pr)">{{ pr.action.label }}</Badge>
-            <Badge variant="outline">{{ pr.state }}{{ pr.isDraft ? ' · draft' : '' }}</Badge>
+            <!-- State: a menu to mark ready / convert to draft / close / reopen on GitHub (merging stays there) -->
+            <DropdownMenu v-if="prState.options(pr).length">
+              <DropdownMenuTrigger as-child>
+                <button
+                  class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+                  :disabled="prState.busy(pr.id)"
+                  :title="'Change the state on GitHub'"
+                >
+                  <PhCircleNotch v-if="prState.busy(pr.id)" class="size-3 animate-spin" />
+                  {{ pr.state }}{{ pr.isDraft ? ' · draft' : '' }}
+                  <PhCaretDown class="size-3 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" class="w-max min-w-44">
+                <DropdownMenuItem
+                  v-for="o in prState.options(pr)"
+                  :key="o.to"
+                  :class="o.to === 'closed' ? 'text-destructive' : ''"
+                  @select="prState.change(pr!, o.to)"
+                >
+                  <component :is="o.icon" /> {{ o.label }}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Badge v-else variant="outline">{{ pr.state }}{{ pr.isDraft ? ' · draft' : '' }}</Badge>
             <Badge v-if="pr.flow" :variant="pr.flow === 'hotfix' ? 'warning' : pr.flow === 'release' ? 'merged' : 'muted'">{{ FLOW_LABEL[pr.flow] }}</Badge>
             <Badge v-for="r in pr.relations" :key="r" variant="muted">{{ r.replace('_', ' ') }}</Badge>
           </div>
@@ -334,12 +420,17 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
       <TabsContent value="details" class="min-h-0 flex-1">
       <ScrollArea class="h-full">
         <div class="space-y-5 p-4">
-          <!-- Status: what this PR needs next, with release flow context -->
-          <Alert v-if="banner" :variant="alertTone">
-            <component :is="ALERT_ICON[alertTone]" />
-            <AlertTitle>{{ banner.title }}</AlertTitle>
-            <AlertDescription>
-              <p v-for="l in banner.lines" :key="l">{{ l }}</p>
+          <!-- Status box, like GitHub's merge box: what this PR needs next (and release flow context) with
+               its actions; open PRs get Checks / Conversations / Approvals cells with bars below -->
+          <div v-if="box" class="overflow-hidden rounded-lg border bg-card">
+            <div class="flex flex-wrap items-start gap-3 p-4">
+              <div :class="['flex size-9 shrink-0 items-center justify-center rounded-full', TONE_CIRCLE[alertTone]]">
+                <component :is="ALERT_ICON[alertTone]" :size="18" weight="bold" />
+              </div>
+              <div class="min-w-0 flex-1 space-y-0.5 text-sm">
+              <div class="text-base leading-snug font-semibold">{{ box.title }}</div>
+              <div class="space-y-0.5 text-muted-foreground">
+              <p v-for="l in box.lines" :key="l">{{ l }}</p>
               <p v-if="pr.shipsIn.length" class="flex flex-wrap items-center gap-x-1.5">
                 <PhRocketLaunch :size="14" class="self-center" />
                 <template v-for="(s, i) in pr.shipsIn" :key="s.id">
@@ -371,9 +462,18 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                   Backmerge <ItemContextMenu as="span" :entries="() => prMenu.byId(pr?.backmergePr ?? '')"><button class="font-mono text-primary hover:underline" @click="deck.selectedId = pr.backmergePr"><RepoName :id="pr.backmergePr" /></button></ItemContextMenu> is open.
                 </template>
               </p>
-            </AlertDescription>
-            <AlertAction v-if="(pr.flow === 'release' && dv.tab !== 'contents') || pr.markedDone || (pr.action.kind !== 'done' && pr.action.kind !== 'none')" class="flex flex-wrap justify-end gap-2">
+              </div>
+              </div>
+            <div v-if="(pr.flow === 'release' && dv.tab !== 'contents') || pr.markedDone || (pr.action.kind !== 'done' && pr.action.kind !== 'none')" class="flex flex-wrap justify-end gap-2">
+              <!-- Merging stays on GitHub: a link there when it's ready -->
+              <Button v-if="pr.action.kind === 'merge'" size="sm" class="bg-success text-background hover:bg-success/90" as="a" :href="pr.url" target="_blank" rel="noopener" :title="externalHint(pr.url)">
+                <PhArrowSquareOut /> Merge on GitHub
+              </Button>
               <Button v-if="pr.flow === 'release' && dv.tab !== 'contents'" size="sm" variant="outline" @click="dv.tab = 'contents'">View contents ({{ contents?.items.length ?? 0 }})</Button>
+              <!-- A draft: mark it ready for review on GitHub -->
+              <Button v-if="pr.state === 'OPEN' && pr.isDraft" size="sm" :disabled="prState.busy(pr.id)" @click="prState.change(pr!, 'ready')">
+                <PhCircleNotch v-if="prState.busy(pr.id)" class="animate-spin" /><PhEye v-else /> Ready for review
+              </Button>
               <!-- Dismiss what it asks for (asks to confirm), or undo that -->
               <Button v-if="pr.markedDone" size="sm" variant="outline" :title="`Show “${pr.markedDone.label}” again`" @click="deck.mutate(() => api.setDone(pr!.id, null), `${pr!.markedDone!.label} again`)">
                 <PhArrowCounterClockwise /> Undo done
@@ -381,8 +481,27 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
               <Button v-else-if="pr.action.kind !== 'done' && pr.action.kind !== 'none'" size="sm" variant="outline" :title="`Not needed? Mark “${pr.action.label}” done`" @click="deck.markDonePr = pr.id">
                 <PhCheck /> Mark as done
               </Button>
-            </AlertAction>
-          </Alert>
+            </div>
+            </div>
+            <div v-if="cells" class="grid grid-cols-3 divide-x border-t text-sm">
+              <ChecksChip :checks="pr.checks" :url="pr.url">
+                <template #trigger>
+                  <button type="button" class="group min-w-0 space-y-2 px-4 py-3 text-left transition-colors hover:bg-accent data-[state=open]:bg-accent">
+                    <span class="flex items-center gap-1.5"><span class="font-semibold">Checks</span><span class="truncate text-xs text-muted-foreground">{{ cells.checks.meta }}</span><PhCaretRight class="ml-auto shrink-0 text-muted-foreground" /></span>
+                    <span :class="['block h-1.5 rounded-full', BAR[cells.checks.tone]]" />
+                  </button>
+                </template>
+              </ChecksChip>
+              <button type="button" class="min-w-0 space-y-2 px-4 py-3 text-left transition-colors hover:bg-accent" @click="dv.tab = 'conversations'">
+                <span class="flex items-center gap-1.5"><span class="font-semibold">Conversations</span><span class="truncate text-xs text-muted-foreground">{{ cells.conv.meta }}</span><PhCaretRight class="ml-auto shrink-0 text-muted-foreground" /></span>
+                <span :class="['block h-1.5 rounded-full', BAR[cells.conv.tone]]" />
+              </button>
+              <button type="button" class="min-w-0 space-y-2 px-4 py-3 text-left transition-colors hover:bg-accent" @click="reviewsEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })">
+                <span class="flex items-center gap-1.5"><span class="font-semibold">Approvals</span><span class="truncate text-xs text-muted-foreground">{{ cells.approvals.meta }}</span><PhCaretRight class="ml-auto shrink-0 text-muted-foreground" /></span>
+                <span :class="['block h-1.5 rounded-full', BAR[cells.approvals.tone]]" />
+              </button>
+            </div>
+          </div>
 
           <div class="grid grid-cols-2 gap-3 text-sm">
             <div>
@@ -397,13 +516,14 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
               <div class="text-xs text-muted-foreground">Size</div>
               <div><span class="text-success">+{{ pr.additions }}</span> <span class="text-destructive">−{{ pr.deletions }}</span> · {{ pr.changedFiles }} files</div>
             </div>
-            <div>
+            <!-- Open PRs show checks in the status box's Checks cell -->
+            <div v-if="!cells">
               <div class="text-xs text-muted-foreground">Checks</div>
               <ChecksChip :checks="pr.checks" :url="pr.url" class="mt-0.5" />
             </div>
           </div>
 
-          <section>
+          <section ref="reviewsEl">
             <h3 class="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Reviews</h3>
             <div class="flex flex-wrap gap-1.5">
               <Badge v-for="r in reviewBadges" :key="r.key" :variant="r.tone" :class="r.pending && 'text-muted-foreground'" :title="r.title">

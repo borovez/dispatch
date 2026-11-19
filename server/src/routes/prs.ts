@@ -16,6 +16,7 @@ import { buildOverview } from '../model.ts'
 import { extractJiraKeys, parseBodyDependencies, parsePrId } from '../refs.ts'
 import { accountForOwner } from '../sync.ts'
 import { api, bad, Images } from './shared.ts'
+import { changePrState } from '../prState.ts'
 
 /** Pull requests: detail, resync / fetch, release contents, notes; the PR writer */
 // ---------- PR detail (panel: description, files) ----------
@@ -339,6 +340,16 @@ api.post('/prs/rewrite', async (c) => {
 })
 
 /** Save a PR's title and/or description to GitHub */
+/** Ready for review / back to draft / close / reopen on GitHub (merging stays on GitHub) */
+api.put('/prs/state', async (c) => {
+  const { prId, to } = z.object({ prId: z.string(), to: z.enum(['ready', 'draft', 'closed', 'open']) }).parse(await c.req.json())
+  try {
+    return c.json(await changePrState(prId, to))
+  } catch (e) {
+    throw bad((e as Error).message)
+  }
+})
+
 api.put('/prs/text', async (c) => {
   const input = z.object({ prId: z.string(), title: z.string().trim().min(1).optional(), body: z.string().optional() }).parse(await c.req.json())
   const { pr, acc } = prAccount(input.prId)

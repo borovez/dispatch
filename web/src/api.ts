@@ -1,4 +1,4 @@
-import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, JiraLiveSearch, LinkedPrs, LinkPreview, PrDetail, ReleasePlan, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
+import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, JiraLiveSearch, LinkedPrs, LinkPreview, PrDetail, PrStateChange, PrStateTarget, ReleasePlan, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
 
 async function call<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -44,6 +44,8 @@ export const api = {
   /** Fetch and store a PR Dispatch doesn't have yet ("not synced") */
   fetchPr: (id: string) => call<unknown>('POST', '/prs/fetch', { id }),
   resyncPr: (id: string) => call('POST', '/prs/resync', { id }),
+  /** Ready for review / draft / close / reopen on GitHub */
+  setPrState: (prId: string, to: PrStateTarget) => call<PrStateChange>('PUT', '/prs/state', { prId, to }),
   /** Resync just these PRs, the PRs their descriptions now depend on, and their Jira issues */
   /** Release planner: every repo's plan */
   releasePlans: () => call<ReleasePlan[]>('GET', '/releases/plan'),

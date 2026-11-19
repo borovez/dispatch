@@ -4,6 +4,14 @@
 export type PrId = string
 
 export type PrState = 'OPEN' | 'MERGED' | 'CLOSED'
+/** What a PR can be changed to from Dispatch (PUT /api/prs/state, MCP set_pr_state); merging stays on GitHub */
+export type PrStateTarget = 'ready' | 'draft' | 'closed' | 'open'
+/** PUT /api/prs/state: the PR as GitHub has it now, and what to know (e.g. ready while a prerequisite isn't merged) */
+export interface PrStateChange {
+  pr: PrRecord
+  message: string
+  warnings: string[]
+}
 
 /** Why a PR is in the cache. A PR can have several. */
 export type Relation =

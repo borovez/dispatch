@@ -28,6 +28,7 @@ import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { useReleaseNav } from '@/composables/releaseNav'
 import { transitionsFor } from '@/composables/jiraTransitions'
+import { usePrState } from '@/composables/prState'
 
 /**
  * Right-click menus for list items (ItemContextMenu). Each item type has one definition, so a row's
@@ -105,6 +106,7 @@ export function removeDependencyEntry(e: DepEdge, remove: (e: DepEdge) => unknow
 export function usePrMenu() {
   const deck = useDeck()
   const nav = useReleaseNav()
+  const prState = usePrState()
   /** A PR by id: its full menu when it's synced, else GitHub and copy only. `extra` goes at the end. */
   const byId = (id: string, extra: MenuEntry[] = []): MenuEntry[] => {
     const pr = deck.byId.get(id)
@@ -149,6 +151,17 @@ export function usePrMenu() {
         : pr.action.kind !== 'done' && pr.action.kind !== 'none'
           ? [{ label: 'Mark as done…', icon: PhCheckCircle, hint: pr.action.label, run: () => (deck.markDonePr = pr.id) }]
           : []),
+      // Ready for review / back to draft / close / reopen on GitHub
+      ...(prState.options(pr).length
+        ? [
+            {
+              label: 'State',
+              icon: PhGitPullRequest,
+              hint: pr.state === 'OPEN' ? (pr.isDraft ? 'Draft' : 'Open') : pr.state === 'CLOSED' ? 'Closed' : undefined,
+              children: prState.options(pr).map((o) => ({ label: o.label, icon: o.icon, run: () => prState.change(pr, o.to) })),
+            },
+          ]
+        : []),
       { label: 'Resync from GitHub', icon: PhArrowsClockwise, run: () => deck.mutate(() => api.resyncPr(pr.id), `Resynced ${ref}`) },
       ...(pr.state === 'OPEN' ? [{ label: 'Edit title and description…', icon: PhMagicWand, run: () => (deck.prWriter = pr.id) }] : []),
       ...(deck.overview?.configured.jira ? [{ label: 'Create Jira issue…', icon: PhNotePencil, run: () => (deck.composer = issueSeedFromPr(pr)) }] : []),
