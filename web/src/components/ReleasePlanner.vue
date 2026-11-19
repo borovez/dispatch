@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import {
   PhCaretDown,
-  PhCheck,
   PhCircleNotch,
   PhCopy,
   PhDotsSixVertical,
@@ -42,6 +41,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import PrNumberLink from './PrNumberLink.vue'
+import PrHover from './PrHover.vue'
+import ExternalLink from './ExternalLink.vue'
+import { prStatus } from '@/composables/prStatus'
 import RefreshButton from './RefreshButton.vue'
 import { useListResync } from '@/composables/listResync'
 
@@ -85,6 +87,22 @@ async function refresh(e: MouseEvent) {
   await load()
 }
 const short = (repo: string) => repo.split('/')[1] ?? repo
+/** A release PR as Dispatch has it (status, hover preview), and what it ships already */
+const releasePr = (r: PlanRelease | null) => (r && r.mode !== 'planned' ? deck.byId.get(r.id) ?? null : null)
+/** What a release branch already contains that isn't a card here (merged straight into it, picked earlier), as locked rows */
+const alreadyIn = (b: { release: PlanRelease | null; items: PlanItem[] }) => {
+  if (b.release?.mode !== 'branch') return []
+  const shown = new Set(b.items.map((i) => i.prId))
+  return (deck.releaseById.get(b.release.id)?.items ?? []).filter((i) => !shown.has(i.id)).map((i) => ({ ...i, number: Number(i.id.split('#')[1]) }))
+}
+/** "Already in it" lists that are open (closed by default when long) */
+const shownAlready = ref(new Set<string>())
+const alreadyOpen = (key: string, n: number) => (n <= 3) !== shownAlready.value.has(key)
+function toggleAlready(key: string) {
+  const next = new Set(shownAlready.value)
+  if (!next.delete(key)) next.add(key)
+  shownAlready.value = next
+}
 const todo = (p: ReleasePlan) => p.counts.pick + p.counts.decide
 
 /** Buckets: drop targets, each with what it means as a decision */
@@ -109,8 +127,8 @@ const buckets = computed<Bucket[]>(() => {
     .map((r) => ({
       key: `release:${r.id}`,
       release: r,
-      title: r.mode === 'planned' ? `New release: ${r.head}` : `Cherry-pick into ${r.head}`,
-      sub: r.mode === 'planned' ? `planned · from ${r.base} · not on GitHub yet` : `#${r.number} → ${r.base}`,
+      title: r.head,
+      sub: r.mode === 'planned' ? `Planned, not on GitHub yet · cut from ${r.base}` : `Cherry-pick these into it, in this order`,
       tone: 'primary',
       decision: 'release',
       releaseId: r.id,
@@ -121,8 +139,8 @@ const buckets = computed<Bucket[]>(() => {
     out.push({
       key: 'skip',
       release: includes,
-      title: `Only with ${includes.head} → ${includes.base}`,
-      sub: `#${includes.number}: ships everything in ${p.integration}, no cherry-pick`,
+      title: `${includes.head} → ${includes.base}`,
+      sub: `Ships whatever is left in ${p.integration}; nothing to cherry-pick`,
       tone: 'muted',
       decision: 'skip',
       releaseId: null,
@@ -131,10 +149,10 @@ const buckets = computed<Bucket[]>(() => {
     })
   const picking = p.releases.some((r) => r.mode !== 'includes')
   if (picking)
-    out.push({ key: 'hold', release: null, title: 'Hold', sub: 'For a later release', tone: 'muted', decision: 'hold', releaseId: null, items: p.items.filter((i) => i.outcome === 'held'), ordered: false })
+    out.push({ key: 'hold', release: null, title: 'Hold', sub: 'Not in any release for now', tone: 'muted', decision: 'hold', releaseId: null, items: p.items.filter((i) => i.outcome === 'held'), ordered: false })
   const undecided = p.items.filter((i) => i.outcome === 'decide')
   if (undecided.length || picking)
-    out.push({ key: 'decide', release: null, title: 'To decide', sub: 'Drag each one where it goes', tone: 'warning', decision: null, releaseId: null, items: undecided, ordered: false })
+    out.push({ key: 'decide', release: null, title: 'To decide', sub: 'Drag each one into a release or Hold', tone: 'warning', decision: null, releaseId: null, items: undecided, ordered: false })
   return out
 })
 const waiting = computed(() => plan.value?.items.filter((i) => i.outcome === 'waiting') ?? [])
@@ -297,13 +315,14 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
           <DropdownMenuTrigger as-child>
             <Button variant="ghost" size="sm" class="ml-1 h-7 gap-1 px-2 font-mono text-xs">{{ short(v.repo) }} <PhCaretDown /></Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" class="w-64">
+          <DropdownMenuContent align="start" class="w-72">
             <DropdownMenuLabel class="text-xs text-muted-foreground">Repo</DropdownMenuLabel>
-            <DropdownMenuItem v-for="p in plans" :key="p.repo" @select="v.repo = p.repo">
+            <!-- Each repo says what's left in words (a bare check read as "selected"); the shown repo is tinted -->
+            <DropdownMenuItem v-for="p in plans" :key="p.repo" :class="p.repo === plan?.repo && 'bg-primary/10 text-primary'" @select="v.repo = p.repo">
               <span class="min-w-0 flex-1 truncate font-mono text-xs">{{ short(p.repo) }}</span>
-              <Badge v-if="p.counts.decide" variant="warning">{{ p.counts.decide }}</Badge>
-              <Badge v-if="p.counts.pick" variant="primary">{{ p.counts.pick }}</Badge>
-              <PhCheck v-if="!todo(p)" class="text-success" />
+              <Badge v-if="p.counts.decide" variant="warning">{{ p.counts.decide }} to decide</Badge>
+              <Badge v-if="p.counts.pick" variant="primary">{{ p.counts.pick }} to pick</Badge>
+              <span v-if="!todo(p)" class="text-[11px] text-muted-foreground">nothing to do</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -327,8 +346,13 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
           <template v-else>
             <p class="text-xs text-muted-foreground">
               <span class="font-mono text-foreground">{{ plan.repo }}</span> · merged into {{ plan.integration }}, not released.
-              <template v-if="buckets.length">Drag a PR to where it goes, or within a release to set the cherry-pick order.</template>
             </p>
+            <!-- How it works, in order -->
+            <ol v-if="buckets.length" class="grid gap-1 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              <li v-for="(step, n) in ['Drag each PR into a release, or Hold', 'Drag within a release to set the cherry-pick order', 'Copy the prompt for Claude (bottom) to do the picks']" :key="n" class="flex items-center gap-2">
+                <span class="flex size-4 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-[10px] font-semibold text-foreground tabular-nums">{{ n + 1 }}</span>{{ step }}
+              </li>
+            </ol>
             <!-- A separate release: a branch off the base, filled by cherry-picks (Claude creates it from the prompt) -->
             <form v-if="form" class="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3" @submit.prevent="saveRelease">
               <p class="text-xs font-medium">{{ form.id ? 'Edit the planned release' : 'New release' }}</p>
@@ -353,13 +377,22 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
               @dragover="onDragOver($event, b, null)"
               @drop="onDrop($event, b)"
             >
-              <header class="flex items-center gap-1.5 px-1 pb-1.5">
-                <PhQuestion v-if="b.tone === 'warning'" :class="TONE[b.tone]" />
-                <PhPause v-else-if="b.key === 'hold'" :class="TONE[b.tone]" />
-                <PhGitMerge v-else :class="TONE[b.tone]" />
-                <span :class="cn('text-xs font-semibold', TONE[b.tone])">{{ b.title }}</span>
-                <span class="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{{ b.sub }}</span>
-                <Badge variant="count">{{ b.items.length }}</Badge>
+              <header class="space-y-1 px-1 pb-1.5">
+                <div class="flex items-center gap-1.5">
+                  <PhQuestion v-if="b.tone === 'warning'" :class="cn('shrink-0', TONE[b.tone])" />
+                  <PhPause v-else-if="b.key === 'hold'" :class="cn('shrink-0', TONE[b.tone])" />
+                  <PhGitMerge v-else :class="cn('shrink-0', TONE[b.tone])" />
+                  <!-- A release PR: its branch opens it in the panel (hover preview); planned ones have no PR yet -->
+                  <PrHover v-if="releasePr(b.release)" :pr="releasePr(b.release)!" side="bottom">
+                    <button type="button" :class="cn('min-w-0 truncate font-mono text-xs font-semibold hover:underline', TONE[b.tone])" :title="`Open #${b.release!.number} in the panel`" @click="deck.selectedId = b.release!.id">
+                      {{ b.title }}
+                    </button>
+                  </PrHover>
+                  <span v-else :class="cn('min-w-0 truncate text-xs font-semibold', b.release && 'font-mono', TONE[b.tone])">{{ b.title }}</span>
+                  <span class="flex-1" />
+                  <Badge v-if="b.release?.mode === 'planned'" variant="muted">Planned</Badge>
+                  <Badge v-else-if="releasePr(b.release)" :variant="prStatus(releasePr(b.release)).tone" class="max-w-40"><span class="truncate">{{ prStatus(releasePr(b.release)).label }}</span></Badge>
+                  <Badge variant="count" :title="`${b.items.length} PR(s) in this group`">{{ b.items.length }}</Badge>
                 <!-- The release itself: open / edit it, or for a planned one open its PR, edit, remove -->
                 <DropdownMenu v-if="b.release">
                   <DropdownMenuTrigger as-child>
@@ -380,6 +413,13 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
                     </template>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                </div>
+                <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-5 text-[11px] text-muted-foreground">
+                  <template v-if="b.release && b.release.mode !== 'planned'">
+                    <PrNumberLink :id="b.release.id" :number="b.release.number" /><span>→ {{ b.release.base }} ·</span>
+                  </template>
+                  <span>{{ b.sub }}</span>
+                </p>
               </header>
               <div class="space-y-1">
                 <div
@@ -424,7 +464,30 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-                <p v-if="!b.items.length" class="px-1 py-2 text-center text-xs text-muted-foreground">Drop a PR here</p>
+                <!-- Empty: a dashed drop target, no text (it turns primary while a PR is dragged over) -->
+                <div
+                  v-if="!b.items.length"
+                  :class="cn('flex h-9 items-center justify-center rounded-md border border-dashed text-muted-foreground/60', over?.bucket === b.key && 'border-primary text-primary')"
+                  title="Drop a PR here"
+                  aria-label="Drop a PR here"
+                >
+                  <PhPlus class="size-4" />
+                </div>
+                <!-- What the release branch already has (its contents), locked -->
+                <template v-if="alreadyIn(b).length">
+                  <button type="button" class="flex w-full items-center gap-1 px-1 pt-1 text-[11px] text-muted-foreground hover:text-foreground" @click="toggleAlready(b.key)">
+                    <PhCaretDown :class="cn('size-3 transition-transform', !alreadyOpen(b.key, alreadyIn(b).length) && '-rotate-90')" />
+                    Already in it · {{ alreadyIn(b).length }}
+                  </button>
+                  <template v-if="alreadyOpen(b.key, alreadyIn(b).length)">
+                    <div v-for="c in alreadyIn(b)" :key="c.id" class="flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-xs" :title="`Already in ${b.title}`">
+                      <PhLockSimple class="size-3.5 shrink-0 text-muted-foreground" />
+                      <PrNumberLink v-if="deck.byId.has(c.id)" :id="c.id" :number="c.number" />
+                      <ExternalLink v-else :href="c.url" class="font-mono">#{{ c.number }}</ExternalLink>
+                      <span class="min-w-0 flex-1 truncate text-muted-foreground">{{ c.title }}</span>
+                    </div>
+                  </template>
+                </template>
               </div>
             </section>
 

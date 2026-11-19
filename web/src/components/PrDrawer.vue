@@ -26,6 +26,7 @@ import { usePrState } from '@/composables/prState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -186,10 +187,10 @@ const cells = computed(() => {
   const conv: { tone: BarTone; meta: string } = p.unresolvedThreads
     ? { tone: 'warning', meta: `${p.unresolvedThreads} unresolved` }
     : { tone: 'success', meta: p.comments ? 'all resolved' : 'none' }
-  const approved = new Set(p.reviews.filter((r) => r.state === 'APPROVED').map((r) => r.login.toLowerCase()))
-  // Requested and not given yet (asked again after a review counts as pending too)
-  const pending = p.requestedReviewers.length
-  const counts = [approved.size && `${approved.size} approved`, pending && `${pending} pending`].filter(Boolean).join(' · ')
+  // Counted from the reviewer chips (one per person), so the numbers match what the cell shows
+  const approved = reviewBadges.value.filter((b) => !b.pending && b.tone === 'success').length
+  const pending = reviewBadges.value.filter((b) => b.pending).length
+  const counts = [approved && `${approved} approved`, pending && `${pending} pending`].filter(Boolean).join(' · ')
   const approvals: { tone: BarTone; meta: string } =
     p.reviewDecision === 'CHANGES_REQUESTED'
       ? { tone: 'destructive', meta: 'changes requested' }
@@ -198,7 +199,6 @@ const cells = computed(() => {
         : { tone: 'muted', meta: counts || (p.isDraft ? 'draft' : 'none requested') }
   return { checks, conv, approvals }
 })
-const reviewsEl = ref<HTMLElement | null>(null)
 
 /** New Jira issue pre-filled from this PR: title without its Jira keys, and a link back */
 function createIssueFromPr() {
@@ -241,6 +241,7 @@ const REVIEW_STATE: Record<string, { tone: 'success' | 'destructive' | 'muted'; 
   DISMISSED: { tone: 'muted', icon: PhProhibit, label: 'Review dismissed' },
   PENDING: { tone: 'muted', icon: PhCircleDashed, label: 'Review in progress' },
 }
+const REVIEW_TONE: Record<string, string> = { success: 'text-success', destructive: 'text-destructive', muted: 'text-muted-foreground', outline: 'text-muted-foreground' }
 const reviewBadges = computed(() => {
   const p = pr.value
   if (!p) return []
@@ -249,13 +250,13 @@ const reviewBadges = computed(() => {
     const st = REVIEW_STATE[r.state] ?? REVIEW_STATE.COMMENTED
     const when = r.submittedAt ? ` ${timeAgo(r.submittedAt)}` : ''
     if (requested.has(r.login.toLowerCase()))
-      return { key: r.login, login: r.login, tone: 'outline' as const, icon: PhArrowsClockwise, pending: true, title: `${r.login}: review requested again, not given yet (last: ${st.label.toLowerCase()}${when})` }
-    return { key: r.login, login: r.login, tone: st.tone, icon: st.icon, pending: false, title: `${r.login}: ${st.label}${when}` }
+      return { key: r.login, login: r.login, tone: 'outline' as const, icon: PhArrowsClockwise, pending: true, status: `Asked again · last ${st.label.toLowerCase()}${when}`, title: `${r.login}: review requested again, not given yet (last: ${st.label.toLowerCase()}${when})` }
+    return { key: r.login, login: r.login, tone: st.tone, icon: st.icon, pending: false, status: `${st.label}${when}`, title: `${r.login}: ${st.label}${when}` }
   })
   const reviewed = new Set(p.reviews.map((r) => r.login.toLowerCase()))
   for (const r of p.requestedReviewers)
     if (!reviewed.has(r.login.toLowerCase()))
-      out.push({ key: `rq${r.login}`, login: `${r.isTeam ? 'team/' : ''}${r.login}`, tone: 'outline' as const, icon: PhCircleDashed, pending: true, title: `Review requested from ${r.isTeam ? 'the team ' : ''}${r.login}, not given yet` })
+      out.push({ key: `rq${r.login}`, login: `${r.isTeam ? 'team/' : ''}${r.login}`, tone: 'outline' as const, icon: PhCircleDashed, pending: true, status: 'Requested, not given yet', title: `Review requested from ${r.isTeam ? 'the team ' : ''}${r.login}, not given yet` })
   return out
 })
 
@@ -496,10 +497,31 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
                 <span class="flex items-center gap-1.5"><span class="font-semibold">Conversations</span><span class="truncate text-xs text-muted-foreground">{{ cells.conv.meta }}</span><PhCaretRight class="ml-auto shrink-0 text-muted-foreground" /></span>
                 <span :class="['block h-1.5 rounded-full', BAR[cells.conv.tone]]" />
               </button>
-              <button type="button" class="min-w-0 space-y-2 px-4 py-3 text-left transition-colors hover:bg-accent" @click="reviewsEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })">
-                <span class="flex items-center gap-1.5"><span class="font-semibold">Approvals</span><span class="truncate text-xs text-muted-foreground">{{ cells.approvals.meta }}</span><PhCaretRight class="ml-auto shrink-0 text-muted-foreground" /></span>
-                <span :class="['block h-1.5 rounded-full', BAR[cells.approvals.tone]]" />
-              </button>
+              <!-- Opens the reviewers (one per person), like the Checks cell; open PRs have no separate Reviews section -->
+              <Popover>
+                <PopoverTrigger as-child>
+                  <button type="button" class="min-w-0 space-y-2 px-4 py-3 text-left transition-colors hover:bg-accent data-[state=open]:bg-accent">
+                    <span class="flex items-center gap-1.5"><span class="font-semibold">Approvals</span><span class="truncate text-xs text-muted-foreground">{{ cells.approvals.meta }}</span><PhCaretRight class="ml-auto shrink-0 text-muted-foreground" /></span>
+                    <span :class="['block h-1.5 rounded-full', BAR[cells.approvals.tone]]" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" class="w-80 gap-0 p-0" @open-auto-focus.prevent>
+                  <div class="border-b px-3 py-2 text-xs font-medium">Reviewers<span v-if="cells.approvals.meta" class="font-normal text-muted-foreground"> · {{ cells.approvals.meta }}</span></div>
+                  <ScrollArea v-if="reviewBadges.length" class="[&>[data-slot=scroll-area-viewport]]:max-h-64">
+                    <ul class="p-1">
+                      <li v-for="r in reviewBadges" :key="r.key" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm" :title="r.title">
+                        <component :is="r.icon" :size="14" :class="['shrink-0', REVIEW_TONE[r.tone]]" />
+                        <span class="min-w-0 flex-1 truncate">{{ r.login }}</span>
+                        <span class="shrink-0 text-xs text-muted-foreground">{{ r.status }}</span>
+                      </li>
+                    </ul>
+                  </ScrollArea>
+                  <p v-else class="px-3 py-2 text-xs text-muted-foreground">No reviews requested yet.</p>
+                  <div class="border-t px-3 py-2 text-xs">
+                    <ExternalLink :href="pr.url" icon="always" class="text-muted-foreground hover:text-foreground">Reviews on GitHub</ExternalLink>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
@@ -523,7 +545,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             </div>
           </div>
 
-          <section ref="reviewsEl">
+          <section v-if="!cells">
             <h3 class="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Reviews</h3>
             <div class="flex flex-wrap gap-1.5">
               <Badge v-for="r in reviewBadges" :key="r.key" :variant="r.tone" :class="r.pending && 'text-muted-foreground'" :title="r.title">
