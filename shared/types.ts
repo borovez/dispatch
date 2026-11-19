@@ -236,6 +236,12 @@ export interface JiraSprint {
   endDate?: string
 }
 
+/** GET /api/jira/search: the search palette's live lookup (issues not stored; `error` when Jira failed) */
+export interface JiraLiveSearch {
+  issues: JiraIssue[]
+  error?: string
+}
+
 export interface JiraIssue {
   /** When this copy was read from Jira (sync or a refresh) */
   fetchedAt?: string
@@ -333,6 +339,8 @@ export interface Overview {
   jira: JiraIssueView[]
   /** Jira keys that moved (old → new key); PRs naming the old key resolve to the moved issue */
   jiraMoved: Record<string, string>
+  /** Jira keys Jira no longer finds (deleted, or no access any more) → when Dispatch noticed */
+  jiraGone: Record<string, string>
   /** Per Jira key: PRs naming it found beyond the synced ones (GitHub search, Jira's development panel); keys with none are left out */
   linkedPrs: Record<string, LinkedPr[]>
   slack: SlackItem[]

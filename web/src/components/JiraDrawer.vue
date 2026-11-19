@@ -5,8 +5,10 @@ import RefreshButton from '@/components/RefreshButton.vue'
 import ShareMenu from '@/components/ShareMenu.vue'
 import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
-import { computed, ref, watch } from 'vue'
-import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhRobot } from '@phosphor-icons/vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { PhArrowSquareOut, PhChatCircle, PhGraph, PhPencilSimple, PhRocketLaunch, PhRobot, PhTrash } from '@phosphor-icons/vue'
+import { toast } from 'vue-sonner'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import type { JiraIssueDetail, JiraSprint, LinkedPrs } from '@shared/types'
 import { currentSprint, sprintBadge } from '@/utils/jiraOrder'
 import LinkedPrRow from './LinkedPrRow.vue'
@@ -38,6 +40,16 @@ const key = computed(() => deck.selectedJiraKey)
 const nav = useReleaseNav()
 const releaseId = computed(() => (key.value ? nav.releaseForIssue(key.value) : null))
 const issue = computed(() => (key.value ? (deck.jiraByKey.get(key.value) ?? null) : null))
+/** When Jira stopped finding this issue (deleted, or no access any more), noticed by a sync or a refresh */
+const goneAt = computed(() => (key.value ? (deck.overview?.jiraGone?.[key.value] ?? null) : null))
+/** Summaries seen this page session, so a deleted issue (dropped from the store) keeps its title */
+const seenSummary = reactive(new Map<string, string>())
+watch(issue, (i) => i && key.value && seenSummary.set(key.value, i.summary), { immediate: true })
+const detailSummary = computed(() => (key.value ? seenSummary.get(key.value) : undefined))
+// Gone while the panel shows it (a sync ran, or a refresh): say so once, the alert stays
+watch(goneAt, (at, before) => {
+  if (at && !before && key.value) toast.warning(`${key.value} was deleted in Jira`, { description: 'Or you no longer have access to it.' })
+})
 /** The key shown, the issue's current key (when it moved) and older keys that moved to it */
 const aliases = computed(() => {
   if (!key.value) return []
@@ -69,6 +81,8 @@ async function loadDetail(k: string | null, force = false) {
   } catch (e) {
     cache.delete(k)
     if (key.value === k) error.value = (e as Error).message
+    // A 404 / 403 marks the issue gone on the server: reload, so the panel says it was deleted
+    if (!deck.overview?.jiraGone?.[k]) deck.load()
   }
 }
 watch(key, (k) => loadDetail(k), { immediate: true })
@@ -107,8 +121,15 @@ async function reload() {
   const k = key.value
   if (!k || reloading.value) return
   reloading.value = true
-  await Promise.all([deck.mutate(() => api.jiraRefresh(k)), loadDetail(k, true), loadLinked(k, true)])
+  await Promise.all([refreshIssue(k), loadDetail(k, true), loadLinked(k, true)])
   reloading.value = false
+}
+/** Re-read the fields; an issue Jira no longer finds shows the Deleted alert (and its toast), not an error toast */
+async function refreshIssue(k: string) {
+  let failed: Error | null = null
+  await api.jiraRefresh(k).catch((e: Error) => (failed = e))
+  await deck.load()
+  if (failed && !deck.overview?.jiraGone?.[k]) toast.error((failed as Error).message)
 }
 
 const initials = (name: string) =>
@@ -162,15 +183,24 @@ const details = computed(() => {
         <Button variant="outline" size="sm" class="h-7" title="Copy a prompt for an AI agent to implement this issue" @click="deck.agentPromptKey = key">
           <PhRobot /> Prompt
         </Button>
-        <Button v-if="deck.overview?.configured.jira" variant="outline" size="sm" class="h-7" @click="deck.composer = { mode: 'edit', key: key! }">
+        <Button v-if="deck.overview?.configured.jira && !goneAt" variant="outline" size="sm" class="h-7" @click="deck.composer = { mode: 'edit', key: key! }">
           <PhPencilSimple /> Edit
         </Button>
       </div>
-      <h2 class="mt-1.5 flex items-start gap-2 leading-snug font-semibold"><KindIcon kind="jira" /><span class="min-w-0 pt-0.5">{{ issue?.summary ?? 'Not loaded from Jira' }}</span></h2>
+      <h2 class="mt-1.5 flex items-start gap-2 leading-snug font-semibold"><KindIcon kind="jira" /><span class="min-w-0 pt-0.5">{{ issue?.summary ?? detailSummary ?? (goneAt ? 'Deleted in Jira' : 'Not loaded from Jira') }}</span></h2>
     </template>
 
     <ScrollArea v-if="key" class="min-h-0 flex-1">
       <div class="space-y-5 p-4">
+        <!-- Deleted in Jira (or no access): a sync or a refresh got 404 / 403 for it -->
+        <Alert v-if="goneAt" variant="destructive">
+          <PhTrash />
+          <AlertTitle>Deleted in Jira</AlertTitle>
+          <AlertDescription>
+            Jira no longer finds {{ key }}: it was deleted, or you no longer have access. Noticed <span :title="fullDate(goneAt)">{{ timeAgo(goneAt) }}</span>.
+          </AlertDescription>
+          <AlertAction><Button variant="outline" size="sm" @click="deck.selectedJiraKey = null">Close</Button></AlertAction>
+        </Alert>
         <div v-if="issue" class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           <div>
             <div class="text-xs text-muted-foreground">Assignee</div>
@@ -260,6 +290,7 @@ const details = computed(() => {
         <section>
           <h3 class="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Description</h3>
           <p v-if="!deck.overview?.configured.jira" class="text-sm text-muted-foreground">Connect Jira to see the description and comments.</p>
+          <p v-else-if="goneAt" class="text-sm text-muted-foreground">Not available: the issue is gone from Jira.</p>
           <p v-else-if="error" class="text-sm text-destructive">{{ error }}</p>
           <template v-else-if="detail">
             <AdfView v-if="detail.description?.content?.length" :doc="detail.description" />
@@ -315,7 +346,7 @@ const details = computed(() => {
     <template v-if="key && (issue || url)" #footer>
       <Button v-if="url" variant="outline" size="sm" as="a" :href="url" target="_blank" rel="noopener"><PhArrowSquareOut /> Open in Jira</Button>
       <span class="flex-1" />
-      <JiraTransition v-if="issue" :issue-key="key" prominent />
+      <JiraTransition v-if="issue && !goneAt" :issue-key="key" prominent />
     </template>
   </SidePanel>
 </template>

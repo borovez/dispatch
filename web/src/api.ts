@@ -1,4 +1,4 @@
-import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, LinkedPrs, LinkPreview, PrDetail, ReleasePlan, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
+import type { UpdateStatus, PrRewrite, PrRewriteRequest, AiConfig, ImageAttachment, JiraAiDraft, JiraDraftRequest, RepoCatalog, JiraIssueTypeMeta, JiraCreateMeta, JiraEditable, JiraFieldKind, JiraFieldOption, JiraIssue, JiraProjectMeta, JiraWriteInput, JiraFieldValue, JiraIssueDetail, JiraLiveSearch, LinkedPrs, LinkPreview, PrDetail, ReleasePlan, Overview, Settings, SlackContext, SlackMessage, SlackStatus, SlackUserProfile, SyncState } from '@shared/types'
 
 async function call<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -83,6 +83,8 @@ export const api = {
   jiraDraft: (input: JiraDraftRequest, signal?: AbortSignal) => call<JiraAiDraft>('POST', '/jira/draft', input, signal),
   jiraUpdateIssue: (key: string, changes: { summary?: string; description?: string; issueTypeId?: string; values?: Record<string, JiraFieldValue>; attachments?: ImageAttachment[]; comment?: string }) =>
     call<JiraIssue>('PUT', `/jira/issues/${encodeURIComponent(key)}`, changes),
+  /** Search palette: Jira issues matching the text or key, live (not stored) */
+  jiraSearch: (q: string, signal?: AbortSignal) => call<JiraLiveSearch>('GET', `/jira/search?q=${encodeURIComponent(q)}`, undefined, signal),
   jiraRefresh: (key: string) => call<JiraIssue>('POST', `/jira/${encodeURIComponent(key)}/refresh`),
   /** PRs naming the key beyond the synced ones: GitHub search and Jira's development panel */
   jiraLinkedPrs: (key: string, refresh = false) => call<LinkedPrs>('GET', `/jira/${encodeURIComponent(key)}/linked-prs${refresh ? '?refresh=1' : ''}`),

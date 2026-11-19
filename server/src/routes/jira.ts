@@ -1,16 +1,32 @@
 import { adfToMarkdown } from '../../../shared/adf.ts'
 import { z } from 'zod'
-import type { LinkedPrs, JiraFieldKind, JiraFieldOption } from '../../../shared/types.ts'
-import { addJiraMoved, listPrs, getSettings, getSlackItem, listJira, replaceJira, setSlackStatus, upsertJira } from '../db.ts'
+import type { LinkedPrs, JiraFieldKind, JiraFieldOption, JiraIssue, JiraLiveSearch } from '../../../shared/types.ts'
+import { addJiraMoved, markJiraGone, listPrs, getSettings, getSlackItem, listJira, replaceJira, setSlackStatus, upsertJira } from '../db.ts'
 import { draftJiraIssue } from '../ai.ts'
 import { buildAgentPrompt } from '../agentPrompt.ts'
 import { claudeMdGuide } from '../guides.ts'
 import { replyInThread, threadContext } from '../slack.ts'
 import { prFileNames } from '../github.ts'
-import { addAttachments, addComment, hasAttachmentRefs, resolveAttachmentRefs, composeCreate, composeUpdate, createMeta, editable, fieldOptions, getIssue, getIssueDetail, getTransitions, jiraMyself, listProjects, transition, fetchIssuesByKey } from '../jira.ts'
+import { addAttachments, addComment, hasAttachmentRefs, resolveAttachmentRefs, composeCreate, composeUpdate, createMeta, editable, fieldOptions, getIssue, getIssueDetail, getTransitions, jiraMyself, listProjects, transition, fetchIssuesByKey, searchIssuesLive, JiraError } from '../jira.ts'
 import { findLinkedPrs } from '../linkedPrs.ts'
 import { accountForOwner } from '../sync.ts'
 import { api, bad, jiraCfg, Images } from './shared.ts'
+
+/**
+ * Jira answering 404 / 403 for an issue: it was deleted, or I can't see it any more. Remember it (the panel
+ * says so, also after a sync) and answer with a message that says what happened.
+ */
+async function goneOn404<T>(key: string, p: Promise<T>): Promise<T> {
+  try {
+    return await p
+  } catch (e) {
+    if (e instanceof JiraError && (e.status === 404 || e.status === 403)) {
+      markJiraGone([key])
+      throw bad(`${key} isn't in Jira any more: it was deleted, or you no longer have access`)
+    }
+    throw e
+  }
+}
 
 /** Jira: issue detail, linked PRs, transitions, the composer (create / edit / draft) */
 // ---------- Jira issue detail (side panel) ----------
@@ -18,8 +34,9 @@ import { api, bad, jiraCfg, Images } from './shared.ts'
 api.post('/jira/:key/refresh', async (c) => {
   // An issue the sync didn't fetch stays off the Jira page list (parentOnly)
   const asked = c.req.param('key').toUpperCase()
-  const issue = { ...(await getIssue(jiraCfg(), asked)), parentOnly: true }
+  const issue = { ...(await goneOn404(asked, getIssue(jiraCfg(), asked))), parentOnly: true }
   upsertJira(issue)
+  markJiraGone([], [asked, issue.key])
   // Moved issue (Jira answers the old key with the new one): remember it, so the old key resolves
   if (issue.key !== asked) addJiraMoved({ [asked]: issue.key })
   return c.json(issue)
@@ -31,13 +48,39 @@ api.post('/jira/refresh-many', async (c) => {
   const { issues, missing, moved } = await fetchIssuesByKey(jiraCfg(), [...new Set(keys.map((k) => k.toUpperCase()))])
   for (const i of issues) upsertJira(i)
   if (Object.keys(moved).length) addJiraMoved(moved)
+  markJiraGone(missing, issues.map((i) => i.key))
   return c.json({ issues: issues.length, missing, moved: Object.keys(moved).length })
+})
+
+/**
+ * Search palette fallback: Jira issues the sync hasn't stored (created since, or not mine). Results are
+ * shown, not stored; picking one stores it through /jira/:key/refresh. Throttled here as well as in the
+ * palette (debounce, abort): per query for a minute, and one request in flight per query.
+ */
+const liveCache = new Map<string, { at: number; value: Promise<JiraIssue[]> }>()
+api.get('/jira/search', async (c) => {
+  const q = (c.req.query('q') ?? '').trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 100)
+  if (q.length < 2) return c.json({ issues: [] } satisfies JiraLiveSearch)
+  const hit = liveCache.get(q)
+  let value = hit && Date.now() - hit.at < 60_000 ? hit.value : null
+  if (!value) {
+    if (liveCache.size > 200) liveCache.clear()
+    value = searchIssuesLive(jiraCfg(), q)
+    liveCache.set(q, { at: Date.now(), value })
+  }
+  try {
+    return c.json({ issues: await value } satisfies JiraLiveSearch)
+  } catch (e) {
+    liveCache.delete(q)
+    return c.json({ issues: [], error: (e as Error).message } satisfies JiraLiveSearch)
+  }
 })
 
 api.get('/jira/:key/detail', async (c) => {
   const cfg = getSettings().jira
   if (!cfg?.apiToken) throw bad('Jira not configured')
-  return c.json(await getIssueDetail(cfg, c.req.param('key')))
+  const key = c.req.param('key').toUpperCase()
+  return c.json(await goneOn404(key, getIssueDetail(cfg, key)))
 })
 
 // ---------- PRs naming a Jira issue (beyond the synced ones) ----------

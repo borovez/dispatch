@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { useEventListener } from '@vueuse/core'
 import {
   PhArrowsClockwise,
+  PhCircleNotch,
   PhNotePencil,
   PhDesktop,
   PhGauge,
@@ -20,6 +21,7 @@ import {
   PhTimer,
 } from '@phosphor-icons/vue'
 import { api } from '@/api'
+import type { JiraIssue } from '@shared/types'
 import { useDeck } from '@/stores/deck'
 import { useTheme } from '@/composables/theme'
 import { LAYER_OPEN } from '@/composables/escape'
@@ -58,6 +60,9 @@ watch(open, async (o) => {
   if (!o) return
   query.value = ''
   active.value = 0
+  live.value = new Map()
+  // Pick up what the server stored since the last poll (issues created here or through the MCP)
+  if (!deck.syncRunning) deck.load()
   await nextTick()
   input.value?.focus()
 })
@@ -99,6 +104,57 @@ function top<T>(items: T[], scoreOf: (t: T) => number): { items: T[]; best: numb
   return { items: hits.map(([t]) => t), best: hits[0]?.[1] ?? 0 }
 }
 
+/** Jira: synced issues plus keys only seen on PRs */
+const localJira = computed(() => {
+  const keys = new Map<string, JiraIssue | null>((deck.overview?.jira ?? []).map((j) => [j.key, j] as const))
+  for (const p of deck.prs) for (const k of p.jiraKeys) if (!keys.has(k)) keys.set(k, null)
+  return keys
+})
+/**
+ * Issues Jira returned for this palette session's queries but the sync hasn't stored (created since,
+ * or not mine). They join the candidates and go through the same matching, so an answer for an older
+ * query still shows while it matches, and nothing flickers between keystrokes.
+ */
+const live = ref(new Map<string, JiraIssue>())
+const jiraHits = computed(() => {
+  const all = new Map(localJira.value)
+  for (const [k, j] of live.value) if (!all.get(k)) all.set(k, j)
+  return top([...all], ([k, j]) => score(`${k} ${j?.summary ?? ''} ${j?.assignee?.displayName ?? ''} ${j?.status ?? ''}`, [k]))
+})
+
+/**
+ * Ask Jira when the synced issues don't fill the group: 3+ characters (or a key), 350 ms after typing
+ * stops, the previous request aborted. The server caches each query for a minute.
+ */
+const liveBusy = ref(false)
+let liveTimer = 0
+let liveCtrl: AbortController | null = null
+watch(
+  () => query.value.trim(),
+  (q) => {
+    clearTimeout(liveTimer)
+    liveCtrl?.abort()
+    liveBusy.value = false
+    const isKey = /^[A-Za-z][A-Za-z0-9_]*-\d+$/.test(q)
+    if (!open.value || !deck.overview?.configured.jira || (q.length < 3 && !isKey)) return
+    if (jiraHits.value.items.length >= LIMIT && !(isKey && !jiraHits.value.items.some(([k]) => k === q.toUpperCase()))) return
+    liveBusy.value = true
+    liveTimer = window.setTimeout(async () => {
+      const ctrl = (liveCtrl = new AbortController())
+      try {
+        const { issues } = await api.jiraSearch(q, ctrl.signal)
+        const next = new Map(live.value)
+        for (const i of issues) next.set(i.key, i)
+        live.value = next
+      } catch {
+        // aborted by the next keystroke, or Jira failed: the synced results stand
+      } finally {
+        if (liveCtrl === ctrl) liveBusy.value = false
+      }
+    }, 350)
+  },
+)
+
 const PAGES = [
   { to: '/', label: 'Overview', icon: PhGauge },
   { to: '/prs', label: 'Pull requests', icon: PhGitPullRequest },
@@ -130,10 +186,7 @@ const groups = computed<Group[]>(() => {
       })),
     })
 
-    // Jira: synced issues plus keys only seen on PRs
-    const keys = new Map((deck.overview?.jira ?? []).map((j) => [j.key, j] as const))
-    for (const p of deck.prs) for (const k of p.jiraKeys) if (!keys.has(k)) keys.set(k, null as never)
-    const issues = top([...keys], ([k, j]) => score(`${k} ${j?.summary ?? ''} ${j?.assignee?.displayName ?? ''} ${j?.status ?? ''}`, [k]))
+    const issues = jiraHits.value
     out.push({
       label: 'Jira issues',
       best: issues.best,
@@ -141,8 +194,13 @@ const groups = computed<Group[]>(() => {
         key: `jira:${k}`,
         icon: PhKanban,
         label: `${k}  ${j?.summary ?? ''}`.trim(),
+        detail: localJira.value.get(k) ? undefined : live.value.has(k) ? 'Found in Jira, not synced yet' : undefined,
         badge: j ? { text: j.status, variant: jiraTone(j.statusCategory) } : undefined,
-        run: () => (deck.selectedJiraKey = k),
+        run: () => {
+          deck.selectedJiraKey = k
+          // Store it, so the panel has its fields and it stays searchable
+          if (live.value.has(k) && !localJira.value.get(k)) deck.mutate(() => api.jiraRefresh(k))
+        },
       })),
     })
 
@@ -194,6 +252,14 @@ const groups = computed<Group[]>(() => {
 
 const flat = computed(() => groups.value.flatMap((g) => g.results))
 watch(query, () => (active.value = 0))
+// Rows arriving from Jira keep the highlighted row where it is (a new query starts at the top)
+let flatQuery = ''
+watch(flat, (now, before) => {
+  if (query.value !== flatQuery) return void (flatQuery = query.value)
+  const k = before?.[active.value]?.key
+  const i = k ? now.findIndex((r) => r.key === k) : -1
+  if (i >= 0) active.value = i
+})
 
 function pick(r: Result) {
   open.value = false
@@ -260,7 +326,10 @@ const indexOf = (r: Result) => flat.value.indexOf(r)
             <Badge v-if="r.badge" :variant="r.badge.variant as never" class="shrink-0">{{ r.badge.text }}</Badge>
           </button>
         </section>
-        <p v-if="!flat.length" class="py-10 text-center text-sm text-muted-foreground">No results for “{{ query }}”</p>
+        <p v-if="liveBusy" class="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+          <PhCircleNotch class="animate-spin" /> Searching Jira…
+        </p>
+        <p v-else-if="!flat.length" class="py-10 text-center text-sm text-muted-foreground">No results for “{{ query }}”</p>
       </div>
       </ScrollArea>
     </DialogContent>

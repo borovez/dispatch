@@ -535,3 +535,18 @@ export const listJiraMoved = () => kvGet<Record<string, string>>('jiraMoved', {}
 export function addJiraMoved(moved: Record<string, string>) {
   if (Object.keys(moved).length) kvSet('jiraMoved', { ...listJiraMoved(), ...moved })
 }
+
+/** Jira keys Jira no longer answers (404 / 403: deleted, or no access any more) → when that was noticed */
+export const listJiraGone = () => kvGet<Record<string, string>>('jiraGone', {})
+/** Record keys Jira didn't find (their stored copies are dropped) and clear keys it found again */
+export function markJiraGone(gone: string[], found: string[] = []) {
+  const prev = listJiraGone()
+  const next = { ...prev }
+  const at = new Date().toISOString()
+  for (const k of gone) next[k] ??= at
+  for (const k of found) delete next[k]
+  for (const k of gone) db.prepare('DELETE FROM jira_issues WHERE key = ?').run(k)
+  // Newest 300 are plenty for the panels that might show one
+  const kept = Object.entries(next).sort((a, b) => b[1].localeCompare(a[1])).slice(0, 300)
+  if (kept.length !== Object.keys(prev).length || kept.some(([k]) => !(k in prev))) kvSet('jiraGone', Object.fromEntries(kept))
+}

@@ -1,5 +1,5 @@
 import type { GithubAccount, JiraIssue, PrId, PrRecord, Relation, Settings, SyncState, SyncStep } from '../../shared/types.ts'
-import { addJiraMoved,
+import { addJiraMoved, markJiraGone, listJira,
   replaceFeatureFlags,
   listFeatureFlags,
   deletePrsNotSyncedAt,
@@ -363,7 +363,7 @@ async function doSync(): Promise<SyncState> {
           k.forEach((x) => keys.add(x))
         }
         const mineKeys = new Set(mine.map((i) => i.key))
-        const { issues, moved } = await fetchIssuesByKey(
+        const { issues, missing, moved } = await fetchIssuesByKey(
           jira,
           [...keys].filter((k) => !mineKeys.has(k)),
         )
@@ -373,7 +373,13 @@ async function doSync(): Promise<SyncState> {
         const parentKeys = [...new Set([...mine, ...issues].map((i) => i.parent?.key).filter((k): k is string => !!k && !have.has(k)))]
         const parents = parentKeys.length ? (await fetchIssuesByKey(jira, parentKeys)).issues.map((i) => ({ ...i, parentOnly: true })) : []
         const all: JiraIssue[] = [...mine, ...issues, ...parents]
+        // Issues stored last time that this sync didn't bring back: still there (out of my JQL now) or
+        // deleted. Ask Jira for them, so an open panel can say the issue is gone.
+        const now = new Set(all.map((i) => i.key))
+        const dropped = listJira().map((i) => i.key).filter((k) => !now.has(k) && !(k in moved)).slice(0, 40)
+        const check = dropped.length ? await fetchIssuesByKey(jira, dropped) : { missing: [] as string[] }
         replaceJira(all, syncedAt)
+        markJiraGone([...missing, ...check.missing], [...now])
         saveMyJiraKeys([...mineKeys])
         jiraCount = all.length
       } catch (e) {

@@ -151,7 +151,7 @@ export async function searchJql(cfg: JiraConfig, jql: string, isMine: boolean, m
   do {
     const page = await request<{ issues: any[]; nextPageToken?: string; isLast?: boolean }>(cfg, '/rest/api/3/search/jql', {
       method: 'POST',
-      body: JSON.stringify({ jql, fields: fields.list, maxResults: 100, nextPageToken }),
+      body: JSON.stringify({ jql, fields: fields.list, maxResults: Math.min(100, max), nextPageToken }),
     })
     out.push(...page.issues.map((i) => mapIssue(cfg, i, isMine, fields.sprint)))
     nextPageToken = page.isLast === false || page.nextPageToken ? page.nextPageToken : undefined
@@ -201,6 +201,36 @@ export async function fetchIssuesByKey(cfg: JiraConfig, keys: string[]): Promise
     }
   }
   return { issues, missing, moved }
+}
+
+/**
+ * Live search for the search palette, for issues the sync hasn't stored (just created, not mine).
+ * A key is looked up directly (no index lag); text matches every word as a prefix of the summary,
+ * in the configured projects. Lucene specials are dropped, and half-typed input that Jira still
+ * rejects (400) is an empty result, not an error.
+ */
+export async function searchIssuesLive(cfg: JiraConfig, q: string, max = 8): Promise<JiraIssue[]> {
+  const text = q.trim()
+  if (/^[A-Za-z][A-Za-z0-9_]*-\d+$/.test(text)) return (await fetchIssuesByKey(cfg, [text.toUpperCase()])).issues
+  // A bare number is an issue number in one of the configured projects (1777 → LDW-1777); else a summary word
+  if (/^\d+$/.test(text) && cfg.projectKeys.length) {
+    const { issues } = await fetchIssuesByKey(cfg, cfg.projectKeys.map((k) => `${k.toUpperCase()}-${text}`))
+    if (issues.length) return issues
+  }
+  const words = text
+    .split(/\s+/)
+    .map((w) => w.replace(/[+\-&|!(){}\[\]^"~*?:\\/]/g, ''))
+    .filter((w) => w.length >= 2)
+    .slice(0, 6)
+  if (!words.length) return []
+  const scope = cfg.projectKeys.length ? `project in (${cfg.projectKeys.map((k) => `"${k}"`).join(',')}) AND ` : ''
+  const jql = `${scope}${words.map((w) => `summary ~ "${w}*"`).join(' AND ')} ORDER BY updated DESC`
+  try {
+    return await searchJql(cfg, jql, false, max)
+  } catch (e) {
+    if (e instanceof JiraError && e.status === 400) return []
+    throw e
+  }
 }
 
 /** Description and the latest comments, for the Jira side panel */
