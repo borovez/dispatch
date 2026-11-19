@@ -84,8 +84,9 @@ async function share() {
             <DropdownMenuItem @select="copyRich"><PhTextAa /> Copy link with title</DropdownMenuItem>
             <DropdownMenuItem @select="copy(`[${label()}](${url})`, 'Markdown link')"><PhMarkdownLogo /> Copy as Markdown</DropdownMenuItem>
             <DropdownMenuItem v-if="refLabel" @select="copy(refLabel!, refLabel!)">
-              <PhHash /> Copy {{ refLabel.includes('#') ? 'reference' : 'key' }}
-              <DropdownMenuShortcut class="max-w-28 truncate font-mono">{{ refLabel }}</DropdownMenuShortcut>
+              <PhHash />
+              <span class="shrink-0 whitespace-nowrap">Copy {{ refLabel.includes('#') ? 'reference' : 'key' }}</span>
+              <DropdownMenuShortcut class="min-w-0 truncate font-mono" :title="refLabel">{{ refLabel }}</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem v-if="title" @select="copy(title!, 'Title')"><PhCopy /> Copy title</DropdownMenuItem>
             <template v-if="canShare">
