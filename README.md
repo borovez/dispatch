@@ -134,8 +134,13 @@ in `~/.dispatch`. If the background server from `npm run app:install` is running
 It asks for Touch ID (or your Mac password) when it opens, and again after the screen locks or the
 Mac sleeps (Dispatch menu → Require Unlock; Lock Now with ⌘L).
 
-The app isn't signed with an Apple Developer ID yet, so the first time macOS says it can't check it:
-right-click Dispatch in Applications → **Open** → **Open**. It checks GitHub for new releases (menu
+The app isn't signed or notarized with an Apple Developer ID yet, so macOS blocks a downloaded
+`.dmg` (and company-managed Macs often allow only signed apps). Until it is, run Dispatch from the
+repo instead: [Getting started](#getting-started), then [Install as a Mac app](#install-as-a-mac-app)
+for a Dock icon and its own window. An app you build yourself with `npm run desktop:dist` isn't
+blocked either, since it was never downloaded.
+
+It checks GitHub for new releases (menu
 **Dispatch → Check for Updates…**) and offers the new `.dmg` when a release has one.
 
 ## Install as a Mac app
