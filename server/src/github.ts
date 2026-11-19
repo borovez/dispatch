@@ -720,6 +720,19 @@ export async function branchExists(account: GithubAccount, repo: string, branch:
   }
 }
 
+/** A repo's branches (up to 1,000), the default branch first (planned releases: what to cut from) */
+export async function listBranches(account: GithubAccount, repo: string): Promise<{ default: string; branches: string[] }> {
+  const info = await request<{ default_branch: string }>(account.token, `/repos/${repo}`)
+  const names: string[] = []
+  for (let page = 1; page <= 10; page++) {
+    const batch = await request<{ name: string }[]>(account.token, `/repos/${repo}/branches?per_page=100&page=${page}`)
+    names.push(...batch.map((b) => b.name))
+    if (batch.length < 100) break
+  }
+  const rest = names.filter((n) => n !== info.default_branch).sort((a, b) => a.localeCompare(b))
+  return { default: info.default_branch, branches: [info.default_branch, ...rest] }
+}
+
 /** Open a pull request (a planned release whose branch is pushed); returns its number and URL */
 export async function createPull(
   account: GithubAccount,

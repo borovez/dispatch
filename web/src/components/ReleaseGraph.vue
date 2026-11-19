@@ -131,7 +131,7 @@ const allLanes = computed<Lane[]>(() => {
         title: p.title,
         url: p.url,
         pr: p,
-        warn: p.state === 'MERGED' && p.backmerge && !p.backmerge.backmerged ? `Not in ${p.backmerge.into} yet` : undefined,
+        warn: p.state === 'MERGED' && p.backmerge && !p.backmerge.backmerged && !p.markedDone ? `Not in ${p.backmerge.into} yet` : undefined,
       }))
       put(repo, group({ kind: 'hotfixes', id: `hotfixes:${k}`, repo, branch: prs[0].baseRef, rows, jiraKeys: [...new Set(prs.flatMap((p) => p.jiraKeys))] }, col))
     }
@@ -185,7 +185,7 @@ const allLanes = computed<Lane[]>(() => {
       return e
     }
     for (const p of deck.prs)
-      if (p.flow === 'hotfix' && p.state === 'MERGED' && recent(p) && p.backmerge && !p.backmerge.backmerged) entry(p, p.backmerge.into).missing++
+      if (p.flow === 'hotfix' && p.state === 'MERGED' && recent(p) && p.backmerge && !p.backmerge.backmerged && !p.markedDone) entry(p, p.backmerge.into).missing++
     for (const p of deck.prs) if (p.flow === 'backmerge' && p.state === 'OPEN') entry(p, p.baseRef).open.push(p)
     for (const [key, e] of repos) {
       const rows = e.open.map((p) => ({ id: p.id, title: p.title, url: p.url, pr: p }))
@@ -339,7 +339,7 @@ const baseEdges = computed<Edge[]>(() => {
     const bm = placed.value.out.find((o) => o.item.id === target)!.item
     for (const r of item.data.rows) {
       const p = r.pr
-      if (!p || p.state !== 'MERGED' || !p.backmerge || p.backmerge.backmerged) continue
+      if (!p || p.state !== 'MERGED' || !p.backmerge || p.backmerge.backmerged || p.markedDone) continue
       const open = p.backmergePr && bm.data.expanded && bm.data.rows.some((x) => x.id === p.backmergePr) ? p.backmergePr : null
       const color = p.backmergePr ? 'var(--warning)' : 'var(--destructive)'
       const id = `back:${r.id}`

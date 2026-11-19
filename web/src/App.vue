@@ -93,7 +93,7 @@ const nav = computed(() => [
     to: '/releases',
     label: 'Releases',
     icon: PhRocketLaunch,
-    count: deck.prs.filter((p) => (p.flow === 'release' && p.state === 'OPEN') || (p.flow === 'hotfix' && p.state === 'MERGED' && p.backmerge && !p.backmerge.backmerged)).length,
+    count: deck.prs.filter((p) => (p.flow === 'release' && p.state === 'OPEN') || (p.flow === 'hotfix' && p.state === 'MERGED' && p.backmerge && !p.backmerge.backmerged && !p.markedDone)).length,
   },
   { to: '/jira', label: 'Jira tasks', icon: PhKanban, count: deck.overview?.jira.length },
   { to: '/settings', label: 'Settings', icon: PhGear },

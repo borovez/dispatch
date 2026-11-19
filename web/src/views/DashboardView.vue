@@ -64,7 +64,7 @@ const shipNextIds = computed(() => new Set((deck.overview?.trains ?? []).map((t)
 const openReleases = computed(() =>
   deck.prs.filter((p) => p.flow === 'release' && p.state === 'OPEN').sort((a, b) => Number(shipNextIds.value.has(b.id)) - Number(shipNextIds.value.has(a.id))),
 )
-const needsBackmerge = computed(() => deck.prs.filter((p) => p.flow === 'hotfix' && p.state === 'MERGED' && p.backmerge && !p.backmerge.backmerged))
+const needsBackmerge = computed(() => deck.prs.filter((p) => p.flow === 'hotfix' && p.state === 'MERGED' && p.backmerge && !p.backmerge.backmerged && !p.markedDone))
 const myUnreleased = computed(() => deck.prs.filter((p) => p.isMine && isUnreleased(p)))
 const releaseNav = useReleaseNav()
 const flagsOf = useReleaseFlags()

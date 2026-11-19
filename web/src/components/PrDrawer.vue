@@ -171,10 +171,10 @@ const box = computed(() => {
   const sub = p.state === 'OPEN' && !lines.length ? SUBTITLE[p.action.kind]?.(p) : undefined
   return { title: banner.value?.title ?? p.action.label, lines: sub ? [sub] : lines }
 })
-/** Open PRs: the three cells under the box header, each with a bar like GitHub's */
+/** The three cells under the box header (every PR, merged and closed too), each with a bar like GitHub's */
 const cells = computed(() => {
   const p = pr.value
-  if (!p || p.state !== 'OPEN') return null
+  if (!p) return null
   const c = p.checks
   const checks: { tone: BarTone; meta: string } =
     c.failing.length || c.state === 'FAILURE' || c.state === 'ERROR'
@@ -190,7 +190,7 @@ const cells = computed(() => {
   // Counted from the reviewer chips (one per person), so the numbers match what the cell shows
   const approved = reviewBadges.value.filter((b) => !b.pending && b.tone === 'success').length
   const pending = reviewBadges.value.filter((b) => b.pending).length
-  const counts = [approved && `${approved} approved`, pending && `${pending} pending`].filter(Boolean).join(' · ')
+  const counts = [approved && `${approved} approved`, pending && (p.state === 'OPEN' ? `${pending} pending` : `${pending} didn't review`)].filter(Boolean).join(' · ')
   const approvals: { tone: BarTone; meta: string } =
     p.reviewDecision === 'CHANGES_REQUESTED'
       ? { tone: 'destructive', meta: 'changes requested' }
@@ -538,25 +538,7 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
               <div class="text-xs text-muted-foreground">Size</div>
               <div><span class="text-success">+{{ pr.additions }}</span> <span class="text-destructive">−{{ pr.deletions }}</span> · {{ pr.changedFiles }} files</div>
             </div>
-            <!-- Open PRs show checks in the status box's Checks cell -->
-            <div v-if="!cells">
-              <div class="text-xs text-muted-foreground">Checks</div>
-              <ChecksChip :checks="pr.checks" :url="pr.url" class="mt-0.5" />
-            </div>
           </div>
-
-          <section v-if="!cells">
-            <h3 class="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Reviews</h3>
-            <div class="flex flex-wrap gap-1.5">
-              <Badge v-for="r in reviewBadges" :key="r.key" :variant="r.tone" :class="r.pending && 'text-muted-foreground'" :title="r.title">
-                <component :is="r.icon" />{{ r.login }}
-              </Badge>
-              <span v-if="!pr.reviews.length && !pr.requestedReviewers.length" class="text-sm text-muted-foreground">No reviews yet</span>
-            </div>
-            <button v-if="pr.unresolvedThreads" class="mt-1 text-xs text-warning hover:underline" @click="dv.tab = 'conversations'">
-              {{ pr.unresolvedThreads }} unresolved conversation(s)
-            </button>
-          </section>
 
           <section v-if="trainData">
             <h3 class="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Release train</h3>

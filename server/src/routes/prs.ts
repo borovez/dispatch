@@ -6,11 +6,11 @@ import { adfToMarkdown } from '../../../shared/adf.ts'
 import { z } from 'zod'
 import type { ActionKind, GithubAccount, PrRecord } from '../../../shared/types.ts'
 import { ACTION_LABELS } from '../../../shared/types.ts'
-import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTitle, updatePrData, upsertPr, listReleaseContents, setDoneAction, setReleaseDecision, listPlannedReleases, savePlannedRelease, deletePlannedRelease } from '../db.ts'
+import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTitle, updatePrData, upsertPr, listReleaseContents, setDoneAction, setReleaseDecision, listPlannedReleases, savePlannedRelease, deletePlannedRelease, clearReleasePlan } from '../db.ts'
 import { draftPrText } from '../ai.ts'
 import { keepDeclarations } from '../prWriter.ts'
 import { claudeMdGuide } from '../guides.ts'
-import { fetchPrsByNodeId, fetchPrsByRef, getPrText, prCommits, prDetail, prTemplate, updatePrText, branchExists, createPull } from '../github.ts'
+import { fetchPrsByNodeId, fetchPrsByRef, getPrText, prCommits, prDetail, prTemplate, updatePrText, branchExists, createPull, listBranches } from '../github.ts'
 import { getIssueDetail, fetchIssuesByKey } from '../jira.ts'
 import { buildOverview } from '../model.ts'
 import { extractJiraKeys, parseBodyDependencies, parsePrId } from '../refs.ts'
@@ -173,6 +173,19 @@ api.put('/releases/planned', async (c) => {
   savePlannedRelease({ ...r, branch: body.branch, base: body.base, title: body.title })
   return c.json({ ok: true })
 })
+/** A repo's branches, default first (the planned release form's base picker); cached 5 min */
+const branchCache = new Map<string, { at: number; data: { default: string; branches: string[] } }>()
+api.get('/repos/branches', async (c) => {
+  const repo = z.string().regex(/^[^/\s]+\/[^/\s]+$/).parse(c.req.query('repo'))
+  const hit = branchCache.get(repo.toLowerCase())
+  if (hit && Date.now() - hit.at < 5 * 60_000) return c.json(hit.data)
+  const accounts = getSettings().github.accounts.filter((a) => a.token)
+  const acc = accountForOwner(accounts, repo.split('/')[0]!)
+  if (!acc) throw bad(`No GitHub account for ${repo}`)
+  const data = await listBranches(acc, repo)
+  branchCache.set(repo.toLowerCase(), { at: Date.now(), data })
+  return c.json(data)
+})
 /** Drop a planned release (the PRs in it go back to undecided) */
 api.delete('/releases/planned', async (c) => {
   const { id } = z.object({ id: z.string().startsWith('planned:') }).parse(await c.req.json())
@@ -223,6 +236,11 @@ api.put('/releases/arrange', async (c) => {
   if (body.decision === 'release') checkReleaseTarget(body.releaseId)
   body.prIds.forEach((id, i) => setReleaseDecision(id, { decision: body.decision, releaseId: body.decision === 'release' ? body.releaseId : null, position: i + 1 }))
   return c.json({ ok: true })
+})
+/** Start a repo's plan over: my decisions and order, and its planned releases (GitHub is untouched) */
+api.delete('/releases/plan', async (c) => {
+  const { repo } = z.object({ repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/) }).parse(await c.req.json())
+  return c.json(clearReleasePlan(repo))
 })
 /** Brief for an agent to carry out a repo's plan (`?text=1`: plain text) */
 api.get('/releases/plan/prompt', async (c) => {

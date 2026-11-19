@@ -78,15 +78,19 @@ export function buildReleasePlans(overview: Overview = buildOverview()): Release
         decision: live,
         order: 0,
         locked: false,
+        prereqIssues: [],
       }
       // Already in a release branch's contents (picked there): fixed. In a dev → master release's: it ships
       // with that one, but it can still go out earlier on its own branch (my decision moves it)
-      const openShip = p.shipsIn.find((s) => s.state !== 'CLOSED')
-      const shipRel = openShip && byId.get(openShip.id)
-      if (openShip && (openShip.state === 'MERGED' || (shipRel && shipRel.headRef.toLowerCase() !== integ.toLowerCase())))
-        return { ...base, outcome: 'shipping', target: openShip.id, locked: true }
+      // A release branch that has it wins over the dev → master release that also does (both list it)
+      const ships = p.shipsIn.filter((s) => s.state !== 'CLOSED')
+      const isBranch = (id: string) => (byId.get(id)?.headRef.toLowerCase() ?? integ.toLowerCase()) !== integ.toLowerCase()
+      const picked = ships.find((s) => s.state === 'MERGED' || isBranch(s.id))
+      if (picked) return { ...base, outcome: 'shipping', target: picked.id, locked: true }
+      const openShip = ships[0]
+      // A dev → master release ships everything in dev: a Hold can't keep it out, so it doesn't apply then
       if (openShip && (!live || live.decision !== 'release')) return { ...base, outcome: 'shipping', target: openShip.id, decision: null }
-      if (live?.decision === 'hold') return { ...base, outcome: 'held' }
+      if (live?.decision === 'hold' && !includes.length) return { ...base, outcome: 'held' }
       if (live?.decision === 'skip') return { ...base, outcome: 'skipped', target: includes[0]?.id ?? null }
       if (live?.decision === 'release') {
         const r = releases.find((x) => x.id === live.releaseId)!
@@ -95,7 +99,8 @@ export function buildReleasePlans(overview: Overview = buildOverview()): Release
       if (!releases.length) return { ...base, outcome: 'waiting', notes: [...notes, 'No release is open for this repo; it goes in the next one'] }
 
       const options: PlanItem['options'] = branches.map((r) => ({ key: `release:${r.id}`, label: `Cherry-pick into ${ref(r)}`, decision: 'release', releaseId: r.id }))
-      options.push({ key: 'hold', label: 'Hold it for a later release', decision: 'hold', releaseId: null })
+      // Hold only while no dev → master release is open (that one ships everything in dev regardless)
+      if (!includes.length) options.push({ key: 'hold', label: 'Hold it for a later release', decision: 'hold', releaseId: null })
       if (includes.length) options.push({ key: 'skip', label: `Only ship it with ${ref(includes[0]!)}, no cherry-pick`, decision: 'skip', releaseId: null })
 
       // dev → master open: whatever is in dev ships with it
@@ -143,9 +148,13 @@ export function buildReleasePlans(overview: Overview = buildOverview()): Release
     for (const it of picks)
       for (const pre of prereqs(it.prId)) {
         const p = itemById.get(pre)!
-        if (p.outcome === 'pick' && p.target === it.target && p.order > it.order) it.notes.push(`Picked before its prerequisite #${p.number}`)
-        else if (p.outcome !== 'shipping' && !(p.outcome === 'pick' && p.target === it.target))
+        if (p.outcome === 'pick' && p.target === it.target && p.order > it.order) {
+          it.notes.push(`Picked before its prerequisite #${p.number}`)
+          it.prereqIssues.push(p.number)
+        } else if (p.outcome !== 'shipping' && !(p.outcome === 'pick' && p.target === it.target)) {
           it.notes.push(`Its prerequisite #${p.number} isn't going into this release`)
+          it.prereqIssues.push(p.number)
+        }
       }
 
     const counts = { shipping: 0, pick: 0, decide: 0, held: 0, skipped: 0, waiting: 0 } as ReleasePlan['counts']

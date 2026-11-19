@@ -931,6 +931,8 @@ export interface PlanItem {
   order: number
   /** Already in a release's contents (picked or found there): it can't be moved */
   locked: boolean
+  /** Prerequisites (PR numbers) not going into the same release, or picked after it: not recommended, the card shows red */
+  prereqIssues: number[]
 }
 
 export interface ReleasePlan {

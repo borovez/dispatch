@@ -438,6 +438,18 @@ export function deletePlannedRelease(id: string) {
   db.prepare('DELETE FROM planned_releases WHERE id = ?').run(id)
   db.prepare('DELETE FROM release_decisions WHERE release_id = ?').run(id)
 }
+/**
+ * Start a repo's plan over: forget my decisions and order for its PRs, and drop its planned releases
+ * (not on GitHub yet). Release PRs, branches and cherry-picks are untouched. Returns what was cleared.
+ */
+export function clearReleasePlan(repo: string): { decisions: number; planned: number } {
+  const r = repo.toLowerCase()
+  const planned = listPlannedReleases().filter((p) => p.repo.toLowerCase() === r)
+  for (const p of planned) db.prepare('DELETE FROM release_decisions WHERE release_id = ?').run(p.id)
+  db.prepare('DELETE FROM planned_releases WHERE lower(repo) = ?').run(r)
+  const decisions = Number(db.prepare('DELETE FROM release_decisions WHERE substr(lower(pr_id), 1, ?) = ?').run(r.length + 1, `${r}#`).changes)
+  return { decisions, planned: planned.length }
+}
 /** A planned release became a real PR: decisions follow it */
 export function movePlannedDecisions(from: string, to: string) {
   db.prepare('UPDATE release_decisions SET release_id = ? WHERE release_id = ?').run(to, from)

@@ -6,7 +6,7 @@ import StickyToolbar from '@/components/StickyToolbar.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhArrowsClockwise, PhCheckCircle, PhGitBranch, PhGraph, PhListBullets, PhWarning, PhListChecks } from '@phosphor-icons/vue'
+import { PhArrowsClockwise, PhCheckCircle, PhGitBranch, PhGraph, PhListBullets, PhWarning, PhListChecks, PhSidebarSimple } from '@phosphor-icons/vue'
 import type { PrView } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
@@ -38,6 +38,15 @@ if ((v.tab as string) === 'graph') (v.tab = 'releases'), (v.mode = 'graph')
 const graph = computed(() => v.mode === 'graph')
 /** One repo or all ('' / 'all'), shared with the graph (and set by "Show in the release graph") */
 const repoState = useLayout().view('releaseGraph', { repo: '' as string })
+// ---- Plan buttons: open the release planner on a repo (repos that integrate on a branch like dev)
+const plannerState = useLayout().view('release-planner', { width: 520, repo: '', detached: false })
+const planRepos = ref(new Set<string>())
+api.releasePlans().then((ps) => (planRepos.value = new Set(ps.map((p) => p.repo.toLowerCase())))).catch(() => {})
+const plannable = (repo: string) => planRepos.value.has(repo.toLowerCase())
+function planRepo(repo: string) {
+  plannerState.repo = repo
+  deck.plannerOpen = true
+}
 /** Repos with releases, hotfixes, tags or unreleased work; counted by open releases and open hotfixes */
 const repoOptions = computed(() => {
   const m = new Map<string, { key: string; repo: string; count: number }>()
@@ -91,9 +100,13 @@ const unreleased = computed(() => {
 })
 
 const hotfixes = computed(() => deck.prs.filter((p) => p.flow === 'hotfix' && p.state !== 'CLOSED' && matches(p)).sort(byRecent))
-const needsBackmerge = computed(() => hotfixes.value.filter((p) => p.state === 'MERGED' && p.backmerge && !p.backmerge.backmerged))
+/** Still owes a backmerge: not back in dev, and not marked done (Mark as done = "this one doesn't need it") */
+const owesBackmerge = (p: PrView) => p.state === 'MERGED' && !!p.backmerge && !p.backmerge.backmerged && !p.markedDone
+/** Marked done while not back in dev: the backmerge was dismissed */
+const backmergeDismissed = (p: PrView) => !!p.backmerge && !p.backmerge.backmerged && !!p.markedDone
+const needsBackmerge = computed(() => hotfixes.value.filter(owesBackmerge))
 const openHotfixes = computed(() => hotfixes.value.filter((p) => p.state === 'OPEN'))
-const doneHotfixes = computed(() => hotfixes.value.filter((p) => p.state === 'MERGED' && !(p.backmerge && !p.backmerge.backmerged)))
+const doneHotfixes = computed(() => hotfixes.value.filter((p) => p.state === 'MERGED' && !owesBackmerge(p)))
 
 /** A release's train (if any) and where it stands, for the status badge on its card */
 const trainOf = (id: string) => (deck.overview?.trains ?? []).find((t) => t.releases.includes(id)) ?? null
@@ -144,7 +157,7 @@ watch(
     if (v.tab === 'hotfixes') {
       // Open just the group the hotfix is in
       const p = deck.byId.get(focus)
-      const group = p?.state === 'OPEN' ? 'hf:open' : p?.backmerge && !p.backmerge.backmerged ? 'hf:needs' : 'hf:done'
+      const group = p?.state === 'OPEN' ? 'hf:open' : p && owesBackmerge(p) ? 'hf:needs' : 'hf:done'
       v.collapsed[group] = false
     } else {
       v.collapsed[focus] = false
@@ -216,7 +229,33 @@ async function refresh(id: string) {
     <!-- --section-h: sticky SectionHeadings are 2.5rem; card headings stick below them -->
     <div v-else class="space-y-4" :class="v.tab === 'releases' && '[--section-h:2.5rem]'">
         <template v-if="v.tab === 'releases'">
-          <template v-for="sec in [{ label: 'Open releases', prs: openReleases }, { label: 'Merged releases', prs: mergedReleases }]" :key="sec.label">
+          <!-- Order: open releases, merged work not in a release yet, merged releases, tags -->
+          <template v-for="sec in [{ label: 'Open releases', prs: openReleases }, { label: 'unreleased', prs: [] as PrView[] }, { label: 'Merged releases', prs: mergedReleases }]" :key="sec.label">
+          <template v-if="sec.label === 'unreleased' && unreleased.length">
+            <SectionHeading
+              v-model:hidden="v.sections.unreleased"
+              label="Merged, not in a release yet"
+              :count="unreleased.length"
+              cards-toggle
+              :cards-collapsed="sectionCollapsed(unreleasedCards)"
+              @toggle-cards="toggleSection(unreleasedCards)"
+            />
+            <GroupCard
+              v-for="u in v.sections.unreleased ? [] : unreleased"
+              :key="u.repo"
+              :label="u.repo"
+              :count="u.prs.length"
+              :collapsed="isCollapsed(`unreleased:${u.repo}`)"
+              @update:collapsed="(c: boolean) => (v.collapsed[`unreleased:${u.repo}`] = c)"
+            >
+              <template #label><RepoName :repo="u.repo" class="font-mono text-xs" /></template>
+              <template v-if="plannable(u.repo)" #actions>
+                <Button variant="ghost" size="sm" class="h-7 text-xs" :title="`Plan which release these go into (release planner, ${u.repo})`" @click="planRepo(u.repo)"><PhListChecks /> Plan release</Button>
+              </template>
+              <div><PrRow v-for="p in u.prs" :key="p.id" :pr="p" compact /></div>
+            </GroupCard>
+          </template>
+
           <SectionHeading
             v-if="sec.prs.length"
             v-model:hidden="v.sections[sec.label]"
@@ -239,11 +278,15 @@ async function refresh(id: string) {
             <template v-if="r.state === 'OPEN'" #actions>
               <Badge v-if="trainOf(r.id)?.next === r.id" variant="primary" class="shrink-0" title="First release of its train with nothing left to wait for">Ship next</Badge>
               <Badge :variant="statusOf(r.id).tone" class="shrink-0" :title="statusOf(r.id).title">{{ statusOf(r.id).label }}</Badge>
+              <!-- Change it: the PR panel (state, title and description, dependencies), or what goes into it -->
+              <Button variant="ghost" size="sm" class="h-7 text-xs" title="Open the release in the panel: state, title and description, dependencies" @click="deck.selectedId = r.id"><PhSidebarSimple /> Open</Button>
+              <Button v-if="plannable(r.repo)" variant="ghost" size="sm" class="h-7 text-xs" :title="`Plan what goes into ${r.repo}'s releases (release planner)`" @click="planRepo(r.repo)"><PhListChecks /> Plan</Button>
             </template>
             <template #label>
               <span class="flex min-w-0 items-center gap-2">
                 <Badge :variant="r.state === 'OPEN' ? 'success' : 'merged'" class="shrink-0">{{ r.state === 'OPEN' ? 'Open' : `Merged ${timeAgo(r.mergedAt!)}` }}</Badge>
-                <RepoName :id="r.id" class="max-w-64 font-mono text-xs" />
+                <!-- The release's name opens it in the panel (the rest of the heading folds the card) -->
+                <span role="link" tabindex="0" class="min-w-0 cursor-pointer rounded-sm hover:text-primary" title="Open the release in the panel" @click.stop="deck.selectedId = r.id" @keydown.enter.stop="deck.selectedId = r.id"><RepoName :id="r.id" class="max-w-64 font-mono text-xs" /></span>
                 <span class="flex shrink-0 items-center gap-1 font-mono text-xs font-normal text-muted-foreground"><PhGitBranch :size="12" />{{ r.headRef }} → {{ r.baseRef }}</span>
               </span>
             </template>
@@ -282,27 +325,6 @@ async function refresh(id: string) {
             </GroupCard>
           </template>
 
-          <template v-if="unreleased.length">
-            <SectionHeading
-              v-model:hidden="v.sections.unreleased"
-              label="Merged, not in a release yet"
-              :count="unreleased.length"
-              cards-toggle
-              :cards-collapsed="sectionCollapsed(unreleasedCards)"
-              @toggle-cards="toggleSection(unreleasedCards)"
-            />
-            <GroupCard
-              v-for="u in v.sections.unreleased ? [] : unreleased"
-              :key="u.repo"
-              :label="u.repo"
-              :count="u.prs.length"
-              :collapsed="isCollapsed(`unreleased:${u.repo}`)"
-              @update:collapsed="(c: boolean) => (v.collapsed[`unreleased:${u.repo}`] = c)"
-            >
-              <template #label><RepoName :repo="u.repo" class="font-mono text-xs" /></template>
-              <div><PrRow v-for="p in u.prs" :key="p.id" :pr="p" compact /></div>
-            </GroupCard>
-          </template>
           <div v-if="!releases.length && !unreleased.length && !tags.length" class="py-16 text-center text-muted-foreground">
             No release PRs found. A release PR targets master/main from dev (or a release/* branch).
           </div>
@@ -321,7 +343,7 @@ async function refresh(id: string) {
             v-for="g in [
               { key: 'hf:needs', label: 'Merged, not back in dev yet', prs: needsBackmerge, collapsed: false },
               { key: 'hf:open', label: 'Open', prs: openHotfixes, collapsed: false },
-              { key: 'hf:done', label: 'Merged and backmerged', prs: doneHotfixes, collapsed: true },
+              { key: 'hf:done', label: 'Merged and backmerged (or not needed)', prs: doneHotfixes, collapsed: true },
             ].filter((g) => g.prs.length)"
             :key="g.key"
             :label="g.label"
@@ -332,7 +354,13 @@ async function refresh(id: string) {
             <div>
               <div v-for="p in g.prs" :key="p.id">
                 <PrRow :pr="p" />
-                <div v-if="p.state === 'MERGED' && p.backmerge" class="flex items-center gap-1.5 px-2.5 pb-2 text-xs" :class="p.backmerge.backmerged ? 'text-success' : 'text-warning'">
+                <!-- Backmerge dismissed (Mark as done): say so, with Undo -->
+                <div v-if="p.state === 'MERGED' && backmergeDismissed(p)" class="flex items-center gap-1.5 px-2.5 pb-2 text-xs text-muted-foreground">
+                  <PhCheckCircle :size="14" />
+                  Not in {{ p.backmerge!.into }}, marked as not needed
+                  <button class="text-primary hover:underline" @click="deck.mutate(() => api.setDone(p.id, null), `Backmerge needed again for #${p.number}`)">Undo</button>
+                </div>
+                <div v-else-if="p.state === 'MERGED' && p.backmerge" class="flex items-center gap-1.5 px-2.5 pb-2 text-xs" :class="p.backmerge.backmerged ? 'text-success' : 'text-warning'">
                   <PhCheckCircle v-if="p.backmerge.backmerged" :size="14" weight="fill" />
                   <PhWarning v-else :size="14" weight="fill" />
                   <template v-if="p.backmerge.backmerged">In {{ p.backmerge.into }}</template>

@@ -58,6 +58,8 @@ export const api = {
   /** Planned releases (a branch Claude creates, or I open the PR for once it's pushed) */
   plannedCreate: (p: { repo: string; branch: string; base: string; title: string }) => call<{ id: string }>('POST', '/releases/planned', p),
   plannedUpdate: (p: { id: string; branch: string; base: string; title: string }) => call<{ ok: boolean }>('PUT', '/releases/planned', p),
+  clearReleasePlan: (repo: string) => call<{ decisions: number; planned: number }>('DELETE', '/releases/plan', { repo }),
+  repoBranches: (repo: string) => call<{ default: string; branches: string[] }>('GET', `/repos/branches?repo=${encodeURIComponent(repo)}`),
   plannedDelete: (id: string) => call<{ ok: boolean }>('DELETE', '/releases/planned', { id }),
   plannedOpenPr: (id: string) => call<{ number: number; url: string }>('POST', '/releases/planned/open-pr', { id }),
   releasePrompt: (repo: string) => call<{ prompt: string }>('GET', `/releases/plan/prompt?repo=${encodeURIComponent(repo)}`),

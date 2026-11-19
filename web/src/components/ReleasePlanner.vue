@@ -7,6 +7,8 @@ import {
   PhCopy,
   PhDotsSixVertical,
   PhGitMerge,
+  PhArrowCounterClockwise,
+  PhGitBranch,
   PhInfo,
   PhLinkBreak,
   PhListChecks,
@@ -14,6 +16,7 @@ import {
   PhPause,
   PhQuestion,
   PhRobot,
+  PhCheckCircle,
   PhWarning,
   PhX,
   PhArrowSquareOut,
@@ -34,15 +37,18 @@ import { timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import { lastPanel, usePanelDock } from '@/composables/panelDock'
 import { onEscape } from '@/composables/escape'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import PrNumberLink from './PrNumberLink.vue'
 import PrHover from './PrHover.vue'
 import ExternalLink from './ExternalLink.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
+import BranchPicker from './BranchPicker.vue'
 import { prStatus } from '@/composables/prStatus'
 import RefreshButton from './RefreshButton.vue'
 import { useListResync } from '@/composables/listResync'
@@ -66,7 +72,8 @@ async function load() {
   error.value = ''
   try {
     plans.value = await api.releasePlans()
-    if (!plans.value.some((p) => p.repo === v.repo)) v.repo = plans.value[0]?.repo ?? ''
+    // Asked for a repo (a Plan button) in other casing: use the plan's spelling
+    v.repo = plans.value.find((p) => p.repo.toLowerCase() === v.repo.toLowerCase())?.repo ?? plans.value[0]?.repo ?? ''
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -103,7 +110,31 @@ function toggleAlready(key: string) {
   if (!next.delete(key)) next.add(key)
   shownAlready.value = next
 }
+const STEPS = [
+  'Drag each PR into a release, or Hold. New release ships some PRs on their own branch.',
+  'Drag within a release to set the cherry-pick order.',
+  'Copy the prompt for Claude (bottom): it does the picks in your checkout and asks before every push.',
+]
+/** What the plan asks for that isn't on GitHub yet: picks not made, releases not created */
+const pending = computed(() => {
+  const p = plan.value
+  if (!p) return null
+  const picks = p.items.filter((i) => i.outcome === 'pick').length
+  const create = p.releases.filter((r) => r.mode === 'planned').length
+  if (!picks && !create) return null
+  const into = new Set(p.items.filter((i) => i.outcome === 'pick').map((i) => i.target)).size
+  return [
+    picks && `${picks} PR${picks === 1 ? '' : 's'} to cherry-pick${into > 1 ? ` into ${into} releases` : ''}`,
+    create && `${create} release${create === 1 ? '' : 's'} to create`,
+  ]
+    .filter(Boolean)
+    .join(', ')
+})
 const todo = (p: ReleasePlan) => p.counts.pick + p.counts.decide
+/** Repo menu, when nothing is marked to pick or decide: how many PRs are merged and not released */
+const unreleased = (p: ReleasePlan) => p.counts.shipping + p.counts.skipped + p.counts.held + p.counts.waiting
+const placedLabel = (p: ReleasePlan) => (unreleased(p) ? `${unreleased(p)} unreleased` : 'all released')
+const placedHint = (p: ReleasePlan) => (unreleased(p) ? `${unreleased(p)} PR(s) merged into ${p.integration} and not released yet` : `Nothing merged into ${p.integration} is waiting for a release`)
 
 /** Buckets: drop targets, each with what it means as a decision */
 interface Bucket {
@@ -148,7 +179,8 @@ const buckets = computed<Bucket[]>(() => {
       ordered: false,
     })
   const picking = p.releases.some((r) => r.mode !== 'includes')
-  if (picking)
+  // No Hold while a dev → master release is open: it ships everything in dev, so nothing can be held back
+  if (picking && !includes)
     out.push({ key: 'hold', release: null, title: 'Hold', sub: 'Not in any release for now', tone: 'muted', decision: 'hold', releaseId: null, items: p.items.filter((i) => i.outcome === 'held'), ordered: false })
   const undecided = p.items.filter((i) => i.outcome === 'decide')
   if (undecided.length || picking)
@@ -162,7 +194,8 @@ const form = ref<{ id: string | null; branch: string; base: string; title: strin
 function newRelease() {
   const p = plan.value
   if (!p) return
-  const base = p.releases.find((r) => r.mode !== 'planned')?.base ?? 'master'
+  // Empty: the base picker fills in the repo's default branch (main / master) once it has the list
+  const base = ''
   const day = new Date().toISOString().slice(0, 10)
   form.value = { id: null, branch: `release/${day}`, base, title: `release: ${short(p.repo)} ${day}` }
 }
@@ -173,6 +206,7 @@ async function saveRelease() {
   const f = form.value
   const p = plan.value
   if (!f || !p) return
+  if (!f.base.trim()) return void toast.error('Pick the branch it is cut from')
   const ok = await deck.mutate(
     () => (f.id ? api.plannedUpdate({ id: f.id, branch: f.branch.trim(), base: f.base.trim(), title: f.title.trim() }) : api.plannedCreate({ repo: p.repo, branch: f.branch.trim(), base: f.base.trim(), title: f.title.trim() })),
     f.id ? 'Release updated' : 'Release planned: drag PRs into it',
@@ -181,6 +215,20 @@ async function saveRelease() {
     form.value = null
     await load()
   }
+}
+/** What a reset would clear for the repo shown: my decisions (incl. order) and planned releases */
+const resettable = computed(() => {
+  const p = plan.value
+  if (!p) return null
+  const decisions = p.items.filter((i) => i.decision).length
+  const planned = p.releases.filter((r) => r.mode === 'planned').length
+  if (!decisions && !planned) return null
+  const parts = [decisions && `your ${decisions === 1 ? 'decision' : `${decisions} decisions`} and order`, planned && `${planned === 1 ? 'the planned release' : `${planned} planned releases`} (not on GitHub yet)`]
+  return parts.filter(Boolean).join(' and ')
+})
+async function resetPlan() {
+  const repo = plan.value?.repo
+  if (repo && (await deck.mutate(() => api.clearReleasePlan(repo), `Reset the plan for ${short(repo)}`))) await load()
 }
 async function deleteRelease(r: PlanRelease) {
   if (await deck.mutate(() => api.plannedDelete(r.id), `Removed ${r.head}; its PRs are undecided again`)) await load()
@@ -223,6 +271,14 @@ async function move(id: string, to: Bucket, before: string | null) {
     busy.value = false
   }
 }
+/**
+ * Where a PR can go: not To decide (Dispatch puts PRs there, it isn't a choice), and not back into the
+ * unordered group it's already in (Hold, dev → master: nothing would change). Releases take reordering.
+ */
+function canDrop(prId: string | null, b: Bucket) {
+  if (!prId || b.decision === null) return false
+  return b.ordered || !b.items.some((i) => i.prId === prId)
+}
 function onDragStart(e: DragEvent, i: PlanItem) {
   dragId.value = i.prId
   e.dataTransfer!.setData('text/plain', i.prId)
@@ -230,6 +286,8 @@ function onDragStart(e: DragEvent, i: PlanItem) {
 }
 function onDragOver(e: DragEvent, b: Bucket, before: string | null) {
   if (!dragId.value) return
+  // Not a place for it: no preventDefault, so the browser shows the no-drop cursor
+  if (!canDrop(dragId.value, b)) return void (over.value = null)
   e.preventDefault()
   over.value = { bucket: b.key, before }
 }
@@ -239,7 +297,7 @@ function onDrop(e: DragEvent, b: Bucket) {
   const before = over.value?.bucket === b.key ? over.value.before : null
   dragId.value = null
   over.value = null
-  if (id && before !== id) void move(id, b, before)
+  if (id && before !== id && canDrop(id, b)) void move(id, b, before)
 }
 function onDragEnd() {
   dragId.value = null
@@ -322,7 +380,8 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
               <span class="min-w-0 flex-1 truncate font-mono text-xs">{{ short(p.repo) }}</span>
               <Badge v-if="p.counts.decide" variant="warning">{{ p.counts.decide }} to decide</Badge>
               <Badge v-if="p.counts.pick" variant="primary">{{ p.counts.pick }} to pick</Badge>
-              <span v-if="!todo(p)" class="text-[11px] text-muted-foreground">nothing to do</span>
+              <!-- No to-decide / to-pick counts: just how many are unreleased -->
+              <span v-if="!todo(p)" class="text-[11px] text-muted-foreground" :title="placedHint(p)">{{ placedLabel(p) }}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -335,6 +394,16 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
           :refreshed-at="planIds.map((id) => deck.byId.get(id)?.fetchedAt)"
           @click="refresh"
         />
+        <!-- Start over: my decisions, order and planned releases for this repo (nothing on GitHub changes) -->
+        <ConfirmDialog
+          v-if="resettable && plan"
+          :title="`Reset the plan for ${short(plan.repo)}?`"
+          :description="`This clears ${resettable}. Every PR goes back to where Dispatch would put it. Release PRs, branches and cherry-picks already done on GitHub stay as they are.`"
+          confirm-label="Reset plan"
+          @confirm="resetPlan"
+        >
+          <Button variant="ghost" size="icon-sm" aria-label="Reset the plan" title="Reset the plan: clear your decisions, order and planned releases"><PhArrowCounterClockwise /></Button>
+        </ConfirmDialog>
         <Button variant="ghost" size="icon-sm" aria-label="Close the planner" title="Close" @click="deck.plannerOpen = false"><PhX /></Button>
       </div>
 
@@ -344,36 +413,74 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
           <div v-else-if="!plans" class="flex items-center gap-2 py-8 text-muted-foreground"><PhCircleNotch class="animate-spin" /> Working out the plan…</div>
           <p v-else-if="!plan" class="py-8 text-center text-muted-foreground">No repo integrates on a branch like dev.</p>
           <template v-else>
-            <p class="text-xs text-muted-foreground">
-              <span class="font-mono text-foreground">{{ plan.repo }}</span> · merged into {{ plan.integration }}, not released.
+            <!-- Repo line; how it works sits behind the info icon -->
+            <p class="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span class="min-w-0 truncate"><span class="font-mono text-foreground">{{ plan.repo }}</span> · merged into {{ plan.integration }}, not released.</span>
+              <HoverCard :open-delay="150" :close-delay="100">
+                <HoverCardTrigger as-child>
+                  <button type="button" class="shrink-0 rounded-sm text-muted-foreground hover:text-foreground" aria-label="How the planner works"><PhInfo class="size-4" /></button>
+                </HoverCardTrigger>
+                <HoverCardContent align="start" class="w-80 text-xs">
+                  <p class="mb-2 font-medium">How it works</p>
+                  <ol class="grid gap-1.5 text-muted-foreground">
+                    <li v-for="(step, n) in STEPS" :key="n" class="flex items-start gap-2">
+                      <span class="flex size-4 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-[10px] font-semibold text-foreground tabular-nums">{{ n + 1 }}</span>{{ step }}
+                    </li>
+                  </ol>
+                </HoverCardContent>
+              </HoverCard>
+              <span class="flex-1" />
+              <!-- Plans a separate release branch (opens the form below) -->
+              <Button
+                v-if="!form"
+                variant="outline"
+                size="sm"
+                class="h-7 shrink-0 px-2 text-xs"
+                title="Plan a release branch that ships some PRs on their own, by cherry-pick"
+                @click="newRelease"
+              >
+                <PhPlus /> New release
+              </Button>
             </p>
-            <!-- How it works, in order -->
-            <ol v-if="buckets.length" class="grid gap-1 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-              <li v-for="(step, n) in ['Drag each PR into a release, or Hold', 'Drag within a release to set the cherry-pick order', 'Copy the prompt for Claude (bottom) to do the picks']" :key="n" class="flex items-center gap-2">
-                <span class="flex size-4 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-[10px] font-semibold text-foreground tabular-nums">{{ n + 1 }}</span>{{ step }}
-              </li>
-            </ol>
             <!-- A separate release: a branch off the base, filled by cherry-picks (Claude creates it from the prompt) -->
+            <!-- The plan is only recorded here: say so while it asks for picks or releases GitHub doesn't have yet -->
+            <Alert v-if="pending" variant="warning">
+              <PhWarning />
+              <AlertTitle class="text-xs">Not applied yet</AlertTitle>
+              <AlertDescription class="text-xs">
+                <p>{{ pending }}. Dispatch only records the plan: Copy prompt for Claude (bottom) applies it in your checkout.</p>
+              </AlertDescription>
+            </Alert>
+            <p v-else-if="buckets.length" class="flex items-center gap-1.5 text-xs text-success"><PhCheckCircle /> Nothing to apply: GitHub matches the plan.</p>
             <form v-if="form" class="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3" @submit.prevent="saveRelease">
-              <p class="text-xs font-medium">{{ form.id ? 'Edit the planned release' : 'New release' }}</p>
-              <div class="grid grid-cols-[1fr_8rem] gap-2">
+              <p class="flex items-center gap-1.5 text-xs font-medium"><PhGitBranch class="size-4 text-primary" />{{ form.id ? 'Edit the planned release' : 'New release' }}</p>
+              <div class="grid grid-cols-[1fr_11rem] gap-2">
                 <Input v-model="form.branch" class="h-8 font-mono text-xs" placeholder="release/plat-332" required />
-                <Input v-model="form.base" class="h-8 font-mono text-xs" placeholder="master" required />
+                <BranchPicker v-model="form.base" :repo="plan.repo" default-on-load />
               </div>
               <Input v-model="form.title" class="h-8 text-xs" placeholder="release: …" required />
-              <p class="text-[11px] text-muted-foreground">Branch, then the branch it's cut from and merges into. Claude creates it from the prompt; once it's pushed you can open the PR from here.</p>
+              <p class="text-[11px] text-muted-foreground">New branch name, then the branch it's cut from and merges into. Claude creates it from the prompt; once it's pushed you can open the PR from here.</p>
               <div class="flex justify-end gap-2">
                 <Button type="button" variant="ghost" size="sm" @click="form = null">Cancel</Button>
                 <Button size="sm" type="submit">{{ form.id ? 'Save' : 'Plan it' }}</Button>
               </div>
             </form>
-            <Button v-else variant="outline" size="sm" class="w-full border-dashed" @click="newRelease"><PhPlus /> New release (ship some PRs separately)</Button>
 
             <!-- Buckets -->
             <section
               v-for="b in buckets"
               :key="b.key"
-              :class="cn('rounded-lg border p-2 transition-colors', over?.bucket === b.key && 'border-primary bg-primary/5')"
+              :class="
+                cn(
+                  'rounded-lg border p-2 transition-[opacity,colors,filter]',
+                  // While dragging: groups it can't go in grey out, the others get a faint outline, the one under the pointer lights up
+                  dragId && !canDrop(dragId, b) && 'cursor-no-drop border-dashed opacity-40 grayscale',
+                  // A release that doesn't exist yet (planned): dashed amber, so it doesn't read as a real one
+                  b.release?.mode === 'planned' && 'border-dashed border-warning/60 bg-warning/5',
+                  dragId && canDrop(dragId, b) && over?.bucket !== b.key && 'border-primary/30',
+                  over?.bucket === b.key && 'border-primary bg-primary/5',
+                )
+              "
               @dragover="onDragOver($event, b, null)"
               @drop="onDrop($event, b)"
             >
@@ -390,7 +497,7 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
                   </PrHover>
                   <span v-else :class="cn('min-w-0 truncate text-xs font-semibold', b.release && 'font-mono', TONE[b.tone])">{{ b.title }}</span>
                   <span class="flex-1" />
-                  <Badge v-if="b.release?.mode === 'planned'" variant="muted">Planned</Badge>
+                  <Badge v-if="b.release?.mode === 'planned'" variant="warning" title="Planned in Dispatch: the branch and PR don't exist yet">Not created yet</Badge>
                   <Badge v-else-if="releasePr(b.release)" :variant="prStatus(releasePr(b.release)).tone" class="max-w-40"><span class="truncate">{{ prStatus(releasePr(b.release)).label }}</span></Badge>
                   <Badge variant="count" :title="`${b.items.length} PR(s) in this group`">{{ b.items.length }}</Badge>
                 <!-- The release itself: open / edit it, or for a planned one open its PR, edit, remove -->
@@ -414,12 +521,25 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
                   </DropdownMenuContent>
                 </DropdownMenu>
                 </div>
-                <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-5 text-[11px] text-muted-foreground">
-                  <template v-if="b.release && b.release.mode !== 'planned'">
-                    <PrNumberLink :id="b.release.id" :number="b.release.number" /><span>→ {{ b.release.base }} ·</span>
+                <!-- Where its PRs come from and land: dev ⟶ (cherry-pick) release branch ⟶ (merge) base; dev → master ships dev as is -->
+                <p v-if="b.release" class="flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-5 text-[11px] text-muted-foreground">
+                  <template v-if="b.release.mode === 'includes'">
+                    <code class="rounded bg-muted px-1 font-mono text-foreground">{{ plan.integration }}</code>
+                    <span>merges into</span>
+                    <code class="rounded bg-muted px-1 font-mono text-foreground">{{ b.release.base }}</code>
+                    <span>via</span><PrNumberLink :id="b.release.id" :number="b.release.number" />
                   </template>
-                  <span>{{ b.sub }}</span>
+                  <template v-else>
+                    <span>From</span>
+                    <code class="rounded bg-muted px-1 font-mono text-foreground">{{ plan.integration }}</code>
+                    <span>cherry-picked into</span>
+                    <code class="rounded bg-muted px-1 font-mono text-foreground">{{ b.release.head }}</code>
+                    <span>, then merges into</span>
+                    <code class="rounded bg-muted px-1 font-mono text-foreground">{{ b.release.base }}</code>
+                    <template v-if="b.release.mode !== 'planned'"><span>via</span><PrNumberLink :id="b.release.id" :number="b.release.number" /></template>
+                  </template>
                 </p>
+                <p v-else class="pl-5 text-[11px] text-muted-foreground">{{ b.sub }}</p>
               </header>
               <div class="space-y-1">
                 <div
@@ -429,6 +549,7 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
                   :class="
                     cn(
                       'group/card flex items-start gap-1.5 rounded-md border bg-card px-2 py-1.5',
+                      i.prereqIssues.length && 'border-destructive/60 bg-destructive/10',
                       !i.locked && 'cursor-grab active:cursor-grabbing',
                       dragId === i.prId && 'opacity-40',
                       over?.bucket === b.key && over.before === i.prId && 'border-t-2 border-t-primary',
@@ -449,7 +570,7 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
                     </p>
                     <p v-if="i.question" class="mt-0.5 text-xs">{{ i.question }}</p>
                     <p v-for="r in i.reasons" :key="r" class="text-[11px] text-muted-foreground">· {{ r }}</p>
-                    <p v-for="nt in i.notes" :key="nt" class="flex items-center gap-1 text-[11px] text-warning"><PhWarning class="shrink-0" /> {{ nt }}</p>
+                    <p v-for="nt in i.notes" :key="nt" :class="cn('flex items-center gap-1 text-[11px]', /prerequisite #/.test(nt) ? 'text-destructive' : 'text-warning')"><PhWarning class="shrink-0" /> {{ nt }}</p>
                   </div>
                   <!-- Move to… (keyboard / precise) -->
                   <DropdownMenu v-if="!i.locked">
@@ -460,7 +581,7 @@ const TONE = { primary: 'text-primary', muted: 'text-muted-foreground', warning:
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" class="w-64">
                       <DropdownMenuLabel class="text-xs text-muted-foreground">Move to</DropdownMenuLabel>
-                      <DropdownMenuItem v-for="t in buckets.filter((x) => x.key !== b.key)" :key="t.key" @select="move(i.prId, t, null)">{{ t.title }}</DropdownMenuItem>
+                      <DropdownMenuItem v-for="t in buckets.filter((x) => x.key !== b.key && canDrop(i.prId, x))" :key="t.key" @select="move(i.prId, t, null)">{{ t.title }}</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
