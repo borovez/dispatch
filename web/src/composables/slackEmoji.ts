@@ -1,5 +1,6 @@
 import { shallowRef } from 'vue'
 import UNICODE from '@shared/slackEmoji.json'
+import EMOTICONS from '@shared/slackEmoticons.json'
 import { api } from '@/api'
 
 /**
@@ -71,6 +72,12 @@ export function searchEmoji(query: string, limit = Infinity): EmojiItem[] {
     .sort((a, b) => a[0] - b[0])
     .slice(0, limit)
     .map(([, e]) => e)
+}
+
+/** The emoji for a text emoticon Slack converts (:) :D :P <3 …), else null */
+export const emoticon = (text: string): string | null => {
+  const name = (EMOTICONS as Record<string, string>)[text]
+  return name ? (MAP[name] ?? null) : null
 }
 
 /** What goes into the text for a picked emoji: the character, or :name: for a custom one */

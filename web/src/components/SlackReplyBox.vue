@@ -8,7 +8,7 @@ import { inCodeBlock, insertAtCursor, replaceRange } from '@/composables/markdow
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { emojiText, searchEmoji, useSlackEmoji, type EmojiItem } from '@/composables/slackEmoji'
+import { emojiText, emoticon, searchEmoji, useSlackEmoji, type EmojiItem } from '@/composables/slackEmoji'
 import EmojiPicker from './EmojiPicker.vue'
 import Kbd from './Kbd.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
@@ -86,9 +86,32 @@ function track() {
   place('mention', start, query)
 }
 
+/**
+ * A text emoticon (:) :D :P <3 …) as a whole word ending at `end` becomes its emoji, like Slack does; not in
+ * code (a ``` block, or an odd number of backticks earlier on the line). True when it replaced one.
+ */
+function convertEmoticon(end: number): boolean {
+  const t = editor.value?.el()
+  if (!t) return false
+  const before = t.value.slice(0, end)
+  const m = /(?:^|\s)(\S{2,4})$/.exec(before)
+  const char = m && emoticon(m[1]!)
+  if (!char) return false
+  const line = before.slice(before.lastIndexOf('\n') + 1)
+  if (((before.match(/(^|\n)```/g) ?? []).length & 1) === 1 || ((line.match(/`/g) ?? []).length & 1) === 1) return false
+  const caret = t.selectionStart
+  replaceRange(t, end - m![1]!.length, end, char)
+  // Put the caret back where it was (shifted by the shorter text)
+  const at = caret - (m![1]!.length - char.length)
+  t.setSelectionRange(at, at)
+  return true
+}
+
 /** Typing the closing colon of a known :name: swaps it for the emoji (custom ones stay as :name:, Slack shows them) */
 function onInput(e: Event) {
   const t = editor.value?.el()
+  // A space after an emoticon converts it
+  if (t && (e as InputEvent).data === ' ' && t.selectionStart === t.selectionEnd) convertEmoticon(t.selectionStart - 1)
   if (t && (e as InputEvent).data === ':' && t.selectionStart === t.selectionEnd && !inCodeBlock(t)) {
     const m = /(?:^|[\s(]):([a-z0-9_+'-]+):$/i.exec(t.value.slice(0, t.selectionStart))
     const found = m && emoji(m[1]!)
@@ -112,7 +135,11 @@ function pick(o: Option) {
 
 function send() {
   if (!draft.value.trim() || props.sending) return
-  emit('send', markdownToMrkdwn(draft.value, { mentions: mentions.value }))
+  // An emoticon at the end converts too (no space typed after it)
+  const t = editor.value?.el()
+  if (t) convertEmoticon(t.value.replace(/\s+$/, '').length)
+  // The editor's own text: the model catches up a tick later, after edits made just now
+  emit('send', markdownToMrkdwn(t?.value ?? draft.value, { mentions: mentions.value }))
 }
 function onKeydown(e: KeyboardEvent) {
   if (typing.value && matches.value.length) {
@@ -129,10 +156,16 @@ function onKeydown(e: KeyboardEvent) {
       return
     }
   }
+  // Enter (a new line or sending) after an emoticon converts it
+  if (e.key === 'Enter' && !e.isComposing) {
+    const el = editor.value?.el()
+    if (el && el.selectionStart === el.selectionEnd) convertEmoticon(el.selectionStart)
+  }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     // Inside a ``` block Enter is a new line; Cmd/Ctrl+Enter always sends
-    const t = e.target as HTMLTextAreaElement
-    if (!e.metaKey && !e.ctrlKey && inCodeBlock(t)) return
+    // The editor's target, not e.target (in the live editor that's the contenteditable, which has no value)
+    const t = editor.value?.el()
+    if (!e.metaKey && !e.ctrlKey && t && inCodeBlock(t)) return
     e.preventDefault()
     send()
   } else if (e.key === 'Escape') {
