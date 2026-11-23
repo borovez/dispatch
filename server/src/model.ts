@@ -92,6 +92,21 @@ export function buildOverview(): Overview {
     }
   }
 
+  // Released through a release: the commit check asks whether a PR's own merge commit is in master, which
+  // misses work a release branch cherry-picked (a copy lands there). A merged, released release PR whose
+  // contents list the PR has shipped it.
+  {
+    const integ = integrationBranches(stored.map((s) => s.pr))
+    for (const c of listReleaseContents()) {
+      const rel = byId.get(c.prId)
+      if (!rel || rel.pr.state !== 'MERGED' || !rel.release?.released || prFlow(rel.pr, integ) !== 'release') continue
+      for (const i of c.items) {
+        const s = byId.get(i.id)
+        if (s && s.pr.state === 'MERGED' && s.release && !s.release.released) s.release = { ...s.release, released: true, shippedIn: c.prId }
+      }
+    }
+  }
+
   const edges: DepEdge[] = [...edgeMap.values()].map((e) => {
     const target = byId.get(e.to)
     const merged = target?.pr.state === 'MERGED'

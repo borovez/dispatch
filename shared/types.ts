@@ -137,6 +137,11 @@ export interface ReleaseInfo {
   via?: 'release' | 'branch'
   /** Ref the merge commit was checked against (tag name or branch) */
   ref: string | null
+  /**
+   * Released through this release PR (merged and released, and its contents list this PR) although this
+   * PR's own merge commit isn't in `ref`: the release branch cherry-picked it
+   */
+  shippedIn?: PrId
   checkedAt: string
   error?: string
 }

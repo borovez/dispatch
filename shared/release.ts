@@ -6,6 +6,8 @@ import type { ReleaseInfo } from './types.ts'
  */
 export function releaseStatus(r: ReleaseInfo): { short: string; long: string } {
   const branch = r.via === 'branch'
+  if (r.released && r.shippedIn)
+    return { short: r.ref ? `In ${r.ref}` : 'Released', long: `Released in ${r.shippedIn}${r.ref ? ` (into ${r.ref})` : ''}` }
   if (r.released)
     return branch
       ? { short: `In ${r.ref}`, long: `Released: merged into ${r.ref}` }
