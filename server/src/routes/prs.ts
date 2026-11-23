@@ -10,13 +10,14 @@ import { listPrs, getSettings, listJira, setMeta, setPrBody, upsertJira, setPrTi
 import { draftPrText } from '../ai.ts'
 import { keepDeclarations } from '../prWriter.ts'
 import { claudeMdGuide } from '../guides.ts'
-import { fetchPrsByNodeId, fetchPrsByRef, getPrText, prCommits, prDetail, prTemplate, updatePrText, branchExists, createPull, listBranches } from '../github.ts'
+import { searchPrHits, fetchPrsByNodeId, fetchPrsByRef, getPrText, prCommits, prDetail, prTemplate, updatePrText, branchExists, createPull, listBranches } from '../github.ts'
 import { getIssueDetail, fetchIssuesByKey } from '../jira.ts'
 import { buildOverview } from '../model.ts'
 import { extractJiraKeys, parseBodyDependencies, parsePrId } from '../refs.ts'
 import { accountForOwner } from '../sync.ts'
 import { api, bad, Images } from './shared.ts'
 import { changePrState } from '../prState.ts'
+import { integrationBranches, prFlow } from '../flow.ts'
 
 /** Pull requests: detail, resync / fetch, release contents, notes; the PR writer */
 // ---------- PR detail (panel: description, files) ----------
@@ -69,7 +70,9 @@ api.post('/prs/fetch', async (c) => {
 })
 
 api.post('/prs/resync-many', async (c) => {
-  const { ids } = z.object({ ids: z.array(z.string()).max(500) }).parse(await c.req.json())
+  // `repos`: also look for open PRs in these repos that Dispatch doesn't have yet (a release opened since the
+  // last sync; the Releases page and the planner send the repos they show)
+  const { ids, repos = [] } = z.object({ ids: z.array(z.string()).max(500), repos: z.array(z.string()).max(50).optional() }).parse(await c.req.json())
   const settings = getSettings()
   const accounts = settings.github.accounts.filter((a) => a.token)
   const stored = new Map(listPrs().map((s) => [s.pr.id, s.pr]))
@@ -81,6 +84,33 @@ api.post('/prs/resync-many', async (c) => {
     const acc = accounts.find((a) => a.id === pr.accountId) ?? accountForOwner(accounts, pr.owner)
     if (acc) byAccount.set(acc, [...(byAccount.get(acc) ?? []), pr.nodeId])
   }
+  // New (or reopened) open PRs in the repos asked about: fetched with the rest, stored as new
+  const discovered = new Set<string>()
+  const reposByAccount = new Map<GithubAccount, string[]>()
+  for (const r of new Set(repos)) {
+    const acc = accountForOwner(accounts, r.split('/')[0] ?? '')
+    if (acc) reposByAccount.set(acc, [...(reposByAccount.get(acc) ?? []), r])
+  }
+  await Promise.all(
+    [...reposByAccount].map(async ([acc, list]) => {
+      for (let i = 0; i < list.length; i += 8) {
+        const q = `is:pr is:open archived:false ${list.slice(i, i + 8).map((r) => `repo:${r}`).join(' ')}`
+        try {
+          for (const hit of await searchPrHits(acc, q, 300)) {
+            const known = stored.get(hit.id)
+            if (known && known.state === 'OPEN') continue
+            discovered.add(hit.id)
+            byAccount.set(acc, [...(byAccount.get(acc) ?? []), hit.nodeId])
+          }
+        } catch (e) {
+          errors.push(`[${acc.label}] search for new PRs: ${(e as Error).message}`)
+        }
+      }
+    }),
+  )
+  const integration = integrationBranches([...stored.values()])
+  const nowIso = new Date().toISOString()
+
   const fresh: PrRecord[] = []
   // Release PRs: what they ship is recomputed too when open or changed (the Releases page refresh)
   const releaseIds = new Set(listReleaseContents().map((r) => r.prId))
@@ -90,10 +120,15 @@ api.post('/prs/resync-many', async (c) => {
       const r = await fetchPrsByNodeId(acc, nodeIds)
       fresh.push(...r.prs)
       errors.push(...r.errors.map((e) => `[${acc.label}] ${e}`))
-      for (const pr of r.prs) updatePrData(pr)
+      for (const pr of r.prs)
+        if (discovered.has(pr.id) && !stored.has(pr.id)) upsertPr(pr, [pr.author.login === acc.login ? 'authored' : 'tracked'], nowIso)
+        else updatePrData(pr)
       for (const pr of r.prs) await checkBackmerge(acc, pr) // merged hotfixes: in dev yet?
       for (const pr of r.prs)
-        if (releaseIds.has(pr.id) && (pr.state === 'OPEN' || stored.get(pr.id)?.updatedAt !== pr.updatedAt)) {
+        if (
+          (releaseIds.has(pr.id) || (discovered.has(pr.id) && prFlow(pr, integration) === 'release')) &&
+          (pr.state === 'OPEN' || stored.get(pr.id)?.updatedAt !== pr.updatedAt)
+        ) {
           const rc = await computeReleaseContents(acc, pr)
           if (rc.error) errors.push(`${pr.id}: ${rc.error}`)
           else releases++
@@ -139,7 +174,7 @@ api.post('/prs/resync-many', async (c) => {
         errors.push(`Jira: ${(e as Error).message}`)
       }
   }
-  return c.json({ prs: fresh.length, added, jira: jiraCount, releases, errors })
+  return c.json({ prs: fresh.length, added: added + discovered.size, discovered: discovered.size, jira: jiraCount, releases, errors })
 })
 
 // ---------- Release planner ----------

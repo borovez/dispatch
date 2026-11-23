@@ -65,7 +65,8 @@ export const api = {
   releasePrompt: (repo: string) => call<{ prompt: string }>('GET', `/releases/plan/prompt?repo=${encodeURIComponent(repo)}`),
   /** Re-read these issues from Jira (the Jira page's refresh) */
   jiraRefreshMany: (keys: string[]) => call<{ issues: number; missing: string[]; moved: number }>('POST', '/jira/refresh-many', { keys }),
-  resyncPrs: (ids: string[]) => call<{ prs: number; added: number; jira: number; releases?: number; errors: string[] }>('POST', '/prs/resync-many', { ids }),
+  resyncPrs: (ids: string[], repos?: string[]) =>
+    call<{ prs: number; added: number; discovered?: number; jira: number; releases?: number; errors: string[] }>('POST', '/prs/resync-many', { ids, repos }),
   refreshRelease: (id: string) => call('POST', '/releases/refresh', { id }),
   setMeta: (id: string, note: string | null, pinned: boolean) => call('PUT', '/prs/meta', { id, note, pinned }),
   /** Mark the PR's current action done (`null` undoes it) */

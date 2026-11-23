@@ -60,6 +60,8 @@ const repoOptions = computed(() => {
   for (const t of deck.overview?.tags ?? []) add(t.repo, false)
   return [...m.values()].sort((a, b) => a.repo.localeCompare(b.repo))
 })
+/** The repos the page shows (the picked one, else all): refresh also finds releases opened since the last sync */
+const shownRepos = computed(() => (repoKey.value ? repoOptions.value.filter((o) => o.key === repoKey.value) : repoOptions.value).map((o) => o.repo))
 const repoKey = computed(() => (repoState.repo && repoState.repo !== 'all' && repoOptions.value.some((o) => o.key === repoState.repo) ? repoState.repo : ''))
 const inRepo = (repo: string) => !repoKey.value || repo.toLowerCase() === repoKey.value
 
@@ -211,9 +213,9 @@ async function refresh(id: string) {
           :label="`Refresh the ${shownIds.length} ${v.tab === 'hotfixes' ? 'hotfixes' : v.tab === 'trains' ? 'releases in trains' : 'releases and unreleased PRs'} shown`"
           full-sync
           :busy="listResync.resyncing.value || deck.syncRunning"
-          :disabled="!shownIds.length"
+          :disabled="!shownIds.length && !shownRepos.length"
           :refreshed-at="shownIds.map((id) => deck.byId.get(id)?.fetchedAt)"
-          @click="(e) => listResync.resync(shownIds, e)"
+          @click="(e) => listResync.resync(shownIds, e, shownRepos)"
         />
         <ExpandingSearch v-if="!graph" v-model="v.query" placeholder="Search PRs, branches, Jira keys…" />
         <div id="releases-toolbar" class="flex items-center gap-2 empty:hidden" />

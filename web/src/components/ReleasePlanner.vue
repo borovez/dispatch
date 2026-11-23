@@ -89,7 +89,8 @@ const plan = computed(() => plans.value?.find((p) => p.repo === v.repo) ?? null)
 const planIds = computed(() => (plan.value ? [...plan.value.releases.map((r) => r.id), ...plan.value.items.map((i) => i.prId)] : []))
 const listResync = useListResync()
 async function refresh(e: MouseEvent) {
-  if (!e.shiftKey && planIds.value.length) await listResync.resync(planIds.value, e)
+  // Its repo too: a release opened since the last sync shows up
+  if (!e.shiftKey && v.repo) await listResync.resync(planIds.value, e, [v.repo])
   else if (e.shiftKey) await listResync.resync([], e)
   await load()
 }
