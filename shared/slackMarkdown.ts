@@ -6,11 +6,7 @@
  * first); with `labels` the mention keeps its name (<@ID|Name>) for showing it in Dispatch.
  */
 export function markdownToMrkdwn(md: string, opts: { mentions?: Record<string, string>; labels?: boolean } = {}): string {
-  const names = Object.keys(opts.mentions ?? {})
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length)
-  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const mention = names.length ? new RegExp(`(^|[^\\w@])@(${names.map(escapeRe).join('|')})(?![\\w])`, 'g') : null
+  const mention = mentionRegex(Object.keys(opts.mentions ?? {}))
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   const prose = (text: string) => {
@@ -42,7 +38,14 @@ export function markdownToMrkdwn(md: string, opts: { mentions?: Record<string, s
   // Code blocks and spans pass through (escaped only)
   return md
     .split(/(```[\s\S]*?```|`[^`\n]+`)/g)
-    .map((part, i) => (i % 2 ? esc(part) : prose(part)))
+    .map((part, i) => (i % 2 ? esc(part.replace(/^```[\w+#.-]+\n/, '```\n')) : prose(part)))
     .join('')
     .trim()
+}
+
+/** @Name for any of these names (longest first, not inside a word or after another @): group 1 is what precedes it, group 2 the name */
+export function mentionRegex(names: string[]): RegExp | null {
+  const sorted = names.filter(Boolean).sort((a, b) => b.length - a.length)
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return sorted.length ? new RegExp(`(^|[^\\w@])@(${sorted.map(escapeRe).join('|')})(?![\\w])`, 'g') : null
 }

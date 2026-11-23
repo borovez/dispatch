@@ -2,7 +2,7 @@ import { setTodoDoneInSlack } from '../slack.ts'
 import { z } from 'zod'
 import { getSettings, getSlackItem, setSlackStatus, setSlackPinned } from '../db.ts'
 import { buildSlackPrompt } from '../slackPrompt.ts'
-import { messagesAround, threadReplies, postMessage, userProfile, threadContext } from '../slack.ts'
+import { messagesAround, threadReplies, postMessage, deleteMessage, customEmoji, userProfile, threadContext } from '../slack.ts'
 import { syncSlack } from '../sync.ts'
 import { api, bad } from './shared.ts'
 
@@ -74,8 +74,30 @@ api.post('/slack/:id/reply', async (c) => {
   const item = getSlackItem(c.req.param('id'))
   if (!s.slack?.token || !item) throw bad('Unknown Slack item')
   const body = z.object({ text: z.string().trim().min(1), threadTs: z.string().nullish() }).parse(await c.req.json())
-  await postMessage(s.slack, item, body.text, body.threadTs)
+  const ts = await postMessage(s.slack, item, body.text, body.threadTs)
+  return c.json({ ok: true, ts })
+})
+
+/** Delete one of my messages in the item's conversation (anyone else's is refused) */
+api.delete('/slack/:id/messages/:ts', async (c) => {
+  const s = getSettings()
+  const item = getSlackItem(c.req.param('id'))
+  if (!s.slack?.token || !item) throw bad('Unknown Slack item')
+  const ts = c.req.param('ts')
+  if (!/^\d+\.\d+$/.test(ts)) throw bad('Bad message ts')
+  await deleteMessage(s.slack, item, ts)
   return c.json({ ok: true })
+})
+
+/** Custom emoji of the workspace (name → image URL); empty with a note when the token lacks emoji:read */
+api.get('/slack/emoji', async (c) => {
+  const s = getSettings()
+  if (!s.slack?.token) return c.json({ emoji: {}, error: 'Slack not connected' })
+  try {
+    return c.json({ emoji: await customEmoji(s.slack, c.req.query('refresh') === '1') })
+  } catch (e) {
+    return c.json({ emoji: {}, error: (e as Error).message })
+  }
 })
 
 api.get('/slack/users/:id', async (c) => {

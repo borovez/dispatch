@@ -5,7 +5,7 @@ import KindIcon from '@/components/KindIcon.vue'
 import ExternalLink from '@/components/ExternalLink.vue'
 import { externalHint } from '@/lib/external'
 import { computed, nextTick, ref, watch } from 'vue'
-import { PhCaretRight, PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhPushPin, PhRobot, PhRocketLaunch } from '@phosphor-icons/vue'
+import { PhCaretRight, PhLink, PhArrowBendUpLeft, PhArrowDown, PhArrowSquareOut, PhArrowUp, PhCircleNotch, PhGraph, PhPushPin, PhRobot, PhRocketLaunch, PhTrash } from '@phosphor-icons/vue'
 import type { SlackContext, SlackMessage } from '@shared/types'
 import { toast } from 'vue-sonner'
 import { api } from '@/api'
@@ -21,6 +21,7 @@ import SidePanel from './SidePanel.vue'
 import SlackText from './SlackText.vue'
 import SlackActions from './SlackActions.vue'
 import SlackUserCard from './SlackUserCard.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 import SlackReplyBox from './SlackReplyBox.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -32,7 +33,7 @@ import { KIND } from '@/utils/slack'
 /** Side panel for a Slack inbox item: the message with the two before and after it. */
 const deck = useDeck()
 /** Reply box height (0: grows with the text), kept between messages */
-const sv = useLayout().view('slack-panel', { replyHeight: 0 })
+const sv = useLayout().view('slack-panel', { replyHeight: 0, replyShowMarks: false })
 const item = computed(() => deck.selectedSlack)
 /** The release the message is about: a linked PR's release, else a mentioned Jira issue's */
 const nav = useReleaseNav()
@@ -134,8 +135,11 @@ async function send(text: string) {
   if (!i || !text || sending.value) return
   sending.value = true
   try {
-    await api.slackReply(i.id, text, replyThread.value)
-    toast.success(replyThread.value ? 'Replied in the thread' : `Sent to ${i.channelName}`)
+    const { ts } = await api.slackReply(i.id, text, replyThread.value)
+    // Delete right from the toast, for a message sent by mistake
+    toast.success(replyThread.value ? 'Replied in the thread' : `Sent to ${i.channelName}`, {
+      action: { label: 'Delete', onClick: () => void deleteMessage(ts, i.id) },
+    })
     closeReply()
     // Show the new message when it lands in the conversation being shown
     if (i.threadTs || !replyThread.value) counts.value = { ...counts.value, after: counts.value.after + 1 }
@@ -150,6 +154,29 @@ async function send(text: string) {
     sending.value = false
   }
 }
+/** Delete one of my messages (the server refuses anyone else's), then show the conversation without it */
+const deleting = ref<string | null>(null)
+async function deleteMessage(ts: string, itemId = item.value?.id) {
+  if (!itemId || deleting.value) return
+  deleting.value = ts
+  try {
+    await api.slackDeleteMessage(itemId, ts)
+    toast.success('Message deleted')
+    if (item.value?.id !== itemId) return
+    if (replyTo.value?.ts === ts) replyTo.value = null
+    await resync()
+    // Expanded threads read again too
+    for (const [parent, t] of Object.entries(threads.value)) {
+      const m = t.open && ctx.value?.messages.find((x) => x.ts === parent)
+      if (m) toggleThread(m, true)
+    }
+  } catch (e) {
+    toast.error(`Couldn't delete: ${(e as Error).message}`)
+  } finally {
+    deleting.value = null
+  }
+}
+
 /** A message's Slack link: the workspace from the item's permalink; thread replies open in their thread */
 function messageLink(m: SlackMessage, parentTs?: string): string | null {
   const i = item.value
@@ -303,6 +330,18 @@ watch(
                 </TooltipTrigger>
                 <TooltipContent>Open in Slack</TooltipContent>
               </Tooltip>
+              <Tooltip v-if="m.mine">
+                <TooltipTrigger as-child>
+                  <span class="inline-flex">
+                    <ConfirmDialog title="Delete this message?" description="It's deleted in Slack for everyone. This can't be undone." confirm-label="Delete" @confirm="deleteMessage(m.ts)">
+                      <Button variant="outline" size="icon-xs" class="bg-background hover:text-destructive" aria-label="Delete message" :disabled="!!deleting">
+                        <PhCircleNotch v-if="deleting === m.ts" class="animate-spin" /><PhTrash v-else />
+                      </Button>
+                    </ConfirmDialog>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Delete message</TooltipContent>
+              </Tooltip>
               <Tooltip v-if="messageLink(m)">
                 <TooltipTrigger as-child>
                   <Button variant="outline" size="icon-xs" class="bg-background" aria-label="Copy link" @click="copyText(messageLink(m)!, 'link')">
@@ -344,6 +383,15 @@ watch(
                         </SlackUserCard>
                         <span class="text-muted-foreground" :title="r.postedAt">{{ timeAgo(r.postedAt) }}</span>
                         <span class="flex-1" />
+                        <ConfirmDialog v-if="r.mine" title="Delete this reply?" description="It's deleted in Slack for everyone. This can't be undone." confirm-label="Delete" @confirm="deleteMessage(r.ts)">
+                          <button
+                            type="button"
+                            class="text-muted-foreground opacity-0 transition-opacity group-hover/reply:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                            aria-label="Delete reply"
+                            title="Delete reply"
+                            :disabled="!!deleting"
+                          ><PhCircleNotch v-if="deleting === r.ts" class="animate-spin" /><PhTrash v-else /></button>
+                        </ConfirmDialog>
                         <a
                           v-if="messageLink(r, m.ts)"
                           :href="messageLink(r, m.ts)!"
@@ -391,6 +439,7 @@ watch(
       ref="box"
       v-model="draft"
       v-model:height="sv.replyHeight"
+      v-model:marks="sv.replyShowMarks"
       :label="replyLabel"
       :quote="replyTo?.text"
       :people="people"

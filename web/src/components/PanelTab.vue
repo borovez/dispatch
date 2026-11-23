@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isTyping } from '@/lib/typing'
 import { computed } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { PhArrowCounterClockwise } from '@phosphor-icons/vue'
@@ -31,7 +32,7 @@ function label(r: PanelRef): { title: string; sub: string } {
 // Alt+→ reopens the last item (in an open panel it moves forward)
 useEventListener(window, 'keydown', (e: KeyboardEvent) => {
   if (!show.value || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || e.key !== 'ArrowRight') return
-  if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]') || document.querySelector(LAYER_OPEN)) return
+  if (isTyping(e.target) || document.querySelector(LAYER_OPEN)) return
   e.preventDefault()
   deck.reopenPanel()
 })

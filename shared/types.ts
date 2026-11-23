@@ -448,6 +448,8 @@ export interface SlackMessage {
   postedAt: string
   /** The inbox item itself */
   isTarget: boolean
+  /** Posted by me (the connected Slack user): it can be deleted */
+  mine?: boolean
   /** Replies in this message's thread (conversation view only; the thread itself isn't loaded) */
   replyCount?: number
 }
@@ -808,6 +810,7 @@ export const SLACK_USER_SCOPES = [
   'reactions:read',
   'reactions:write',
   'chat:write',
+  'emoji:read',
 ]
 
 export const DEFAULT_SETTINGS: Settings = {

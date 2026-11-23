@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isTyping } from '@/lib/typing'
 import { externalHint } from '@/lib/external'
 import { PhArrowBendUpLeft, PhArrowCounterClockwise, PhArrowSquareOut, PhCheck, PhKanban, PhX } from '@phosphor-icons/vue'
 import type { SlackItem } from '@shared/types'
@@ -31,7 +32,7 @@ const jira = () => slackToJira(deck, props.item)
 // Shortcuts while the panel is open and nothing else has the keyboard
 useEventListener(window, 'keydown', (e: KeyboardEvent) => {
   if (!props.labelled || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return
-  if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]') || document.querySelector(LAYER_OPEN)) return
+  if (isTyping(e.target) || document.querySelector(LAYER_OPEN)) return
   const k = e.key.toLowerCase()
   const open = props.item.status === 'new'
   const act = k === 'r' && props.canReply ? () => emit('reply') : k === 'j' && !props.item.jiraKey ? jira : k === 'd' && open ? () => status('done') : k === 'x' && open ? () => status('dismissed') : k === 'u' && !open ? () => status('new') : null

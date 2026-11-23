@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isTyping } from '@/lib/typing'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { computed, nextTick, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
@@ -47,7 +48,7 @@ const input = ref<HTMLInputElement | null>(null)
 const list = ref<HTMLElement | null>(null)
 
 useEventListener(window, 'keydown', (e: KeyboardEvent) => {
-  const typing = (e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')
+  const typing = isTyping(e.target)
   const cmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'
   if (cmdK || (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !document.querySelector(LAYER_OPEN))) {
     // Cmd/Ctrl+K in the Markdown editor is "insert link"; leave it there

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isTyping } from '@/lib/typing'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { computed, nextTick, ref, watch, type Component } from 'vue'
 import { PhCaretLeft, PhCaretRight, PhCheck, PhFunnelSimple, PhX } from '@phosphor-icons/vue'
@@ -144,7 +145,7 @@ function openOn(key: string) {
 // F opens the menu, unless typing somewhere
 onKeyStroke('f', (e) => {
   const t = e.target as HTMLElement
-  if (e.metaKey || e.ctrlKey || e.altKey || t.closest('input, textarea, select, [contenteditable=true], [role=dialog]')) return
+  if (e.metaKey || e.ctrlKey || e.altKey || isTyping(t) || t.closest('[role=dialog]')) return
   e.preventDefault()
   open.value = true
 })

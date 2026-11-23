@@ -26,6 +26,7 @@
     "desktop:dist:all": "npm run dist:all -w desktop"
   },
   "devDependencies": {
-    "concurrently": "^9.0.0"
+    "concurrently": "^9.0.0",
+    "emoji-datasource": "^16.0.0"
   }
 }

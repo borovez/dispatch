@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isTyping } from '@/lib/typing'
 import { computed, ref, watch } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { PhArrowLeft, PhArrowRight, PhClockCounterClockwise } from '@phosphor-icons/vue'
@@ -92,7 +93,7 @@ function openRecent(r: PanelRef) {
 
 useEventListener(window, 'keydown', (e: KeyboardEvent) => {
   if (!e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
-  if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]') || document.querySelector(LAYER_OPEN)) return
+  if (isTyping(e.target) || document.querySelector(LAYER_OPEN)) return
   e.preventDefault()
   deck.panelGo(e.key === 'ArrowLeft' ? -1 : 1)
 })

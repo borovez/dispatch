@@ -1,37 +1,81 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { caretCoords } from '@/lib/caretCoords'
+import { useListNav } from '@/composables/listNav'
 import { PhArrowBendUpLeft, PhAt, PhCircleNotch, PhPaperPlaneRight, PhX } from '@phosphor-icons/vue'
 import { markdownToMrkdwn } from '@shared/slackMarkdown'
-import { insertAtCursor } from '@/composables/markdownFormat'
+import { inCodeBlock, insertAtCursor, replaceRange } from '@/composables/markdownFormat'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import Kbd from './Kbd.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
 import ResizeHandle from './ResizeHandle.vue'
-import SlackText from './SlackText.vue'
 
 /**
- * Slack reply box: the shared MarkdownEditor (toolbar with strikethrough, an @mention menu of the people
- * in the conversation, a preview as Slack will show it). Sends Slack mrkdwn (`markdownToMrkdwn`).
- * Enter sends, Shift+Enter is a new line; Escape cancels. Drag the line above it to make it taller.
+ * Slack reply box: the shared MarkdownEditor, live (Markdown and @mentions styled as you type; toolbar with
+ * strikethrough and an @mention menu of the people in the conversation). Sends Slack mrkdwn (`markdownToMrkdwn`).
+ * Typing @ opens a list of the people in the conversation under the caret (filtered by what follows the @;
+ * arrows, Enter or Tab picks, Escape closes it). Enter sends, Shift+Enter is a new line (inside a ``` block Enter is a new line, Cmd/Ctrl+Enter sends); Escape cancels. Drag the line above it to make it taller.
  */
 const props = defineProps<{ label: string; quote?: string | null; people: { id: string; name: string }[]; sending?: boolean }>()
 const emit = defineEmits<{ send: [mrkdwn: string]; cancel: [] }>()
 const draft = defineModel<string>({ required: true })
 /** Box height in px set by dragging the line above it; 0: grows with the text */
 const height = defineModel<number>('height', { default: 0 })
+/** Formatting marks shown in the text (the toolbar's Aa toggle) */
+const marks = defineModel<boolean>('marks', { default: false })
 const root = ref<HTMLElement | null>(null)
 
 const editor = ref<InstanceType<typeof MarkdownEditor> | null>(null)
 const mentions = computed(() => Object.fromEntries(props.people.map((p) => [p.name, p.id])))
-const asSlack = (md: string) => markdownToMrkdwn(md, { mentions: mentions.value, labels: true })
 
 function mention(name: string) {
   const t = editor.value?.el()
   if (!t) return
   const before = t.value.slice(0, t.selectionStart)
-  insertAtCursor(t, `${before && !/\s$/.test(before) ? ' ' : ''}@${name} `)
+  const after = t.value.slice(t.selectionEnd)
+  // A space on each side, unless one is there already
+  insertAtCursor(t, `${before && !/\s$/.test(before) ? ' ' : ''}@${name}${/^\s/.test(after) ? '' : ' '}`)
+}
+
+// @ autocomplete: the @ before the caret (at the start or after a space / punctuation) and what follows it
+const typing = ref<{ start: number; query: string; left: number; top: number } | null>(null)
+const active = ref(0)
+const list = ref<HTMLElement | null>(null)
+const matches = computed(() => {
+  if (!typing.value) return []
+  const q = typing.value.query.toLowerCase()
+  return props.people
+    .filter((p) => !q || p.name.toLowerCase().startsWith(q) || p.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)))
+    .slice(0, 8)
+})
+const nav = useListNav({ items: () => matches.value, active, container: () => list.value })
+
+/** The caret is inside a ``` block (the hint says Enter is a new line there) */
+const inCode = ref(false)
+
+function track() {
+  const t = editor.value?.el()
+  inCode.value = !!t && inCodeBlock(t)
+  if (!t || t.selectionStart !== t.selectionEnd || !props.people.length) return (typing.value = null)
+  const m = /(?:^|[^\w@])@([^\s@][^@\n]{0,40})?$/.exec(t.value.slice(0, t.selectionStart))
+  if (!m) return (typing.value = null)
+  const query = m[1] ?? ''
+  const start = t.selectionStart - query.length - 1
+  const q = query.toLowerCase()
+  // A space after the name typed so far: keep the list only while a name still matches
+  if (/\s/.test(query) && !props.people.some((p) => p.name.toLowerCase().startsWith(q))) return (typing.value = null)
+  const at = t.coordsAt ? t.coordsAt(start) : caretCoords(t as HTMLTextAreaElement, start)
+  if (typing.value?.start !== start) active.value = 0
+  typing.value = { start, query, left: at.left, top: at.top }
+}
+
+function pick(name: string) {
+  const t = editor.value?.el()
+  if (!t || !typing.value) return
+  replaceRange(t, typing.value.start, t.selectionStart, `@${name} `)
+  typing.value = null
 }
 
 function send() {
@@ -39,7 +83,24 @@ function send() {
   emit('send', markdownToMrkdwn(draft.value, { mentions: mentions.value }))
 }
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.metaKey && !e.ctrlKey) {
+  if (typing.value && matches.value.length) {
+    if (nav.onArrow(e)) return
+    if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && !e.isComposing) {
+      e.preventDefault()
+      pick(matches.value[active.value]!.name)
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      typing.value = null
+      return
+    }
+  }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    // Inside a ``` block Enter is a new line; Cmd/Ctrl+Enter always sends
+    const t = e.target as HTMLTextAreaElement
+    if (!e.metaKey && !e.ctrlKey && inCodeBlock(t)) return
     e.preventDefault()
     send()
   } else if (e.key === 'Escape') {
@@ -57,6 +118,10 @@ defineExpose({ focus })
     ref="root"
     :class="['relative flex shrink-0 flex-col gap-2 p-3', height && 'min-h-0']"
     :style="height ? { height: `${height}px` } : undefined"
+    @input="track"
+    @click="track"
+    @keyup="(e: KeyboardEvent) => ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) && track()"
+    @focusout="typing = null"
   >
     <ResizeHandle
       line
@@ -81,6 +146,9 @@ defineExpose({ focus })
       :grow="!height"
       :fill="!!height"
       strike
+      live
+      v-model:marks="marks"
+      :mentions="people.map((p) => p.name)"
       placeholder="Write a reply… Markdown works: **bold**, _italic_, `code`, - lists, @name"
       :disabled="sending"
       @keydown="onKeydown"
@@ -104,12 +172,35 @@ defineExpose({ focus })
           <TooltipContent>Mention someone</TooltipContent>
         </Tooltip>
       </template>
-      <template #preview="{ value }">
-        <SlackText v-if="value.trim()" :text="asSlack(value)" :rich="asSlack(value)" />
-      </template>
     </MarkdownEditor>
+    <Teleport to="body">
+      <!-- Above the caret's line (the box sits at the bottom of the panel); mousedown.prevent keeps the textarea focused -->
+      <div
+        v-if="typing && matches.length"
+        ref="list"
+        role="listbox"
+        aria-label="Mention someone"
+        class="fixed z-50 max-h-64 w-60 -translate-y-full overflow-y-auto rounded-md bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10"
+        :style="{ left: `${typing.left}px`, top: `${typing.top - 4}px` }"
+        @mousedown.prevent
+      >
+        <div
+          v-for="(p, i) in matches"
+          :key="p.id"
+          role="option"
+          :aria-selected="i === active"
+          :data-active="i === active || undefined"
+          :class="['flex cursor-default items-center gap-1 rounded-sm px-2 py-1.5', i === active && 'bg-accent text-accent-foreground']"
+          @mouseenter="active = i"
+          @click="pick(p.name)"
+        >
+          <span class="text-merged">@</span><span class="truncate">{{ p.name }}</span>
+        </div>
+      </div>
+    </Teleport>
     <div class="flex items-center gap-2">
-      <p class="flex-1 text-xs text-muted-foreground"><Kbd>↵</Kbd> send · <Kbd>⇧↵</Kbd> new line</p>
+      <p v-if="inCode" class="flex-1 text-xs text-muted-foreground">In a code block: <Kbd>↵</Kbd> new line · <Kbd>⌘↵</Kbd> send</p>
+      <p v-else class="flex-1 text-xs text-muted-foreground"><Kbd>↵</Kbd> send · <Kbd>⇧↵</Kbd> new line · <Kbd>```</Kbd> code block</p>
       <Button size="sm" :disabled="sending || !draft.trim()" @click="send">
         <PhCircleNotch v-if="sending" class="animate-spin" /><PhPaperPlaneRight v-else /> Send
       </Button>

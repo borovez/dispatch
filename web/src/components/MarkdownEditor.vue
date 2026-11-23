@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, type HTMLAttributes } from 'vue'
-import { PhEye, PhPencilSimple } from '@phosphor-icons/vue'
-import { formatActions, pasteLink, runFormatShortcut, type FormatAction } from '@/composables/markdownFormat'
+import { PhEye, PhPencilSimple, PhTextAa } from '@phosphor-icons/vue'
+import { formatActions, pasteLink, runFormatShortcut, type FormatAction, type TextTarget } from '@/composables/markdownFormat'
+import LiveMarkdownInput from './LiveMarkdownInput.vue'
 import { markdownToAdf } from '@shared/adf'
 import { cn } from '@/lib/utils'
 import AdfView from './AdfView.vue'
@@ -18,6 +19,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
  * the `preview` slot ({ value }) renders it some other way (e.g. as Slack shows it). The `toolbar` slot
  * adds buttons after the formatting ones. Keydown is re-emitted after the format shortcuts so a parent
  * can add its own keys (Enter to send…).
+ * `live` styles the Markdown in place instead of a Preview toggle (`LiveMarkdownInput`, a contenteditable):
+ * bold, italic, monospaced code and ``` blocks as boxes, links, quotes, lists and @mentions (`mentions`: names
+ * that will really mention someone).
  */
 const props = withDefaults(
   defineProps<{
@@ -34,6 +38,10 @@ const props = withDefaults(
     /** Monospaced text (prompts, code-heavy text) */
     mono?: boolean
     disabled?: boolean
+    /** Style the Markdown as you type (no Preview toggle) */
+    live?: boolean
+    /** With `live`: names highlighted after an @ */
+    mentions?: string[]
     class?: HTMLAttributes['class']
   }>(),
   {},
@@ -45,14 +53,17 @@ const preview = ref(false)
 const doc = computed(() => markdownToAdf(model.value))
 
 const textarea = ref<{ $el: HTMLTextAreaElement } | null>(null)
-const el = () => textarea.value?.$el
+const liveInput = ref<InstanceType<typeof LiveMarkdownInput> | null>(null)
+/** What the formatting acts on: the textarea, or the live editor's textarea-like target (with `coordsAt`) */
+const el = (): (TextTarget & { coordsAt?: InstanceType<typeof LiveMarkdownInput>['target']['coordsAt'] }) | undefined =>
+  props.live ? liveInput.value?.target : textarea.value?.$el
 const ACTIONS = computed(() => formatActions({ strike: props.strike }))
 function apply(a: FormatAction) {
   const t = el()
   if (t) a.run(t)
 }
 function onKeydown(e: KeyboardEvent) {
-  if (runFormatShortcut(ACTIONS.value, e)) return
+  if (runFormatShortcut(ACTIONS.value, e, el())) return
   emit('keydown', e)
 }
 
@@ -67,6 +78,9 @@ async function focus() {
   el()?.focus()
 }
 defineExpose({ focus, el })
+
+/** With `live`: show the formatting marks (**, _, `…); hidden, they show only on the caret's line */
+const marks = defineModel<boolean>('marks', { default: true })
 </script>
 
 <template>
@@ -95,7 +109,17 @@ defineExpose({ focus, el })
           <slot name="toolbar" />
         </template>
         <span class="flex-1" />
-        <Toggle v-model="preview" size="sm" class="h-6 shrink-0 gap-1 px-2 text-xs" :aria-label="preview ? 'Edit' : 'Preview'">
+        <Tooltip v-if="live">
+          <TooltipTrigger as-child>
+            <span class="inline-flex shrink-0">
+              <Toggle v-model="marks" size="sm" class="h-6 w-7 px-0" aria-label="Show formatting marks" @mousedown.prevent>
+                <PhTextAa />
+              </Toggle>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{{ marks ? 'Hide formatting marks (shown on the line you edit)' : 'Show formatting marks (**, _, `)' }}</TooltipContent>
+        </Tooltip>
+        <Toggle v-if="!live" v-model="preview" size="sm" class="h-6 shrink-0 gap-1 px-2 text-xs" :aria-label="preview ? 'Edit' : 'Preview'">
           <PhPencilSimple v-if="preview" /><PhEye v-else /> {{ preview ? 'Edit' : 'Preview' }}
         </Toggle>
       </div>
@@ -109,6 +133,19 @@ defineExpose({ focus, el })
         </slot>
         <p v-if="!model.trim()" class="text-muted-foreground">Nothing to preview.</p>
       </div>
+      <LiveMarkdownInput
+        v-else-if="live"
+        ref="liveInput"
+        v-model="model"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        :mentions="mentions"
+        :marks="marks"
+        :class="cn(mono && 'font-mono text-xs leading-relaxed', fill ? 'min-h-0 flex-1' : grow ? 'max-h-48 min-h-16' : '')"
+        :style="sized"
+        @keydown="onKeydown"
+        @blur="emit('blur')"
+      />
       <Textarea
         v-else
         ref="textarea"

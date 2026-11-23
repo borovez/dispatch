@@ -1,5 +1,5 @@
 import type { SlackConfig, SlackContext, SlackItem, SlackKind, SlackMessage, SlackUserProfile } from '../../shared/types.ts'
-import { getSlackUsers, saveSlackUsers } from './db.ts'
+import { getSlackUsers, kvGet, kvSet, saveSlackUsers } from './db.ts'
 
 // Slack Web API with a *user* token (xoxp-). Required user scopes:
 //   search:read, im:history, mpim:history, im:read, mpim:read, channels:history,
@@ -357,6 +357,7 @@ export async function messagesAround(cfg: SlackConfig, item: SlackItem, before =
     cfg.token,
     window.flatMap((m) => [m.user, ...[...String(m.text ?? '').matchAll(/<@([UW][A-Z0-9]+)/g)].map((x) => x[1])]),
   )
+  const me = await myUserId(cfg).catch(() => null)
   const messages = window.map((m) => ({
     ts: m.ts,
     user: m.user ?? '',
@@ -366,6 +367,7 @@ export async function messagesAround(cfg: SlackConfig, item: SlackItem, before =
     rich: namedMentions(m.text ?? '', users),
     postedAt: tsToIso(m.ts),
     isTarget: m.ts === item.ts,
+    ...(me && m.user === me ? { mine: true } : {}),
     ...(!item.threadTs && m.reply_count ? { replyCount: Number(m.reply_count) } : {}),
   }))
   return { messages, hasBefore, hasAfter }
@@ -381,8 +383,34 @@ export async function threadReplies(cfg: SlackConfig, item: SlackItem, ts: strin
  * Post a message to the item's conversation as me: in a thread when `threadTs` is given (a message's own ts
  * starts its thread), else straight into the channel or DM. Needs chat:write.
  */
-export async function postMessage(cfg: SlackConfig, item: SlackItem, text: string, threadTs?: string | null) {
-  await call(cfg.token, 'chat.postMessage', { channel: item.channelId, text, ...(threadTs ? { thread_ts: threadTs } : {}) })
+export async function postMessage(cfg: SlackConfig, item: SlackItem, text: string, threadTs?: string | null): Promise<string> {
+  const r = await call<{ ts: string }>(cfg.token, 'chat.postMessage', { channel: item.channelId, text, ...(threadTs ? { thread_ts: threadTs } : {}) })
+  return r.ts
+}
+
+/** The connected user's id: from settings, else asked once per token */
+const meByToken = new Map<string, Promise<string>>()
+export function myUserId(cfg: SlackConfig): Promise<string> {
+  if (cfg.userId) return Promise.resolve(cfg.userId)
+  let p = meByToken.get(cfg.token)
+  if (!p) {
+    p = slackAuthTest(cfg.token).then((r) => r.userId)
+    p.catch(() => meByToken.delete(cfg.token))
+    meByToken.set(cfg.token, p)
+  }
+  return p
+}
+
+/**
+ * Delete one of my messages in the item's conversation (chat:write). Refuses anyone else's, even when the
+ * token could (a workspace admin's can): the message is read back first and must be mine.
+ */
+export async function deleteMessage(cfg: SlackConfig, item: SlackItem, ts: string): Promise<void> {
+  const [me, r] = await Promise.all([myUserId(cfg), call<{ messages?: { ts: string; user?: string }[] }>(cfg.token, 'conversations.replies', { channel: item.channelId, ts, limit: 1 })])
+  const m = r.messages?.find((x) => x.ts === ts)
+  if (!m) throw new SlackError('Slack: that message is gone already', 'message_not_found')
+  if (m.user !== me) throw new SlackError('Only your own messages can be deleted', 'cant_delete_message')
+  await call(cfg.token, 'chat.delete', { channel: item.channelId, ts })
 }
 
 /** The workspace's URL (https://x.slack.com/) and id, for profile links; asked once per process */
@@ -435,4 +463,27 @@ export async function setTodoDoneInSlack(cfg: SlackConfig, item: SlackItem, done
     }
   }
   return name
+}
+
+/**
+ * The workspace's custom emoji, name → image URL (aliases resolved; an alias of a standard emoji maps to
+ * `unicode:<name>`). Needs emoji:read. Kept a day in kv `slackEmoji`; `refresh` asks Slack again.
+ */
+export async function customEmoji(cfg: SlackConfig, refresh = false): Promise<Record<string, string>> {
+  const cached = kvGet<{ at: number; emoji: Record<string, string> } | null>('slackEmoji', null)
+  if (!refresh && cached && Date.now() - cached.at < 86_400_000) return cached.emoji
+  const r = await call<{ emoji: Record<string, string> }>(cfg.token, 'emoji.list')
+  const raw = r.emoji ?? {}
+  const emoji: Record<string, string> = {}
+  for (const [name, value] of Object.entries(raw)) {
+    let v = value
+    // alias:other (possibly a chain, or a standard emoji's name)
+    for (let hops = 0; v.startsWith('alias:') && hops < 5; hops++) {
+      const target = v.slice(6)
+      v = raw[target] ?? `unicode:${target}`
+    }
+    if (!v.startsWith('alias:')) emoji[name] = v
+  }
+  kvSet('slackEmoji', { at: Date.now(), emoji })
+  return emoji
 }

@@ -1,3 +1,4 @@
+import { isTyping } from '@/lib/typing'
 import { useEventListener } from '@vueuse/core'
 import { LAYER_OPEN } from './escape'
 import { useDeck } from '@/stores/deck'
@@ -35,7 +36,7 @@ export function useArrowNav(kind: 'pr' | 'slack' | 'jira', selected: () => strin
     if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.defaultPrevented || e.altKey || e.metaKey || e.ctrlKey) return
     const id = selected()
     const target = e.target as HTMLElement
-    if (!id || target.closest('input, textarea, select, [contenteditable="true"]') || document.querySelector(LAYER_OPEN)) return
+    if (!id || isTyping(target) || document.querySelector(LAYER_OPEN)) return
 
     const items = itemsOf(attr)
     let i = cursor && cursor.isConnected && idOf(cursor) === id ? items.indexOf(cursor) : -1

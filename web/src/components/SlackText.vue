@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { h, type VNode } from 'vue'
 import { useDeck } from '@/stores/deck'
+import { useSlackEmoji } from '@/composables/slackEmoji'
 import RepoName from './RepoName.vue'
 
 /**
@@ -10,6 +11,27 @@ import RepoName from './RepoName.vue'
 const props = defineProps<{ text: string; rich?: string | null }>()
 
 const deck = useDeck()
+const { emoji, custom } = useSlackEmoji()
+
+/** Plain text with :shortcode: emoji as characters or the workspace's images (unknown names stay as typed) */
+function withEmoji(s: string): (VNode | string)[] {
+  void custom.value // re-render once the custom emoji arrive
+  const out: (VNode | string)[] = []
+  let last = 0
+  for (const m of s.matchAll(/:([a-z0-9_+'-]+):/gi)) {
+    const e = emoji(m[1]!)
+    if (!e) continue
+    if (m.index > last) out.push(s.slice(last, m.index))
+    out.push(
+      'char' in e
+        ? h('span', { title: m[0] }, e.char)
+        : h('img', { src: e.url, alt: m[0], title: m[0], loading: 'lazy', class: 'inline-block size-[1.3em] object-contain align-[-0.3em]' }),
+    )
+    last = m.index + m[0].length
+  }
+  if (last < s.length) out.push(s.slice(last))
+  return out
+}
 /** https://github.com/owner/repo/pull/123 (with anything after: /files, #discussion…) */
 const GITHUB_PR = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/i
 
@@ -24,6 +46,8 @@ function prChip(url: string, owner: string, repo: string, n: string): VNode {
       target: '_blank',
       rel: 'noopener',
       title: pr ? `${pr.title} (open in Dispatch)` : `${shown} (open on GitHub)`,
+      // The link card's hint follows what a click does
+      ...(pr ? { 'data-opens-in-app': '' } : {}),
       class: 'inline-flex max-w-full items-baseline rounded bg-primary/12 px-1 align-baseline font-mono text-[0.85em] text-primary hover:bg-primary/20',
       onClick: (e: MouseEvent) => {
         e.stopPropagation()
@@ -61,7 +85,7 @@ function inline(s: string): (VNode | string)[] {
   const out: (VNode | string)[] = []
   let last = 0
   for (const m of s.matchAll(INLINE)) {
-    if (m.index > last) out.push(decode(s.slice(last, m.index)))
+    if (m.index > last) out.push(...withEmoji(decode(s.slice(last, m.index))))
     if (m[1] !== undefined) out.push(token(m[1]))
     else if (m[2] !== undefined) out.push(h('code', { class: 'rounded bg-muted px-1 font-mono text-[0.9em]' }, decode(m[2])))
     else if (m[3] !== undefined) out.push(h('strong', { class: 'font-semibold' }, inline(m[3])))
@@ -69,7 +93,7 @@ function inline(s: string): (VNode | string)[] {
     else if (m[5] !== undefined) out.push(h('s', inline(m[5])))
     last = m.index + m[0].length
   }
-  if (last < s.length) out.push(decode(s.slice(last)))
+  if (last < s.length) out.push(...withEmoji(decode(s.slice(last))))
   return out
 }
 
@@ -78,7 +102,7 @@ function blocks(src: string): VNode[] {
   const out: VNode[] = []
   src.split(/```/).forEach((part, i) => {
     if (i % 2) {
-      out.push(h('pre', { class: 'my-1 overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap' }, decode(part.replace(/^\n|\n$/g, ''))))
+      out.push(h('pre', { class: 'my-1 overflow-x-auto rounded-md border bg-muted px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap' }, decode(part.replace(/^\n|\n$/g, ''))))
       return
     }
     let para: string[] = []
@@ -105,7 +129,7 @@ function blocks(src: string): VNode[] {
 }
 
 const render = () =>
-  props.rich ? h('div', { class: 'break-words' }, blocks(props.rich.trim())) : h('div', { class: 'break-words whitespace-pre-line' }, props.text)
+  props.rich ? h('div', { class: 'break-words' }, blocks(props.rich.trim())) : h('div', { class: 'break-words whitespace-pre-line' }, withEmoji(props.text))
 </script>
 
 <template>

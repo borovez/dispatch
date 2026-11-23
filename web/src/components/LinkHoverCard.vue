@@ -6,7 +6,7 @@ import type { LinkPreview } from '@shared/types'
 import { api } from '@/api'
 import { useDeck } from '@/stores/deck'
 import { describeLink, type LinkInfo } from '@/lib/linkInfo'
-import { externalHint, siteName } from '@/lib/external'
+import { externalHint, modKey, siteName } from '@/lib/external'
 import { writeClipboard } from '@/lib/clipboard'
 import { prStatus, type StatusTone } from '@/composables/prStatus'
 import { timeAgo } from '@/utils/format'
@@ -27,6 +27,8 @@ const deck = useDeck()
 
 const anchor = shallowRef<HTMLAnchorElement | null>(null)
 const href = ref('')
+/** The link opens in Dispatch on a plain click (it says so with `data-opens-in-app`); Cmd/Ctrl-click goes out */
+const inApp = ref(false)
 const pos = reactive({ top: 0, left: 0, above: false })
 const card = ref<HTMLElement | null>(null)
 const open = ref(false)
@@ -79,6 +81,7 @@ function place(a: HTMLElement) {
 async function show(a: HTMLAnchorElement) {
   anchor.value = a
   href.value = a.href
+  inApp.value = a.dataset.opensInApp !== undefined
   // The card replaces the browser's own tooltip while it is open
   stashedTitle = a.getAttribute('title')
   if (stashedTitle != null) a.removeAttribute('title')
@@ -222,8 +225,9 @@ async function copyUrl() {
       </div>
 
       <div class="mt-2 flex items-center gap-1 select-none">
-        <span class="flex min-w-0 flex-1 items-center gap-1 text-[11px] text-muted-foreground select-none" :title="externalHint(href)"><PhArrowSquareOut class="size-3 shrink-0" /><span class="truncate">Click opens {{ siteName(href) }}</span></span>
-        <Button v-if="local.open" variant="ghost" size="xs" class="h-6 text-xs" @click="openInApp"><PhSidebarSimple /> Open in Dispatch</Button>
+        <span v-if="inApp" class="flex min-w-0 flex-1 items-center gap-1 text-[11px] text-muted-foreground select-none"><PhSidebarSimple class="size-3 shrink-0" /><span class="truncate">Click opens Dispatch · {{ modKey }}-click {{ siteName(href) }}</span></span>
+        <span v-else class="flex min-w-0 flex-1 items-center gap-1 text-[11px] text-muted-foreground select-none" :title="externalHint(href)"><PhArrowSquareOut class="size-3 shrink-0" /><span class="truncate">Click opens {{ siteName(href) }}</span></span>
+        <Button v-if="local.open && !inApp" variant="ghost" size="xs" class="h-6 text-xs" @click="openInApp"><PhSidebarSimple /> Open in Dispatch</Button>
         <Button variant="ghost" size="xs" class="h-6 text-xs" :class="copied && 'text-success'" @click="copyUrl">
           <PhCheck v-if="copied" /><PhCopy v-else /> {{ copied ? 'Copied' : 'Copy' }}
         </Button>
