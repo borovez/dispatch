@@ -105,6 +105,9 @@ export function buildOverview(): Overview {
         if (s && s.pr.state === 'MERGED' && s.release && !s.release.released) s.release = { ...s.release, released: true, shippedIn: c.prId }
       }
     }
+    // A merged backmerge brings master into dev: what it carries is out already, there's nothing to release
+    for (const s of stored)
+      if (s.pr.state === 'MERGED' && s.release && !s.release.released && prFlow(s.pr, integ) === 'backmerge') s.release = { ...s.release, released: true }
   }
 
   const edges: DepEdge[] = [...edgeMap.values()].map((e) => {
@@ -381,7 +384,11 @@ function buildTrains(prs: PrView[], edges: DepEdge[], releases: ReleaseContents[
     if (!l.reasons.includes(reason)) l.reasons.push(reason)
     links.set(key, l)
   }
-  for (const e of edges)
+  for (const e of edges) {
+    // The prerequisite is already out (released, perhaps through another release that cherry-picked it, or
+    // abandoned): no release has to go first to bring it, even one that also ships it
+    const target = byId.get(e.to)
+    if (target?.state === 'CLOSED' || (target?.state === 'MERGED' && target.release?.released)) continue
     for (const a of holders(e.to))
       for (const b of holders(e.from)) {
         // Same release, or one release inside the other: no order between them. Only open releases can wait.
@@ -389,6 +396,7 @@ function buildTrains(prs: PrView[], edges: DepEdge[], releases: ReleaseContents[
         // Say when the wait is inherited through what a release ships, so it can be told apart from a direct one
         link(a, b, 'order', `${b === e.from ? '' : `ships ${e.from}, which `}${b === e.from ? `${e.from} needs` : 'needs'} ${a === e.to ? e.to : `${e.to} (shipped by ${a})`} ${e.kind === 'release' ? 'released' : 'merged'}`)
       }
+  }
   const open = live.filter((r) => byId.get(r.prId)!.state === 'OPEN')
   for (let i = 0; i < open.length; i++)
     for (let j = i + 1; j < open.length; j++) {
