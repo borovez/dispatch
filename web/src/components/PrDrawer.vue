@@ -261,16 +261,36 @@ const reviewBadges = computed(() => {
 })
 
 /**
- * Re-read this PR from GitHub now (checks, reviews, description; contents for a release) and its Jira
- * issues from Jira (status, assignee, summary for the Jira section), without a full sync
+ * The PRs this panel shows the state of besides this one: what it waits for, what waits on it, and the
+ * other releases in its train. The refresh re-reads them too (a prerequisite merged since the last sync).
+ */
+const relatedIds = computed(() => {
+  const p = pr.value
+  if (!p) return []
+  const ids = [...p.dependsOn.map((e) => e.to), ...p.dependents.map((e) => e.from), ...(trainData.value?.releases ?? [])]
+  return [...new Set(ids)].filter((id) => id !== p.id && deck.byId.has(id))
+})
+
+/**
+ * Re-read this PR from GitHub now (checks, reviews, description; contents for a release), the PRs in its
+ * Dependencies and release train, and its Jira issues from Jira (status, assignee, summary for the Jira
+ * section), without a full sync. Shift-click: full sync.
  */
 const resyncing = ref(false)
-async function resync() {
+async function resync(e?: MouseEvent) {
+  if (e?.shiftKey) return void deck.sync()
   const id = pr.value?.id
   if (!id || resyncing.value) return
   const keys = deck.overview?.configured.jira ? pr.value!.jiraKeys : []
+  const related = relatedIds.value
   resyncing.value = true
-  await deck.mutate(() => Promise.all([api.resyncPr(id), ...keys.map((k) => api.jiraRefresh(k))]))
+  await deck.mutate(() =>
+    Promise.all([
+      // Through resync-many with the rest: same re-read, plus release contents and new dependency targets
+      related.length ? api.resyncPrs([id, ...related]) : api.resyncPr(id),
+      ...keys.map((k) => api.jiraRefresh(k)),
+    ]),
+  )
   resyncing.value = false
 }
 
@@ -348,7 +368,13 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
             <TooltipContent>Show in the release graph</TooltipContent>
           </Tooltip>
         </template>
-        <RefreshButton :label="`Refresh this PR${pr.jiraKeys.length && deck.overview?.configured.jira ? ' and its Jira issues' : ''}`" :refreshed-at="pr.fetchedAt ?? null" :busy="resyncing" @click="resync" />
+        <RefreshButton
+          :label="`Refresh this PR${relatedIds.length ? `, the ${relatedIds.length} PR${relatedIds.length === 1 ? '' : 's'} in its dependencies${trainData ? ' and train' : ''}` : ''}${pr.jiraKeys.length && deck.overview?.configured.jira ? ' and its Jira issues' : ''}`"
+          :refreshed-at="[pr.fetchedAt, ...relatedIds.map((r) => deck.byId.get(r)?.fetchedAt)]"
+          full-sync
+          :busy="resyncing || deck.syncRunning"
+          @click="resync"
+        />
         <Tooltip v-if="pr.state === 'OPEN'">
           <TooltipTrigger as-child>
             <Button variant="ghost" size="icon-sm" aria-label="Edit title and description" class="text-primary" @click="deck.prWriter = pr.id"><PhMagicWand weight="fill" /></Button>
