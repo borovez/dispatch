@@ -8,6 +8,8 @@ import { inCodeBlock, insertAtCursor, replaceRange } from '@/composables/markdow
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { emojiText, searchEmoji, useSlackEmoji, type EmojiItem } from '@/composables/slackEmoji'
+import EmojiPicker from './EmojiPicker.vue'
 import Kbd from './Kbd.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
 import ResizeHandle from './ResizeHandle.vue'
@@ -15,8 +17,9 @@ import ResizeHandle from './ResizeHandle.vue'
 /**
  * Slack reply box: the shared MarkdownEditor, live (Markdown and @mentions styled as you type; toolbar with
  * strikethrough and an @mention menu of the people in the conversation). Sends Slack mrkdwn (`markdownToMrkdwn`).
- * Typing @ opens a list of the people in the conversation under the caret (filtered by what follows the @;
- * arrows, Enter or Tab picks, Escape closes it). Enter sends, Shift+Enter is a new line (inside a ``` block Enter is a new line, Cmd/Ctrl+Enter sends); Escape cancels. Drag the line above it to make it taller.
+ * Typing @ opens a list of the people in the conversation at the caret, :name (2+ letters) a list of emoji
+ * (arrows, Enter or Tab picks, Escape closes it); typing the closing colon of a known :name: makes it the
+ * emoji. The toolbar has an emoji picker (EmojiPicker) that inserts at the caret. Enter sends, Shift+Enter is a new line (inside a ``` block Enter is a new line, Cmd/Ctrl+Enter sends); Escape cancels. Drag the line above it to make it taller.
  */
 const props = defineProps<{ label: string; quote?: string | null; people: { id: string; name: string }[]; sending?: boolean }>()
 const emit = defineEmits<{ send: [mrkdwn: string]; cancel: [] }>()
@@ -39,18 +42,23 @@ function mention(name: string) {
   insertAtCursor(t, `${before && !/\s$/.test(before) ? ' ' : ''}@${name}${/^\s/.test(after) ? '' : ' '}`)
 }
 
-// @ autocomplete: the @ before the caret (at the start or after a space / punctuation) and what follows it
-const typing = ref<{ start: number; query: string; left: number; top: number } | null>(null)
+// Autocomplete at the caret: @name (people in the conversation) or :name (emoji, 2+ letters, not in code)
+const typing = ref<{ kind: 'mention' | 'emoji'; start: number; query: string; left: number; top: number } | null>(null)
 const active = ref(0)
 const list = ref<HTMLElement | null>(null)
-const matches = computed(() => {
-  if (!typing.value) return []
-  const q = typing.value.query.toLowerCase()
+type Option = { key: string; name: string; emoji?: EmojiItem }
+const matches = computed<Option[]>(() => {
+  const t = typing.value
+  if (!t) return []
+  if (t.kind === 'emoji') return searchEmoji(t.query, 8).map((e) => ({ key: e.name, name: e.name, emoji: e }))
+  const q = t.query.toLowerCase()
   return props.people
     .filter((p) => !q || p.name.toLowerCase().startsWith(q) || p.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)))
     .slice(0, 8)
+    .map((p) => ({ key: p.id, name: p.name }))
 })
 const nav = useListNav({ items: () => matches.value, active, container: () => list.value })
+const { emoji } = useSlackEmoji()
 
 /** The caret is inside a ``` block (the hint says Enter is a new line there) */
 const inCode = ref(false)
@@ -58,23 +66,47 @@ const inCode = ref(false)
 function track() {
   const t = editor.value?.el()
   inCode.value = !!t && inCodeBlock(t)
-  if (!t || t.selectionStart !== t.selectionEnd || !props.people.length) return (typing.value = null)
-  const m = /(?:^|[^\w@])@([^\s@][^@\n]{0,40})?$/.exec(t.value.slice(0, t.selectionStart))
+  if (!t || t.selectionStart !== t.selectionEnd) return (typing.value = null)
+  const before = t.value.slice(0, t.selectionStart)
+  const place = (kind: 'mention' | 'emoji', start: number, query: string) => {
+    const at = t.coordsAt ? t.coordsAt(start) : caretCoords(t as HTMLTextAreaElement, start)
+    if (typing.value?.start !== start || typing.value.kind !== kind) active.value = 0
+    typing.value = { kind, start, query, left: at.left, top: at.top }
+  }
+  const em = !inCode.value ? /(?:^|[\s(])(:([a-z0-9_+'-]{2,30}))$/i.exec(before) : null
+  if (em && searchEmoji(em[2]!, 1).length) return place('emoji', t.selectionStart - em[1]!.length, em[2]!)
+  if (!props.people.length) return (typing.value = null)
+  const m = /(?:^|[^\w@])@([^\s@][^@\n]{0,40})?$/.exec(before)
   if (!m) return (typing.value = null)
   const query = m[1] ?? ''
   const start = t.selectionStart - query.length - 1
   const q = query.toLowerCase()
   // A space after the name typed so far: keep the list only while a name still matches
   if (/\s/.test(query) && !props.people.some((p) => p.name.toLowerCase().startsWith(q))) return (typing.value = null)
-  const at = t.coordsAt ? t.coordsAt(start) : caretCoords(t as HTMLTextAreaElement, start)
-  if (typing.value?.start !== start) active.value = 0
-  typing.value = { start, query, left: at.left, top: at.top }
+  place('mention', start, query)
 }
 
-function pick(name: string) {
+/** Typing the closing colon of a known :name: swaps it for the emoji (custom ones stay as :name:, Slack shows them) */
+function onInput(e: Event) {
+  const t = editor.value?.el()
+  if (t && (e as InputEvent).data === ':' && t.selectionStart === t.selectionEnd && !inCodeBlock(t)) {
+    const m = /(?:^|[\s(]):([a-z0-9_+'-]+):$/i.exec(t.value.slice(0, t.selectionStart))
+    const found = m && emoji(m[1]!)
+    if (found && 'char' in found) replaceRange(t, t.selectionStart - m![1]!.length - 2, t.selectionStart, found.char)
+  }
+  track()
+}
+
+/** The toolbar picker's choice, at the caret */
+function insertEmoji(e: EmojiItem) {
+  const t = editor.value?.el()
+  if (t) insertAtCursor(t, emojiText(e))
+}
+
+function pick(o: Option) {
   const t = editor.value?.el()
   if (!t || !typing.value) return
-  replaceRange(t, typing.value.start, t.selectionStart, `@${name} `)
+  replaceRange(t, typing.value.start, t.selectionStart, o.emoji ? emojiText(o.emoji) : `@${o.name} `)
   typing.value = null
 }
 
@@ -87,7 +119,7 @@ function onKeydown(e: KeyboardEvent) {
     if (nav.onArrow(e)) return
     if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && !e.isComposing) {
       e.preventDefault()
-      pick(matches.value[active.value]!.name)
+      pick(matches.value[active.value]!)
       return
     }
     if (e.key === 'Escape') {
@@ -118,7 +150,7 @@ defineExpose({ focus })
     ref="root"
     :class="['relative flex shrink-0 flex-col gap-2 p-3', height && 'min-h-0']"
     :style="height ? { height: `${height}px` } : undefined"
-    @input="track"
+    @input="onInput"
     @click="track"
     @keyup="(e: KeyboardEvent) => ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) && track()"
     @focusout="typing = null"
@@ -171,6 +203,7 @@ defineExpose({ focus })
           </TooltipTrigger>
           <TooltipContent>Mention someone</TooltipContent>
         </Tooltip>
+        <EmojiPicker @pick="insertEmoji" @close-auto-focus="(e: Event) => (e.preventDefault(), editor?.el()?.focus())" />
       </template>
     </MarkdownEditor>
     <Teleport to="body">
@@ -179,22 +212,27 @@ defineExpose({ focus })
         v-if="typing && matches.length"
         ref="list"
         role="listbox"
-        aria-label="Mention someone"
+        :aria-label="typing.kind === 'emoji' ? 'Emoji' : 'Mention someone'"
         class="fixed z-50 max-h-64 w-60 -translate-y-full overflow-y-auto rounded-md bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10"
         :style="{ left: `${typing.left}px`, top: `${typing.top - 4}px` }"
         @mousedown.prevent
       >
         <div
-          v-for="(p, i) in matches"
-          :key="p.id"
+          v-for="(o, i) in matches"
+          :key="o.key"
           role="option"
           :aria-selected="i === active"
           :data-active="i === active || undefined"
           :class="['flex cursor-default items-center gap-1 rounded-sm px-2 py-1.5', i === active && 'bg-accent text-accent-foreground']"
           @mouseenter="active = i"
-          @click="pick(p.name)"
+          @click="pick(o)"
         >
-          <span class="text-merged">@</span><span class="truncate">{{ p.name }}</span>
+          <template v-if="o.emoji">
+            <img v-if="o.emoji.url" :src="o.emoji.url" :alt="o.name" class="size-5 shrink-0 object-contain" />
+            <span v-else class="w-5 shrink-0 text-center text-base leading-none">{{ o.emoji.char }}</span>
+            <span class="truncate text-muted-foreground">:{{ o.name }}:</span>
+          </template>
+          <template v-else><span class="text-merged">@</span><span class="truncate">{{ o.name }}</span></template>
         </div>
       </div>
     </Teleport>
