@@ -644,7 +644,8 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
               <span class="flex-1" />
               <Button v-if="adding !== 'waitsFor'" variant="ghost" size="xs" class="h-6 text-xs text-muted-foreground" title="Add a PR that must be merged or released before this one" @click="adding = 'waitsFor'"><PhPlus /> Add</Button>
             </div>
-            <ul class="space-y-1">
+            <!-- gap, not space-y: the rows sit in ItemContextMenu (display: contents), which margins can't reach -->
+            <ul class="flex flex-col gap-1.5">
               <ItemContextMenu v-for="e in pr.dependsOn" :key="e.to" :entries="() => depMenu(e.to, e)">
               <li class="flex items-center gap-2 text-sm">
                 <PhCheckCircle v-if="e.satisfied" :size="16" weight="fill" class="shrink-0 text-success" />
@@ -670,7 +671,8 @@ const depMenu = (id: string, e: DepEdge) => prMenu.byId(id, deps.canRemove(e) ? 
               <span class="flex-1" />
               <Button v-if="adding !== 'waitedOn'" variant="ghost" size="xs" class="h-6 text-xs text-muted-foreground" title="Add a PR that can only merge after this one" @click="adding = 'waitedOn'"><PhPlus /> Add</Button>
             </div>
-            <ul class="space-y-1">
+            <!-- gap, not space-y: the rows sit in ItemContextMenu (display: contents), which margins can't reach -->
+            <ul class="flex flex-col gap-1.5">
               <ItemContextMenu v-for="e in pr.dependents" :key="e.from" :entries="() => depMenu(e.from, e)">
               <li class="flex items-center gap-2 text-sm">
                 <!-- Satisfied: this PR is merged / released, so the other one no longer waits on it -->
