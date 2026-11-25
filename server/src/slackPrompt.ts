@@ -36,7 +36,7 @@ export async function buildSlackPrompt(item: SlackItem, before = 20, after = 20)
 
   const when = (iso: string) => iso.slice(0, 16).replace('T', ' ')
   const indent = (text: string) => text.trim().split('\n').join('\n  ')
-  const attached = (m: SlackMessage) => (m.files?.length ? `\n  _Attached (not viewable here): ${m.files.map((f) => `${f.name} (${f.filetype || 'file'})`).join(', ')}_` : '')
+  const attached = (m: SlackMessage) => (m.files?.length ? `\n  _Attached (not viewable here): ${m.files.map((f) => `${f.permalink ? `[${f.name}](${f.permalink})` : f.name} (${f.filetype || 'file'})`).join(', ')}_` : '')
   const line = (m: SlackMessage) =>
     `- **${m.userName}** (${when(m.postedAt)})${m.isTarget ? ' ★ *the message in question*' : ''}:\n  ${indent(m.text) || (m.files?.length ? '' : '_(no text)_')}${attached(m)}`
   /** A conversation message, then its thread replies nested under it */

@@ -423,6 +423,8 @@ export interface SlackItem {
   jiraKey: string | null
   /** Pinned in Dispatch: shown at the top of the inbox and kept until unpinned */
   pinned: boolean
+  /** Names of the files attached to the message (the panel loads the files themselves) */
+  attachments?: string[]
 }
 
 /** A field Jira requires when creating an issue of a given project + type (beyond summary, description etc.) */

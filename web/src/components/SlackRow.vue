@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { PhPushPin } from '@phosphor-icons/vue'
+import { PhPaperclip, PhPushPin } from '@phosphor-icons/vue'
 import type { SlackItem } from '@shared/types'
 import { useRowArming } from '@/composables/arming'
 import { useDeck } from '@/stores/deck'
@@ -53,6 +53,12 @@ useRowArming(rowEl)
         <Badge v-if="item.kind === 'todo'" variant="primary" class="h-4 text-[10px]">todo</Badge>
         <Badge v-if="item.awaitingReply && item.status === 'new'" variant="warning" class="h-4 text-[10px]">awaiting reply</Badge>
         <Badge v-if="item.threadTs" variant="muted" class="h-4 text-[10px]">in thread</Badge>
+        <span
+          v-if="item.attachments?.length"
+          class="inline-flex items-center gap-0.5 text-muted-foreground tabular-nums"
+          :title="item.attachments.join('\n')"
+          :aria-label="`${item.attachments.length} ${item.attachments.length === 1 ? 'attachment' : 'attachments'}`"
+        ><PhPaperclip :size="12" />{{ item.attachments.length }}</span>
         <JiraPill v-if="item.jiraKey" :issue-key="item.jiraKey" />
       </div>
       <SlackText :text="item.text" :rich="item.rich" class="mt-0.5 line-clamp-2 text-sm" />

@@ -284,6 +284,7 @@ export async function fetchSlackInbox(cfg: SlackConfig): Promise<SlackFetchResul
         status: 'new',
         jiraKey: null,
         pinned: false,
+        ...(attachmentNames(r.m.files).length ? { attachments: attachmentNames(r.m.files) } : {}),
       },
     })
   }
@@ -372,6 +373,11 @@ export async function messagesAround(cfg: SlackConfig, item: SlackItem, before =
     ...(m.files?.length ? { files: slackFiles(m.files) } : {}),
   }))
   return { messages, hasBefore, hasAfter }
+}
+
+/** Names of a message's files (deleted / hidden ones left out), for the inbox row */
+function attachmentNames(files: any[] | undefined): string[] {
+  return (files ?? []).filter((f) => f?.id && f.mode !== 'tombstone' && !f.hidden_by_limit).map((f) => String(f.title || f.name || 'File'))
 }
 
 /** Slack's file objects as shown in the panel: deleted and hidden ones left out, previews through `/api/slack/file` */
