@@ -457,6 +457,25 @@ export interface SlackMessage {
   mine?: boolean
   /** Replies in this message's thread (conversation view only; the thread itself isn't loaded) */
   replyCount?: number
+  /** Files and images attached to the message */
+  files?: SlackFile[]
+}
+
+/** A file attached to a Slack message */
+export interface SlackFile {
+  id: string
+  name: string
+  /** Slack's short type: png, pdf, docx… */
+  filetype: string
+  mimetype: string
+  size: number | null
+  /** Preview image through Dispatch (`/api/slack/file?url=…`: Slack's files need the token); null when Slack has none */
+  thumb: string | null
+  /** Thumbnail size, for the box before it loads */
+  thumbWidth: number | null
+  thumbHeight: number | null
+  /** Opens the file in Slack */
+  permalink: string | null
 }
 
 /** Messages around a Slack inbox item, and whether the conversation goes on either side */
@@ -816,6 +835,7 @@ export const SLACK_USER_SCOPES = [
   'reactions:write',
   'chat:write',
   'emoji:read',
+  'files:read',
 ]
 
 export const DEFAULT_SETTINGS: Settings = {

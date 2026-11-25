@@ -1,4 +1,4 @@
-import type { SlackConfig, SlackContext, SlackItem, SlackKind, SlackMessage, SlackUserProfile } from '../../shared/types.ts'
+import type { SlackConfig, SlackContext, SlackItem, SlackKind, SlackFile, SlackMessage, SlackUserProfile } from '../../shared/types.ts'
 import { getSlackUsers, kvGet, kvSet, saveSlackUsers } from './db.ts'
 
 // Slack Web API with a *user* token (xoxp-). Required user scopes:
@@ -369,8 +369,56 @@ export async function messagesAround(cfg: SlackConfig, item: SlackItem, before =
     isTarget: m.ts === item.ts,
     ...(me && m.user === me ? { mine: true } : {}),
     ...(!item.threadTs && m.reply_count ? { replyCount: Number(m.reply_count) } : {}),
+    ...(m.files?.length ? { files: slackFiles(m.files) } : {}),
   }))
   return { messages, hasBefore, hasAfter }
+}
+
+/** Slack's file objects as shown in the panel: deleted and hidden ones left out, previews through `/api/slack/file` */
+function slackFiles(files: any[]): SlackFile[] {
+  return files
+    .filter((f) => f?.id && f.mode !== 'tombstone' && !f.hidden_by_limit)
+    .map((f) => {
+      // The largest preview up to 720 px (images, PDFs and other documents Slack renders)
+      const size = [720, 480, 360].find((n) => f[`thumb_${n}`])
+      const url: string | undefined = size ? f[`thumb_${size}`] : f.thumb_pdf
+      return {
+        id: String(f.id),
+        name: String(f.title || f.name || 'File'),
+        filetype: String(f.filetype ?? ''),
+        mimetype: String(f.mimetype ?? ''),
+        size: typeof f.size === 'number' ? f.size : null,
+        thumb: url && isSlackFileUrl(url) ? `/api/slack/file?url=${encodeURIComponent(url)}` : null,
+        thumbWidth: size ? (Number(f[`thumb_${size}_w`]) || null) : (Number(f.thumb_pdf_w) || null),
+        thumbHeight: size ? (Number(f[`thumb_${size}_h`]) || null) : (Number(f.thumb_pdf_h) || null),
+        permalink: f.permalink ?? null,
+      }
+    })
+}
+
+/** Only Slack's own file host gets the token */
+export function isSlackFileUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return u.protocol === 'https:' && u.hostname === 'files.slack.com'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * A private Slack file (a thumbnail) fetched with the token (needs files:read). Without the scope Slack answers
+ * with its sign-in page instead, so anything that isn't an image is refused.
+ */
+export async function fetchSlackFile(cfg: SlackConfig, url: string): Promise<{ body: ArrayBuffer; type: string }> {
+  if (!isSlackFileUrl(url)) throw new Error('Not a Slack file')
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${cfg.token}` }, redirect: 'manual' })
+  const type = res.headers.get('content-type') ?? ''
+  // Without files:read Slack redirects to its sign-in page (or answers it directly)
+  const signIn = (res.status >= 300 && res.status < 400) || (res.ok && !type.startsWith('image/'))
+  if (signIn) throw new Error('Slack file: needs scope files:read')
+  if (!res.ok) throw new Error(`Slack file: ${res.status}`)
+  return { body: await res.arrayBuffer(), type }
 }
 
 /** The replies in a message's thread (parent left out), oldest first */

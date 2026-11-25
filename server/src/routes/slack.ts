@@ -2,7 +2,7 @@ import { setTodoDoneInSlack } from '../slack.ts'
 import { z } from 'zod'
 import { getSettings, getSlackItem, setSlackStatus, setSlackPinned } from '../db.ts'
 import { buildSlackPrompt } from '../slackPrompt.ts'
-import { messagesAround, threadReplies, postMessage, deleteMessage, customEmoji, userProfile, threadContext } from '../slack.ts'
+import { messagesAround, threadReplies, postMessage, deleteMessage, customEmoji, fetchSlackFile, userProfile, threadContext } from '../slack.ts'
 import { syncSlack } from '../sync.ts'
 import { api, bad } from './shared.ts'
 
@@ -97,6 +97,18 @@ api.get('/slack/emoji', async (c) => {
     return c.json({ emoji: await customEmoji(s.slack, c.req.query('refresh') === '1') })
   } catch (e) {
     return c.json({ emoji: {}, error: (e as Error).message })
+  }
+})
+
+/** A Slack file preview (thumbnail), fetched with the token: Slack's file URLs need it */
+api.get('/slack/file', async (c) => {
+  const s = getSettings()
+  if (!s.slack?.token) throw bad('Slack is not connected')
+  try {
+    const f = await fetchSlackFile(s.slack, c.req.query('url') ?? '')
+    return c.body(f.body, 200, { 'Content-Type': f.type, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff' })
+  } catch (e) {
+    return c.json({ error: (e as Error).message }, 502)
   }
 })
 

@@ -19,6 +19,7 @@ import { timeAgo } from '@/utils/format'
 import { cn } from '@/lib/utils'
 import SidePanel from './SidePanel.vue'
 import SlackText from './SlackText.vue'
+import SlackFiles from './SlackFiles.vue'
 import SlackActions from './SlackActions.vue'
 import SlackUserCard from './SlackUserCard.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -360,6 +361,7 @@ watch(
                 <Badge v-if="m.isTarget" variant="primary" class="h-4 text-[10px]">{{ KIND[item.kind].label }}</Badge>
               </div>
               <SlackText :text="m.text" :rich="m.rich" class="mt-0.5 text-sm" />
+              <SlackFiles v-if="m.files?.length" :files="m.files" class="mt-1.5" />
               <!-- Its thread, expandable in place -->
               <template v-if="m.replyCount">
                 <Button variant="ghost" size="xs" class="-ml-2 mt-1 text-primary" :aria-expanded="!!threads[m.ts]?.open" @click="toggleThread(m)">
@@ -403,6 +405,7 @@ watch(
                         ><PhArrowSquareOut /></a>
                       </div>
                       <SlackText :text="r.text" :rich="r.rich" class="mt-0.5 text-sm" />
+                      <SlackFiles v-if="r.files?.length" :files="r.files" class="mt-1.5" />
                     </div>
                   </div>
                   <Button v-if="threads[m.ts].replies" variant="ghost" size="xs" class="-ml-2 text-muted-foreground" @click="startReply(m)">
